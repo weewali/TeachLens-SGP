@@ -5,21 +5,31 @@ __pycache__/
 venv/
 
 # Data
-data/raw/
-data/processed/
+data/raw_videos/*
+!data/raw_videos/.gitkeep
+data/raw_frames/*
+!data/raw_frames/.gitkeep
+data/dataset_v1/images/train/*
+!data/dataset_v1/images/train/.gitkeep
+data/dataset_v1/images/val/*
+!data/dataset_v1/images/val/.gitkeep
 *.mp4
 *.avi
 *.mov
+*.mkv
 *.wav
 
 # Model files
+models/*
+!models/.gitkeep
 *.pt
 *.pth
 *.onnx
 *.h5
 
 # Outputs
-outputs/
+outputs/*
+!outputs/.gitkeep
 runs/
 
 # IDE

@@ -1,0 +1,7 @@
+path: data/dataset_v1
+train: images/train
+val: images/val
+
+names:
+  0: instructor
+  1: student
