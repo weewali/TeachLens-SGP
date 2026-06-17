@@ -14,5 +14,5 @@ Use this file to document classroom or lecture videos that clearly show students
 | V001 | https://www.youtube.com/watch?v=B18P6ZwRMHI&list=PL8knJxvDjLHscjL-DTMgV20QU10dS3_Xd | Youtube | 31:34 | 20 | Good | Mixed | Yes |
 | V002 | https://www.youtube.com/watch?v=7SZnuQqv6bw&list=PLunwo3H734g3jGeJswCeCTiOWKdKBQ0MU | Youtube | 18:28 | 15 | Medium | Side | Yes |
 | V003 | https://www.youtube.com/watch?v=x18bMLW4eO4&list=PLUl4u3cNGP61gxUNrwFXIyIKheQEPqSMc | Youtube | 2:16:32 | 3 | Good | Back | No |
-| V004 | --- | --- | --- | --- | --- | --- | --- |
-| V005 | --- | --- | --- | --- | --- | --- | --- |
+| V004 | https://www.youtube.com/watch?v=lIsfCmPI0cU&list=PLunwo3H734g3jGeJswCeCTiOWKdKBQ0MU&index=6 | Youtube | 30:11 | 10 | Good | Back | Yes |
+| V005 | https://www.youtube.com/watch?v=cATQhVhBXsc&list=PLunwo3H734g3jGeJswCeCTiOWKdKBQ0MU&index=18 | Youtube | 26:47 | 5 | Good | Back | Yes |
