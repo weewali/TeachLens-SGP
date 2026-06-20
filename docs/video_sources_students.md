@@ -18,5 +18,6 @@ Use this file to document classroom or lecture videos that clearly show students
 | V004 | https://www.youtube.com/watch?v=lIsfCmPI0cU&list=PLunwo3H734g3jGeJswCeCTiOWKdKBQ0MU&index=6 | Youtube | 30:11 | 10 | Good | Back | Yes |
 | V005 | https://www.youtube.com/watch?v=cATQhVhBXsc&list=PLunwo3H734g3jGeJswCeCTiOWKdKBQ0MU&index=18 | Youtube | 26:47 | 5 | Good | Back | Yes |
 |V006| https://universe.roboflow.com/test-xl0mi/students-bmi9o/browse?queryText=&pageSize=50&startingIndex=0&browseQuery=true | Roboflow Universe | - | Varies | Good | Front | Yes |
-|V007| https://universe.roboflow.com/test-xl0mi/students-bmi9o/browse?queryText=&pageSize=50&startingIndex=0&browseQuery=true | Roboflow Universe | - | 35-50 | Good | Front | Yes |
+|V007| https://universe.roboflow.com/don-tho-phng/students-4f4cs/dataset/1 | Roboflow Universe | - | 35-50 | Good | Front | Yes |
 |V008| https://github.com/Whiffe/SCB-dataset | GitHub | - | - | Medium | Front | No | There are other datasets in the repo - Do not use this until I get copyright approval for it |
+|V009| https://universe.roboflow.com/mywork-lkwz4/student-behaviour-detection-neazg/browse?queryText=&pageSize=50&startingIndex=0&browseQuery=true | Roboflow Universe | - | Varies | Good | Front/Side | Yes | It's a mix dataset from different classrooms, different environments, and different age groups
