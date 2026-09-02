@@ -1,7 +1,7 @@
-path: data/dataset_v1
+path: data/dataset_v2
+
 train: images/train
 val: images/val
 
 names:
-  0: instructor
-  1: student
+  0: person
