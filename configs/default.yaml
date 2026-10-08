@@ -1,0 +1,39 @@
+# Default values for a local TeachLens analysis run.
+# Environment-specific overrides should live in a separate, uncommitted YAML file.
+
+project:
+  random_seed: 42
+
+paths:
+  raw_videos: data/raw_videos
+  raw_frames: data/raw_frames
+  dataset: data/dataset_v2
+  calibration: data/calibration
+  models: models
+  outputs: outputs
+  runs: runs
+
+video:
+  sample_every_seconds: 2
+
+models:
+  person_detector: yolo11n.pt
+  pose_estimator: yolo11n-pose.pt
+  role_detector: models/detection/best.pt
+  tracker: bytetrack.yaml
+
+inference:
+  confidence_threshold: 0.25
+  iou_threshold: 0.45
+
+analysis:
+  minimum_event_duration_seconds: 0.5
+  merge_gap_seconds: 0.25
+
+reporting:
+  format: html
+  include_evidence_coverage: true
+
+privacy:
+  anonymous_track_ids: true
+  save_face_crops: false

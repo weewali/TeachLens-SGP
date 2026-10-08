@@ -1,0 +1,24 @@
+# Copy this file for each fixed camera and replace the example coordinates.
+# Points are normalized to a 0..1 frame so calibration is resolution-independent.
+
+camera_id: example_classroom_camera
+
+zones:
+  board:
+    points:
+      - [0.05, 0.08]
+      - [0.55, 0.08]
+      - [0.55, 0.55]
+      - [0.05, 0.55]
+  teacher_front:
+    points:
+      - [0.00, 0.45]
+      - [1.00, 0.45]
+      - [1.00, 0.75]
+      - [0.00, 0.75]
+  student_seating:
+    points:
+      - [0.00, 0.65]
+      - [1.00, 0.65]
+      - [1.00, 1.00]
+      - [0.00, 1.00]

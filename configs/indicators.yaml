@@ -1,0 +1,33 @@
+# Phase 1 indicator switches and thresholds.
+# Each indicator must produce observable evidence, confidence, and coverage.
+
+visual:
+  teacher_presence:
+    enabled: true
+  visible_student_count:
+    enabled: true
+  hand_raise:
+    enabled: true
+    minimum_keypoint_confidence: 0.25
+    smoothing_window_seconds: 0.5
+    positive_frame_ratio: 0.70
+  sitting_standing:
+    enabled: false
+  head_torso_orientation:
+    enabled: false
+  teacher_movement:
+    enabled: false
+
+audio:
+  speaker_turns:
+    enabled: false
+  teacher_student_talk_ratio:
+    enabled: false
+  questions_and_wait_time:
+    enabled: false
+
+quality:
+  recording_quality:
+    enabled: true
+  evidence_coverage:
+    enabled: true
