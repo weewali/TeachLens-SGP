@@ -1,6 +1,9 @@
 ultralytics
-opencv-python
+opencv-python-headless
 numpy
 pandas
 matplotlib
 pyyaml
+scipy
+statsmodels
+jinja2

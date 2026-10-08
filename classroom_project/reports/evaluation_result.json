@@ -1,0 +1,237 @@
+{
+  "video": "Video10min.mp4",
+  "mode": "pose + object cues",
+  "frames": 301,
+  "windows": 61,
+  "instructor": {
+    "visible_pct": 84.0531561461794,
+    "explanation_s": 312.0,
+    "board_s": 0.0,
+    "board_is_writing": true,
+    "interaction_events": 0,
+    "path_length": 13.56989645303127,
+    "zone_changes": 16
+  },
+  "students": {
+    "avg_per_frame": 8.970099667774086,
+    "attention_level": 0.5027331321594936,
+    "off_task_rate": 0.07007847081052529,
+    "hand_raise_events": 5,
+    "phone_use_events": 1,
+    "reading_events": 2
+  },
+  "lag_results": [
+    {
+      "teacher_feature": "explanation_ratio",
+      "student_outcome": "attention_level",
+      "lag_windows": 1,
+      "lag_seconds": 10,
+      "correlation": -0.3447758439,
+      "p_value": 0.0069819834,
+      "n_windows": 60
+    },
+    {
+      "teacher_feature": "explanation_ratio",
+      "student_outcome": "attention_level",
+      "lag_windows": 2,
+      "lag_seconds": 20,
+      "correlation": -0.2718917931,
+      "p_value": 0.0372350665,
+      "n_windows": 59
+    },
+    {
+      "teacher_feature": "explanation_ratio",
+      "student_outcome": "attention_level",
+      "lag_windows": 3,
+      "lag_seconds": 30,
+      "correlation": -0.1293858858,
+      "p_value": 0.3330443632,
+      "n_windows": 58
+    },
+    {
+      "teacher_feature": "explanation_ratio",
+      "student_outcome": "off_task_rate",
+      "lag_windows": 1,
+      "lag_seconds": 10,
+      "correlation": 0.2223177997,
+      "p_value": 0.0877701916,
+      "n_windows": 60
+    },
+    {
+      "teacher_feature": "explanation_ratio",
+      "student_outcome": "off_task_rate",
+      "lag_windows": 2,
+      "lag_seconds": 20,
+      "correlation": 0.2706056302,
+      "p_value": 0.0381781403,
+      "n_windows": 59
+    },
+    {
+      "teacher_feature": "explanation_ratio",
+      "student_outcome": "off_task_rate",
+      "lag_windows": 3,
+      "lag_seconds": 30,
+      "correlation": 0.1454748793,
+      "p_value": 0.2758916403,
+      "n_windows": 58
+    },
+    {
+      "teacher_feature": "explanation_ratio",
+      "student_outcome": "hand_raise_count",
+      "lag_windows": 1,
+      "lag_seconds": 10,
+      "correlation": 0.0777069961,
+      "p_value": 0.5550918602,
+      "n_windows": 60
+    },
+    {
+      "teacher_feature": "explanation_ratio",
+      "student_outcome": "hand_raise_count",
+      "lag_windows": 2,
+      "lag_seconds": 20,
+      "correlation": -0.0489737233,
+      "p_value": 0.7126146616,
+      "n_windows": 59
+    },
+    {
+      "teacher_feature": "explanation_ratio",
+      "student_outcome": "hand_raise_count",
+      "lag_windows": 3,
+      "lag_seconds": 30,
+      "correlation": 0.0257418626,
+      "p_value": 0.8478923877,
+      "n_windows": 58
+    },
+    {
+      "teacher_feature": "movement_amount",
+      "student_outcome": "attention_level",
+      "lag_windows": 1,
+      "lag_seconds": 10,
+      "correlation": -0.1888828131,
+      "p_value": 0.1483599206,
+      "n_windows": 60
+    },
+    {
+      "teacher_feature": "movement_amount",
+      "student_outcome": "attention_level",
+      "lag_windows": 2,
+      "lag_seconds": 20,
+      "correlation": -0.0954066374,
+      "p_value": 0.4722674596,
+      "n_windows": 59
+    },
+    {
+      "teacher_feature": "movement_amount",
+      "student_outcome": "attention_level",
+      "lag_windows": 3,
+      "lag_seconds": 30,
+      "correlation": -0.1240417509,
+      "p_value": 0.3535637376,
+      "n_windows": 58
+    },
+    {
+      "teacher_feature": "movement_amount",
+      "student_outcome": "off_task_rate",
+      "lag_windows": 1,
+      "lag_seconds": 10,
+      "correlation": 0.2215854064,
+      "p_value": 0.0888472144,
+      "n_windows": 60
+    },
+    {
+      "teacher_feature": "movement_amount",
+      "student_outcome": "off_task_rate",
+      "lag_windows": 2,
+      "lag_seconds": 20,
+      "correlation": 0.0779005595,
+      "p_value": 0.5575696714,
+      "n_windows": 59
+    },
+    {
+      "teacher_feature": "movement_amount",
+      "student_outcome": "off_task_rate",
+      "lag_windows": 3,
+      "lag_seconds": 30,
+      "correlation": 0.1423253581,
+      "p_value": 0.2865325686,
+      "n_windows": 58
+    },
+    {
+      "teacher_feature": "movement_amount",
+      "student_outcome": "hand_raise_count",
+      "lag_windows": 1,
+      "lag_seconds": 10,
+      "correlation": -0.0729881852,
+      "p_value": 0.5794343773,
+      "n_windows": 60
+    },
+    {
+      "teacher_feature": "movement_amount",
+      "student_outcome": "hand_raise_count",
+      "lag_windows": 2,
+      "lag_seconds": 20,
+      "correlation": -0.0193382403,
+      "p_value": 0.8844146382,
+      "n_windows": 59
+    },
+    {
+      "teacher_feature": "movement_amount",
+      "student_outcome": "hand_raise_count",
+      "lag_windows": 3,
+      "lag_seconds": 30,
+      "correlation": -0.1179929846,
+      "p_value": 0.3777047276,
+      "n_windows": 58
+    }
+  ],
+  "lagged_model": [
+    {
+      "student_outcome": "attention_level",
+      "term": "explanation_ratio",
+      "coefficient": -0.0262823852,
+      "p_value": 0.5502476902,
+      "r_squared": 0.4972350039,
+      "n_windows": 60
+    },
+    {
+      "student_outcome": "attention_level",
+      "term": "previous_outcome",
+      "coefficient": 0.6900800764,
+      "p_value": 1.78e-08,
+      "r_squared": 0.4972350039,
+      "n_windows": 60
+    },
+    {
+      "student_outcome": "off_task_rate",
+      "term": "explanation_ratio",
+      "coefficient": 0.0248222337,
+      "p_value": 0.2530736604,
+      "r_squared": 0.4797360717,
+      "n_windows": 60
+    },
+    {
+      "student_outcome": "off_task_rate",
+      "term": "previous_outcome",
+      "coefficient": 0.6652155619,
+      "p_value": 5.3e-09,
+      "r_squared": 0.4797360717,
+      "n_windows": 60
+    },
+    {
+      "student_outcome": "hand_raise_count",
+      "term": "explanation_ratio",
+      "coefficient": 0.0636296363,
+      "p_value": 0.5740305101,
+      "r_squared": 0.0095602349,
+      "n_windows": 60
+    },
+    {
+      "student_outcome": "hand_raise_count",
+      "term": "previous_outcome",
+      "coefficient": -0.0594250348,
+      "p_value": 0.6542710732,
+      "r_squared": 0.0095602349,
+      "n_windows": 60
+    }
+  ]
+}

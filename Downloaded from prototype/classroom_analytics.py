@@ -1,9 +1,9 @@
 import os
 import cv2
-import math
-import shutil
+#import math
+#import shutil
 import pandas as pd
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from ultralytics import YOLO
 
 # 1. Path Configuration
@@ -27,7 +27,7 @@ def extract_frames(video_path, output_dir, every_n_seconds=2):
     if fps <= 0:
         raise ValueError(f"Could not read FPS from video at {video_path}")
 
-    frame_interval = int(fps * every_n_seconds)
+    frame_interval = max(1, int(fps * every_n_seconds))
     saved = 0
     frame_idx = 0
 
@@ -48,10 +48,10 @@ def extract_frames(video_path, output_dir, every_n_seconds=2):
 def run_yolo_predictions(frame_dir, output_project_dir):
     """Runs YOLOv8 model inference over extracted frames and saves visualized output."""
     model = YOLO("yolov8n.pt")
-    results = model.predict(
+    model.predict(
         source=frame_dir,
         save=True,
-        project=output_project_dir,
+        project=os.path.abspath(output_project_dir),
         name="run1",
         conf=0.25,
         imgsz=640,
