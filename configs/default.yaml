@@ -7,7 +7,7 @@ project:
 paths:
   raw_videos: data/raw_videos
   raw_frames: data/raw_frames
-  dataset: data/dataset_v2
+  dataset: data/person_detection_v2
   calibration: data/calibration
   models: models
   outputs: outputs
@@ -19,8 +19,15 @@ video:
 models:
   person_detector: yolo11n.pt
   pose_estimator: yolo11n-pose.pt
-  role_detector: models/detection/best.pt
   tracker: bytetrack.yaml
+
+# These are camera contexts, not per-person role predictions. A track whose
+# role is ambiguous within a view must remain unknown.
+cameras:
+  student_view:
+    expected_role: student
+  instructor_view:
+    expected_role: teacher
 
 inference:
   confidence_threshold: 0.25
@@ -29,6 +36,8 @@ inference:
 analysis:
   minimum_event_duration_seconds: 0.5
   merge_gap_seconds: 0.25
+  # Metrics use valid visible time, not the full video duration by default.
+  require_evidence_coverage: true
 
 reporting:
   format: html

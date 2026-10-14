@@ -1,0 +1,9 @@
+# Historical one-class person dataset. Most train images and all test images
+# have no matching labels; use only after completing the annotation audit.
+path: data/person_detection_v1
+
+train: images/train
+val: images/val
+
+names:
+  0: person

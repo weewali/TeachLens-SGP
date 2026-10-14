@@ -1,5 +1,6 @@
 # Copy this file for each fixed camera and replace the example coordinates.
 # Points are normalized to a 0..1 frame so calibration is resolution-independent.
+# These polygons are placeholders, not valid classroom calibration.
 
 camera_id: example_classroom_camera
 

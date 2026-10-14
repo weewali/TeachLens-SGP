@@ -1,4 +1,7 @@
-path: data/dataset_v2
+# Current one-class person-detection experiment. This is not a role detector.
+# Train and validation currently contain the same source frames; repair the
+# split before using validation metrics.
+path: data/person_detection_v2
 
 train: images/train
 val: images/val

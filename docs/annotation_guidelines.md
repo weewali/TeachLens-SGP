@@ -2,14 +2,18 @@
 
 ## Allowed Labels
 
-Only these two labels are allowed in `dataset_v1`:
+The imported two-class dataset in `data/student_instructor_imported/` uses:
 
 ```text
-0: instructor
-1: student
+0: student
+1: instructor
 ```
 
-Do not use behavior labels such as `writing`, `walking`, `focused`, `distracted`, `bored`, or `engaged` in the first dataset version.
+The separate `person_detection_v1` and `person_detection_v2` datasets use
+`0: person`. Do not change a dataset's numeric class meaning in place.
+
+Do not use behavior labels such as `writing`, `walking`, `focused`,
+`distracted`, `bored`, or `engaged` in a role-detection dataset.
 
 ## Bounding Box Rules
 

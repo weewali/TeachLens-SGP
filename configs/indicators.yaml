@@ -1,10 +1,23 @@
-# Phase 1 indicator switches and thresholds.
-# Each indicator must produce observable evidence, confidence, and coverage.
+# Catalog-aligned feature plan. Enabled means intended for the first visual
+# pipeline; it does not imply the corresponding source module exists yet.
+# Role-specific indicators use the configured camera context and must leave
+# ambiguous people as unknown rather than forcing a role assignment.
+# Zone-specific indicators also require a camera-specific calibration file.
 
 visual:
   teacher_presence:
     enabled: true
   visible_student_count:
+    enabled: true
+  anonymous_tracking:
+    enabled: true
+  position:
+    enabled: true
+  classroom_zone:
+    enabled: false
+  entry_exit:
+    enabled: false
+  visibility_occlusion:
     enabled: true
   hand_raise:
     enabled: true
@@ -17,7 +30,24 @@ visual:
     enabled: false
   teacher_movement:
     enabled: false
+  student_movement:
+    enabled: false
+  teacher_position_heatmap:
+    enabled: false
+  teacher_stationary_episodes:
+    enabled: false
+  student_out_of_seat:
+    enabled: false
 
+interaction:
+  hand_raise_participation_breadth:
+    enabled: false
+  teacher_student_proximity:
+    enabled: false
+  group_formation:
+    enabled: false
+
+# Audio, transcript, and speech-linked interaction work is deferred.
 audio:
   speaker_turns:
     enabled: false
@@ -27,7 +57,8 @@ audio:
     enabled: false
 
 quality:
-  recording_quality:
-    enabled: true
+  # Visibility/keypoint coverage is needed for every reported visual rate.
   evidence_coverage:
     enabled: true
+  recording_quality:
+    enabled: false

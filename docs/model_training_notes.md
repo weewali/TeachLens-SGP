@@ -1,5 +1,11 @@
 # Model Training Notes
 
+> Historical training instructions below use a proposed class order and
+> examples. They are not valid for the current datasets. The current one-class
+> person dataset is described by `data.yaml` (`0: person`); the imported role
+> dataset is described by `role_data.yaml` (`0: student`, `1: instructor`).
+> Audit labels and remove source-frame overlap across splits before training.
+
 The first model will use a YOLO-based object detector to identify:
 
 ```text
@@ -55,7 +61,7 @@ The dataset should be organized like this:
 TeachLens-SGP/
 │
 ├── data/
-│   └── dataset_v1/
+│   └── person_detection_v1/
 │       ├── images/
 │       │   ├── train/
 │       │   └── val/
@@ -78,15 +84,15 @@ Each image must have a matching label file with the exact same name.
 Example:
 
 ```text
-data/dataset_v1/images/train/frame001.jpg
-data/dataset_v1/labels/train/frame001.txt
+data/person_detection_v1/images/train/frame001.jpg
+data/person_detection_v1/labels/train/frame001.txt
 ```
 
 Another example:
 
 ```text
-data/dataset_v1/images/val/frame150.jpg
-data/dataset_v1/labels/val/frame150.txt
+data/person_detection_v1/images/val/frame150.jpg
+data/person_detection_v1/labels/val/frame150.txt
 ```
 
 ---
@@ -182,7 +188,7 @@ TeachLens-SGP/data.yaml
 Paste this inside:
 
 ```yaml
-path: data/dataset_v1
+path: data/person_detection_v1
 
 train: images/train
 val: images/val
@@ -201,13 +207,13 @@ The `data.yaml` file tells YOLO where the dataset is and what the class names ar
 This part:
 
 ```yaml
-path: data/dataset_v1
+path: data/person_detection_v1
 ```
 
 means the main dataset folder is:
 
 ```text
-data/dataset_v1
+data/person_detection_v1
 ```
 
 This part:
@@ -219,7 +225,7 @@ train: images/train
 means the training images are inside:
 
 ```text
-data/dataset_v1/images/train
+data/person_detection_v1/images/train
 ```
 
 This part:
@@ -231,7 +237,7 @@ val: images/val
 means the validation images are inside:
 
 ```text
-data/dataset_v1/images/val
+data/person_detection_v1/images/val
 ```
 
 This part:
@@ -259,25 +265,25 @@ cd "C:\Users\weewa\OneDrive\Desktop\TeachLens-SGP"
 Check training images:
 
 ```powershell
-Get-ChildItem .\data\dataset_v1\images\train\*.jpg | Measure-Object
+Get-ChildItem .\data\person_detection_v1\images\train\*.jpg | Measure-Object
 ```
 
 Check validation images:
 
 ```powershell
-Get-ChildItem .\data\dataset_v1\images\val\*.jpg | Measure-Object
+Get-ChildItem .\data\person_detection_v1\images\val\*.jpg | Measure-Object
 ```
 
 Check training labels:
 
 ```powershell
-Get-ChildItem .\data\dataset_v1\labels\train\*.txt | Measure-Object
+Get-ChildItem .\data\person_detection_v1\labels\train\*.txt | Measure-Object
 ```
 
 Check validation labels:
 
 ```powershell
-Get-ChildItem .\data\dataset_v1\labels\val\*.txt | Measure-Object
+Get-ChildItem .\data\person_detection_v1\labels\val\*.txt | Measure-Object
 ```
 
 The number of label files should match the number of image files.
@@ -484,7 +490,7 @@ Use this when you want to visualize students/instructors being followed across t
 Try:
 
 ```bash
-yolo predict model=runs/detect/teachlens_v1/weights/best.pt source=data/dataset_v1/images/train conf=0.01 save=True
+yolo predict model=runs/detect/teachlens_v1/weights/best.pt source=data/person_detection_v1/images/train conf=0.01 save=True
 ```
 
 If it still detects nothing on training images, check:

@@ -1,0 +1,12 @@
+# Historical imported two-class role dataset; not required for the current
+# one-class, two-camera plan. Audit the malformed annotation and split overlap
+# before any future role-detection training or validation.
+# Do not swap numeric IDs to match older documentation.
+path: data/student_instructor_imported
+
+train: images/train
+val: images/val
+
+names:
+  0: student
+  1: instructor

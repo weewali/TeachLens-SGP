@@ -32,7 +32,7 @@ recording + camera zones + run configuration
                     |
                     v
               inference layer
- detector -> tracker -> pose model
+ person detector -> tracker -> pose model
                     |
                     v
                event layer
@@ -70,6 +70,8 @@ TeachLens-SGP/
 |-- README.md                              [current]
 |-- requirements.txt                      [current]
 |-- data.yaml                              [current]
+|-- person_v1_data.yaml                    [current, historical person labels]
+|-- role_data.yaml                         [current, imported role labels]
 |-- .gitignore                             [current]
 |
 |-- configs/
@@ -83,9 +85,9 @@ TeachLens-SGP/
 |   |-- calibration/                       [scaffold]
 |   |-- manifests/                         [scaffold]
 |   |-- samples/                           [current]
-|   |-- dataset_v1/                        [current]
-|   |-- dataset_v2/                        [current]
-|   `-- Instructor_Student/                [current imported dataset]
+|   |-- person_detection_v1/               [current, incomplete labels]
+|   |-- person_detection_v2/               [current, split overlap]
+|   `-- student_instructor_imported/       [current, imported role dataset]
 |
 |-- models/
 |   |-- detection/                         [scaffold, local artifacts]
@@ -153,7 +155,9 @@ TeachLens-SGP/
 | --- | --- | --- |
 | `README.md` | Markdown | Gives the short project description and links to this detailed map. Keep it brief so a new contributor can orient quickly. |
 | `requirements.txt` | pip requirements | Lists Python runtime dependencies. Pin tested versions before a reproducible release; add development-only tools to a future `requirements-dev.txt`. |
-| `data.yaml` | Ultralytics YAML | Tells Ultralytics where the currently selected training images and labels live and maps numeric class IDs to names. It currently describes `dataset_v2` as a one-class `person` dataset. |
+| `data.yaml` | Ultralytics YAML | Current one-class `person` experiment using `person_detection_v2`. Its train and validation splits overlap, so validation metrics are not trustworthy yet. |
+| `person_v1_data.yaml` | Ultralytics YAML | Historical one-class `person` dataset. Most training images lack labels. |
+| `role_data.yaml` | Ultralytics YAML | Historical imported role dataset, with `0: student` and `1: instructor`; it is not used by the current one-class, two-camera pipeline. Audit its malformed label and split overlap before any future training. |
 | `.gitignore` | Git pattern file | Prevents recordings, raw frames, model weights, generated outputs, caches, IDE files, and run artifacts from being committed while retaining directory placeholders. |
 | `yolo11n.pt` | PyTorch weight | Local Ultralytics object-detection checkpoint used by experiments. It is intentionally ignored by Git. New downloaded weights should preferably be placed under `models/detection/`. |
 | `yolo11n-pose.pt` | PyTorch weight | Local Ultralytics pose checkpoint used by the pose demo. It is intentionally ignored by Git. New pose weights should preferably be placed under `models/pose/`. |
@@ -162,8 +166,8 @@ TeachLens-SGP/
 
 | File | Format | Responsibility |
 | --- | --- | --- |
-| `configs/default.yaml` | YAML | Central default paths, pretrained/trained model locations, inference thresholds, event timing, report options, and privacy-safe behavior. Code should load this before applying command-line overrides. |
-| `configs/indicators.yaml` | YAML | Enables indicators independently and owns indicator-specific thresholds. Phase 1 visual indicators are enabled; advanced visual indicators are disabled. |
+| `configs/default.yaml` | YAML | Central default paths, pretrained/trained model locations, two camera contexts, inference thresholds, event timing, report options, and privacy-safe behavior. Code should load this before applying command-line overrides. |
+| `configs/indicators.yaml` | YAML | Declares planned visual Phase 1 switches and indicator-specific thresholds. Audio, recording-quality, and advanced visual indicators are disabled; enabled switches do not mean implementation exists yet. |
 | `configs/zones.example.yaml` | YAML | Example normalized polygon calibration for a fixed classroom camera. Copy it to a camera-specific file and edit the points; never treat these example polygons as real calibration. |
 | `configs/*.local.yaml` | YAML, future and ignored if added | Machine- or experiment-specific overrides such as local absolute paths. These should not contain credentials or be committed. |
 
@@ -178,9 +182,9 @@ Configuration precedence should be: command-line value > local override > `confi
 | `data/calibration/` | YAML/JSON | One camera-specific zone file per fixed camera. Store geometry only, not recordings. |
 | `data/manifests/` | CSV/JSON | Records stable video IDs, source provenance, allowed use, split assignment, and optional calibration ID without putting identity into filenames. |
 | `data/samples/` | Small images and labels | Tiny, safe fixtures used in documentation, smoke tests, and examples. Do not turn this into a second full dataset. |
-| `data/dataset_v1/` | YOLO images and labels | First versioned dataset. Treat its class mapping as immutable; fix labels in a new version if the meaning changes. |
-| `data/dataset_v2/` | YOLO images and labels | Current dataset selected by root `data.yaml`. Train/validation/test image folders must have corresponding label folders. |
-| `data/Instructor_Student/` | YOLO images and labels | Imported or separately prepared instructor/student dataset. Record its origin and class mapping before combining it with another dataset. |
+| `data/person_detection_v1/` | YOLO images and labels | Historical one-class `person` set; most training images and all test images have no matching labels. Do not reinterpret ID 0 as instructor. |
+| `data/person_detection_v2/` | YOLO images and labels | Current one-class `person` set selected by root `data.yaml`; train and validation currently contain the same frames. |
+| `data/student_instructor_imported/` | YOLO images and labels | Imported role set with ID 0 = student, ID 1 = instructor. One annotation is not YOLO text, and source frames appear across splits. Preserve its mapping while repairing a derived version. |
 | `data/**/images/{train,val,test}/` | JPG/PNG | Model inputs split before training. Frames from the same source recording must not be split across train and validation/test sets. |
 | `data/**/labels/{train,val,test}/` | YOLO TXT | One annotation file per image with the same base filename. `classes.txt` is informative; the dataset YAML remains the training source of truth. |
 | `*.cache` inside datasets | Ultralytics cache | Generated acceleration files. They can be deleted and regenerated; they are not authoritative labels. |
@@ -202,7 +206,7 @@ Create a Python file below only when its first behavior and tests are implemente
 
 | Planned file | Responsibility |
 | --- | --- |
-| `detection.py` | Load the chosen YOLO detector and return person boxes, class/role predictions, and confidences in a model-independent record shape. |
+| `detection.py` | Load the one-class YOLO person detector and return boxes and confidences in a model-independent record shape. Camera context supplies an expected role; ambiguous tracks remain unknown. |
 | `tracking.py` | Associate detections over time with anonymous temporary IDs using ByteTrack or BoT-SORT and report track-quality information. IDs must reset between recordings. |
 | `pose.py` | Run pose estimation and convert keypoints into normalized, confidence-aware observations. It must not directly claim attention, engagement, or emotion. |
 
@@ -316,11 +320,11 @@ Model files and generated outputs are local artifacts and remain ignored by Git.
 
 ## 14. Recommended implementation order
 
-1. Reconcile the one-class versus two-class dataset contract and create the correct dataset YAML without changing old label meanings.
+1. Use the one-class `person` contract for the current two-camera pipeline. Repair missing labels and split leakage before training; preserve the historical imported two-class mapping without using it for this pipeline.
 2. Move reusable frame/video logic into `src/preprocessing/video.py` and add unit tests.
 3. Implement the canonical event model in `src/analysis/events.py` and write JSONL under `outputs/events/`.
 4. Split the pose demo into detection, tracking, pose, and `visual_indicators.py` modules while preserving a thin demo script.
-5. Add evidence coverage and recording-quality metrics before generating teaching conclusions.
+5. Add visibility and pose evidence coverage before reporting visual rates; recording-quality analysis remains deferred.
 6. Implement aggregation, charts, and an HTML report with explicit confidence and limitations.
 7. Add the audio pipeline only after visual Phase 1 is testable on held-out recordings.
 
