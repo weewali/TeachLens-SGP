@@ -83,7 +83,7 @@ The report can then aggregate events into counts, rates, percentages, timelines,
 | Student | Body-movement level | Per-track motion intensity and unusually large changes | Normalize keypoint displacement by body scale and remove global camera motion; do not equate stillness or movement with engagement |
 | Student | Writing/presenting at board | Which anonymous track approaches and interacts with the board; duration | Track a student entering the board zone and detect pointing/writing motion |
 
-## D. Speech, voice, and transcript indicators
+## D. Speech, voice, and transcript indicators (not going to be implemeted yet)
 
 These indicators require usable audio. The normal pipeline is voice-activity detection, speaker diarization, audio-video active-speaker association, speech-to-text, and then rule-based or language-model analysis of the transcript. If the microphone captures only the teacher, student-speaking measures will be incomplete.
 
@@ -127,7 +127,7 @@ These indicators require usable audio. The normal pipeline is voice-activity det
 | Student | Answer correctness | Correct/partially correct/incorrect/unknown for a response | Requires a supplied answer key, rubric, or trusted subject model plus transcript context; never infer reliably from video alone |
 | Student | Peer explanation | Student turns that explain reasoning or content to peers | Detect during group-work segments and classify discourse function from local conversation context |
 
-## E. Teacher–student interaction and whole-class indicators
+## E. Teacher–student interaction and whole-class indicators (only movement related indicators)
 
 | Who | Indicator | What it records | How to detect it |
 |---|---|---|---|
@@ -157,7 +157,7 @@ These indicators require usable audio. The normal pipeline is voice-activity det
 | Classroom | Attendance proxy | Maximum/median unique visible student tracks or occupied seats | Combine long-lived tracks and seat occupancy; explicitly label it incomplete when the camera does not show every seat |
 | Classroom | Evidence coverage | Percentage of lesson for which each indicator had adequate visibility/audio | Aggregate the quality gates required by each indicator; show this beside every reported metric |
 
-## F. Recording-quality indicators
+## F. Recording-quality indicators (not going to be implemented yet)
 
 These do not evaluate the teacher or students, but they determine whether the behavioral indicators are trustworthy.
 
