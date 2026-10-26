@@ -24,16 +24,16 @@ The report can then aggregate events into counts, rates, percentages, timelines,
 
 | Who | Indicator | What it records | How to detect it |
 |---|---|---|---|
-| Teacher | Teacher presence | Whether the teacher is visible; first/last appearance; visible duration and percentage of lesson | Detect the `instructor` class in each sampled frame, track it with ByteTrack/BoT-SORT, and merge adjacent detections into intervals |
-| Student | Visible student count | Number of students visible at each time; minimum, maximum, median, and time series | Detect the `student` class, track detections, and count reliable tracks per frame; suppress duplicate and low-confidence tracks |
+| Teacher | Teacher presence | Whether the teacher is visible; first/last appearance; visible duration and percentage of lesson | Track the single person in the instructor camera with YOLO26 Pose and ByteTrack; if multiple people make the role ambiguous, report unknown rather than assuming a teacher |
+| Student | Visible student count | Number of students visible at each time; minimum, maximum, median, and time series | Count confirmed YOLO26 Pose tracks in a student-only camera view; mark camera-role assumptions and provisional/ambiguous frames as limited evidence |
 | Teacher or student | Persistent anonymous identity | A temporary ID linking the same visible person across frames | Multi-object tracking using bounding-box motion and appearance embeddings; reset IDs between recordings |
-| Teacher or student | Role classification | Whether a tracked person is the teacher or a student, with confidence | Use the project's two-class detector and stabilize predictions across the track; optionally use location and speaking evidence as secondary cues |
+| Teacher or student | Role classification | Whether a tracked person is assumed to be the teacher or a student, or unknown | For the current one-class pose model, assign an expected role only from camera context under an explicit camera policy; this is not a learned role classifier and has no calibrated role confidence |
 | Teacher or student | Position | Bounding-box center, body keypoints, and normalized coordinates over time | Person detection plus pose estimation; normalize coordinates by frame width and height |
 | Teacher or student | Classroom zone | Time spent in configured regions such as board, lectern, aisle, or seating area | Calibrate polygon zones once per camera, then test the person's foot point or box center against each polygon |
 | Teacher or student | Entry and exit | Timestamp when a person enters or leaves the visible scene | Detect creation and termination of stable tracks near frame boundaries; ignore short tracking losses |
-| Teacher or student | Visibility/occlusion | Whether the full body, upper body, face, or required joints are visible | Combine bounding-box truncation, pose-keypoint confidence, face detection, and percentage of the track hidden by other boxes |
-| Teacher or student | Sitting/standing | State, transition timestamps, duration, and percentage of visible time | Classify temporally smoothed pose geometry using hip/knee angles and torso-to-box proportions; train a small action classifier for difficult camera angles |
-| Teacher or student | Motion level | Still, low, medium, or high body movement and duration | Use tracked keypoint displacement or optical flow normalized by body size and camera motion |
+| Teacher or student | Visibility/occlusion | Whether the full body, upper body, face landmarks, or required joints are visible | Combine box truncation, COCO-17 keypoint confidence, and box overlap as visibility proxies; do not claim to distinguish true occlusion from blur or model failure |
+| Teacher or student | Sitting/standing | State, transition timestamps, duration, and percentage of visible time | Use conservative 2D hip/knee-angle rules with unknown when joints are hidden or geometry is ambiguous; a later action classifier may help difficult angles |
+| Teacher or student | Motion level | Still, low, medium, or high apparent body movement and duration | Smooth tracked keypoint displacement normalized by body height on a fixed camera; report unknown when motion cannot be measured and do not call it engagement |
 
 ## B. Teacher visual behavior
 
@@ -212,17 +212,16 @@ Semantic indicators in Phase 3 should expose the supporting transcript clip and 
 ## I. Suggested detection architecture
 
 ```text
-Video ──> teacher/student detector ──> multi-object tracker ──> pose/head/object models
-   │                                      │                         │
-   │                                      └──── positions/zones ────┤
-   │                                                                │
-Audio ──> VAD ──> diarization ──> active-speaker association ──> ASR transcript
-                                                                    │
-                     temporal rules + action models + transcript NLP
-                                                                    │
-                       timestamped evidence events with confidence
-                                                                    │
-                         aggregates, timelines, heatmaps, report
+Video ──> YOLO26 pose (person boxes + joints) ──> ByteTrack ──> List A rules
+                                   │                  │                 │
+                                   └──── position/zone/visibility ────┘
+                                                        │
+                                  timestamped evidence events + coverage
+                                                        │
+                                              JSON summary (current)
+
+Future: object/head/action models and audio/transcript branches can feed
+the same event layer; they are not part of the current List A pipeline.
 ```
 
 The safest reporting pattern is: **observation + denominator + confidence + limitation**. For example: “12 hand raises were detected among 18 students whose upper-body pose was visible for at least half of the lesson; estimated event precision on the validation set: 0.87.”

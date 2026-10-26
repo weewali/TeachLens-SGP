@@ -1,5 +1,5 @@
-# Catalog-aligned feature plan. Enabled means intended for the first visual
-# pipeline; it does not imply the corresponding source module exists yet.
+# Catalog-aligned feature plan. The List A switches below are read by the
+# pose-only pipeline. Other sections remain future work.
 # Role-specific indicators use the configured camera context and must leave
 # ambiguous people as unknown rather than forcing a role assignment.
 # Zone-specific indicators also require a camera-specific calibration file.
@@ -11,21 +11,25 @@ visual:
     enabled: true
   anonymous_tracking:
     enabled: true
+  role_classification:
+    enabled: true
   position:
     enabled: true
   classroom_zone:
-    enabled: false
+    enabled: true  # emits nothing until a camera-specific zone file is set
   entry_exit:
-    enabled: false
+    enabled: true  # only apparent transitions at a frame edge
   visibility_occlusion:
     enabled: true
   hand_raise:
-    enabled: true
+    enabled: false  # List C; intentionally deferred
     minimum_keypoint_confidence: 0.25
     smoothing_window_seconds: 0.5
     positive_frame_ratio: 0.70
   sitting_standing:
-    enabled: false
+    enabled: true
+  motion_level:
+    enabled: true
   head_torso_orientation:
     enabled: false
   teacher_movement:

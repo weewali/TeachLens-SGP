@@ -7,37 +7,114 @@ project:
 paths:
   raw_videos: data/raw_videos
   raw_frames: data/raw_frames
-  dataset: data/person_detection_v2
+  indicators: configs/indicators.yaml
+  dataset: data/person_detection
   calibration: data/calibration
   models: models
   outputs: outputs
   runs: runs
 
 video:
-  sample_every_seconds: 2
+  # 5 sampled frames/second; 2-second gaps are too sparse for motion/tracking.
+  sample_every_seconds: 0.2
 
 models:
   person_detector: yolo11n.pt
-  pose_estimator: yolo11n-pose.pt
+  # Explicit local file: analysis never triggers an implicit model download.
+  pose_estimator: models/pose/yolo26n-pose.pt
   tracker: bytetrack.yaml
 
 # These are camera contexts, not per-person role predictions. A track whose
 # role is ambiguous within a view must remain unknown.
+#
+# TeachLens recordings use static cameras on tripods: no panning, zooming, or
+# cuts, so image coordinates are scene coordinates for the whole run. The
+# downloaded web samples are operated cameras; analyze those with
+# --local-config configs/web_sample_cameras.yaml.
+#
+# pose_joints lists the COCO-17 groups rules may use (head, arms, hips, knees,
+# ankles); other joints are dropped before any rule sees them, as are joints
+# placed outside the image. posture_method is legs (hip/knee angles, with the
+# shoulder-hip-knee fallback when ankles are missing) or shoulder_rise
+# (shoulder height against the track's own seated level; fixed cameras only).
 cameras:
   student_view:
     expected_role: student
+    # Use all_tracks only if this camera is truly restricted to students.
+    role_policy: all_tracks
+    fixed_camera: true
+    compensate_camera_motion: false
+    # Desks hide students' knees and ankles, and the model still guesses
+    # positions for hidden joints, so student rules never use legs.
+    pose_joints: [head, arms, hips]
+    posture_method: shoulder_rise
+    zones: null
   instructor_view:
     expected_role: teacher
+    # More than one confirmed visible person makes their roles unknown.
+    role_policy: single_visible
+    fixed_camera: true
+    compensate_camera_motion: false
+    # Legs are used when visible; near the camera the feet or knees leave the
+    # frame, and posture then falls back to shoulder-hip-knee or unknown.
+    pose_joints: [head, arms, hips, knees, ankles]
+    posture_method: legs
+    zones: null
+
+# Background feature matching for cameras with fixed_camera: false and
+# compensate_camera_motion: true (only the web-sample override sets these).
+camera_motion:
+  min_inliers: 40  # fewer agreeing background features = unmeasured step (new shot)
+  max_scale_step: 0.1  # >10% zoom between samples is treated as a cut
 
 inference:
   confidence_threshold: 0.25
   iou_threshold: 0.45
+  keypoint_confidence: 0.35
 
 analysis:
   minimum_event_duration_seconds: 0.5
   merge_gap_seconds: 0.25
+  min_track_samples: 3
+  max_track_gap_seconds: 0.6
+  edge_margin: 0.05
+  sitting_angle_degrees: 135
+  standing_angle_degrees: 160
+  # Without visible ankles (feet cut off or hidden), judge posture from
+  # shoulder-hip-knee: standing = straight hip + thigh near vertical, sitting =
+  # bent hip + thigh near horizontal. Reported as limited coverage.
+  upper_leg_posture: true
+  thigh_axis_tolerance_degrees: 30
+  thigh_torso_min_ratio: 0.5  # shorter thighs are foreshortened; direction not trusted
+  # shoulder_rise posture, in shoulder widths above the track's seated level
+  # (the low end of its own shoulder heights). Assumes students sit most of
+  # the time and stand up in place; unvalidated starting values.
+  shoulder_rise_standing_min: 0.7
+  shoulder_rise_sitting_max: 0.35
+  shoulder_rise_history_seconds: 3.0  # shoulder history needed before any label
+  shoulder_rise_max_seat_shift: 1.0  # widths away from the seat -> unknown (left the seat)
+  # Median apparent joint displacement in body-heights/second.
+  motion_low_max: 0.08
+  motion_medium_max: 0.35
+  motion_high_min: 0.8
+  motion_smoothing_samples: 3
   # Metrics use valid visible time, not the full video duration by default.
   require_evidence_coverage: true
+
+# Visual check of what List A saw in each analyzed (sampled) frame. The MP4
+# holds original classroom footage: it stays local under outputs/debug/
+# (ignored by Git) and must not be shared without the recording's permission.
+review:
+  save_video: true  # outputs/debug/<video_id>.list_a.mp4; --no-save-video skips it
+  video_codec: avc1  # H.264; falls back to mp4v when OpenCV cannot encode it
+  live_preview: false  # or --live; needs a desktop session
+  show_rejected_keypoints: false  # grey rings for joints below keypoint_confidence
+  # Trail of hip-centre points in camera-shot coordinates: "off", "teacher"
+  # (camera-assumed teacher), or "all" (every confirmed track); or --path.
+  # Quoted because YAML reads a bare off as false.
+  path: "off"
+  path_seconds: null  # null keeps the whole analyzed range; e.g. 30 for a recent trail
+  path_max_gap_seconds: 1.0  # longer gaps between points are not joined by a line
 
 reporting:
   format: html

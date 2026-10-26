@@ -11,6 +11,8 @@ data/raw_videos/**
 data/raw_frames/**
 !data/raw_frames/**/
 !data/raw_frames/**/.gitkeep
+# Keep downloaded Roboflow exports local; retain the combined dataset YAML.
+data/person_detection/people_*/
 data/person_detection_v1/images/train/*
 !data/person_detection_v1/images/train/.gitkeep
 data/person_detection_v1/images/val/*

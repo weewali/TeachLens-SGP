@@ -2,13 +2,13 @@
 
 This document is the repository map for TeachLens. It defines where every type of work belongs, which language or format it uses, and the responsibility of each current or planned file.
 
-The repository is currently an early computer-vision prototype. Existing datasets, recordings, generated runs, and the pose demo are preserved in place. 
+The repository now has a small executable List A physical-indicator pipeline alongside the earlier pose demo. Existing datasets, recordings, and generated runs remain in place. See [list_a_pose.md](list_a_pose.md) for usage and limitations.
 
 ## 1. Technology choices
 
 | Area | Language or format | Why |
 | --- | --- | --- |
-| Pipeline, model inference, analysis, training, and command-line tools | Python 3.11+ (`.py`) | The current code and the Ultralytics, OpenCV, NumPy, pandas, SciPy, statsmodels, and Jinja2 libraries are Python-based. One executable language keeps the project easier to test and maintain. |
+| Pipeline, model inference, analysis, training, and command-line tools | Python 3.10+ (`.py`) | The existing TeachLens Conda environment uses Python 3.10; one executable language keeps the project easier to test and maintain. |
 | Runtime and model configuration | YAML (`.yaml`) | Human-readable settings can change without editing Python. |
 | Dataset annotations | YOLO text (`.txt`) | Ultralytics expects one normalized annotation row per object. |
 | Event interchange | JSON Lines (`.jsonl`) | One timestamped event per line is streamable, debuggable, and easy to process with Python or external tools. |
@@ -28,11 +28,11 @@ recording + camera zones + run configuration
                     |
                     v
             preprocessing layer
-       video metadata, frames, and audio
+       video metadata, frames (audio later)
                     |
                     v
               inference layer
- person detector -> tracker -> pose model
+ YOLO26 pose (person boxes + COCO-17 joints) -> ByteTrack
                     |
                     v
                event layer
@@ -53,7 +53,7 @@ Every event should eventually include:
 
 - `video_id`
 - anonymous `track_id`, when applicable
-- `role`: `teacher`, `student`, `both`, `classroom`, or `recording`
+- `role`: `teacher`, `student`, `unknown`, `both`, `classroom`, or `recording`
 - `indicator_name`
 - `start_time`, `end_time`, and `duration`
 - observed value or event label
@@ -77,11 +77,13 @@ TeachLens-SGP/
 |-- configs/
 |   |-- default.yaml                       [scaffold]
 |   |-- indicators.yaml                    [scaffold]
+|   |-- web_sample_cameras.yaml            [current, override for panning web clips]
 |   `-- zones.example.yaml                 [scaffold]
 |
 |-- data/
 |   |-- raw_videos/                        [current, local only]
 |   |-- raw_frames/                        [current, local only]
+|   |-- person_detection/                  [current, local Roboflow exports + YAML]
 |   |-- calibration/                       [scaffold]
 |   |-- manifests/                         [scaffold]
 |   |-- samples/                           [current]
@@ -91,26 +93,29 @@ TeachLens-SGP/
 |
 |-- models/
 |   |-- detection/                         [scaffold, local artifacts]
-|   |-- pose/                              [scaffold, local artifacts]
+|   |-- pose/                              [current, local YOLO26 checkpoint]
 |   `-- audio/                             [scaffold, local artifacts]
 |
 |-- src/
 |   |-- preprocessing/
-|   |   |-- video.py                       [planned]
+|   |   |-- video.py                       [current]
+|   |   |-- camera_motion.py               [current, pan/zoom/cut estimate]
+|   |   |-- recording_time.py              [current, metadata recording time]
 |   |   `-- dataset.py                     [planned]
 |   |-- inference/
 |   |   |-- detection.py                   [planned]
 |   |   |-- tracking.py                    [planned]
-|   |   |-- pose.py                        [planned]
+|   |   |-- pose.py                        [current, YOLO26 + ByteTrack adapter]
 |   |   `-- speech.py                      [planned]
 |   |-- analysis/
-|   |   |-- events.py                      [planned]
-|   |   |-- visual_indicators.py           [planned]
+|   |   |-- events.py                      [current]
+|   |   |-- visual_indicators.py           [current, List A]
 |   |   |-- speech_indicators.py           [planned]
 |   |   |-- interaction_indicators.py      [planned]
 |   |   |-- quality.py                     [planned]
-|   |   `-- aggregates.py                  [planned]
+|   |   `-- aggregates.py                  [current, List A JSON summary]
 |   |-- reporting/
+|   |   |-- annotated_video.py             [current, List A overlays/MP4/live window]
 |   |   |-- charts.py                      [planned]
 |   |   |-- renderer.py                    [planned]
 |   |   `-- templates/                     [scaffold]
@@ -120,17 +125,19 @@ TeachLens-SGP/
 |   |   |-- train_detector.py              [planned]
 |   |   `-- evaluate_detector.py           [planned]
 |   |-- utils/
-|   |   |-- config.py                      [planned]
-|   |   |-- paths.py                       [planned]
+|   |   |-- config.py                      [current]
+|   |   |-- paths.py                       [current]
 |   |   `-- logging.py                     [planned]
-|   `-- pipeline.py                        [planned]
+|   `-- pipeline.py                        [current, List A orchestration]
 |
 |-- scripts/
 |   |-- extract_frames_ffmpeg.py           [current]
-|   `-- pose_action_demo.py                [current local prototype]
+|   |-- pose_action_demo.py                [current local prototype]
+|   |-- recording_time.py                  [current, shows recording time]
+|   `-- analyze.py                          [current, List A CLI]
 |
 |-- tests/
-|   |-- unit/                              [scaffold]
+|   |-- unit/                              [current, List A tests]
 |   |-- integration/                       [scaffold]
 |   `-- fixtures/                          [scaffold]
 |
@@ -155,7 +162,7 @@ TeachLens-SGP/
 | --- | --- | --- |
 | `README.md` | Markdown | Gives the short project description and links to this detailed map. Keep it brief so a new contributor can orient quickly. |
 | `requirements.txt` | pip requirements | Lists Python runtime dependencies. Pin tested versions before a reproducible release; add development-only tools to a future `requirements-dev.txt`. |
-| `data.yaml` | Ultralytics YAML | Current one-class `person` experiment using `person_detection_v2`. Its train and validation splits overlap, so validation metrics are not trustworthy yet. |
+| `data.yaml` | Ultralytics YAML | Current one-class `person` experiment using `data/person_detection/people_01`. `people_02` appears to duplicate the same Roboflow export, and source names overlap across train and validation. |
 | `person_v1_data.yaml` | Ultralytics YAML | Historical one-class `person` dataset. Most training images lack labels. |
 | `role_data.yaml` | Ultralytics YAML | Historical imported role dataset, with `0: student` and `1: instructor`; it is not used by the current one-class, two-camera pipeline. Audit its malformed label and split overlap before any future training. |
 | `.gitignore` | Git pattern file | Prevents recordings, raw frames, model weights, generated outputs, caches, IDE files, and run artifacts from being committed while retaining directory placeholders. |
@@ -166,8 +173,9 @@ TeachLens-SGP/
 
 | File | Format | Responsibility |
 | --- | --- | --- |
-| `configs/default.yaml` | YAML | Central default paths, pretrained/trained model locations, two camera contexts, inference thresholds, event timing, report options, and privacy-safe behavior. Code should load this before applying command-line overrides. |
-| `configs/indicators.yaml` | YAML | Declares planned visual Phase 1 switches and indicator-specific thresholds. Audio, recording-quality, and advanced visual indicators are disabled; enabled switches do not mean implementation exists yet. |
+| `configs/default.yaml` | YAML | Central default paths, local YOLO26 pose checkpoint, camera role policies, inference and List A thresholds. Code loads this before local and command-line overrides. |
+| `configs/indicators.yaml` | YAML | List A feature switches are honored by the current pipeline. Hand raises, audio, recording quality, and advanced visual work are disabled or deferred. |
+| `configs/web_sample_cameras.yaml` | YAML | Committed override for the downloaded web samples, whose operated cameras pan, zoom, and cut: turns on camera-motion compensation for `instructor_view`. TeachLens's own static-camera recordings use the defaults instead. |
 | `configs/zones.example.yaml` | YAML | Example normalized polygon calibration for a fixed classroom camera. Copy it to a camera-specific file and edit the points; never treat these example polygons as real calibration. |
 | `configs/*.local.yaml` | YAML, future and ignored if added | Machine- or experiment-specific overrides such as local absolute paths. These should not contain credentials or be committed. |
 
@@ -179,11 +187,12 @@ Configuration precedence should be: command-line value > local override > `confi
 | --- | --- | --- |
 | `data/raw_videos/` | MP4/MOV/MKV, local only | Canonical location for source recordings. New recordings should be copied here under clear, anonymous names. |
 | `data/raw_frames/` | JPG/PNG, local only | Frames extracted from raw recordings. Filenames should contain a video ID and zero-padded frame number. |
+| `data/person_detection/` | YOLO images/labels plus YAML | Holds downloaded one-class Roboflow exports locally and a `combined.yaml` that currently selects one copy. Add distinct sources to the YAML only after checking class IDs and split leakage. |
 | `data/calibration/` | YAML/JSON | One camera-specific zone file per fixed camera. Store geometry only, not recordings. |
 | `data/manifests/` | CSV/JSON | Records stable video IDs, source provenance, allowed use, split assignment, and optional calibration ID without putting identity into filenames. |
 | `data/samples/` | Small images and labels | Tiny, safe fixtures used in documentation, smoke tests, and examples. Do not turn this into a second full dataset. |
 | `data/person_detection_v1/` | YOLO images and labels | Historical one-class `person` set; most training images and all test images have no matching labels. Do not reinterpret ID 0 as instructor. |
-| `data/person_detection_v2/` | YOLO images and labels | Current one-class `person` set selected by root `data.yaml`; train and validation currently contain the same frames. |
+| `data/person_detection_v2/` | YOLO images and labels | Historical one-class `person` set, no longer selected by root `data.yaml`; its train and validation contain the same frames. |
 | `data/student_instructor_imported/` | YOLO images and labels | Imported role set with ID 0 = student, ID 1 = instructor. One annotation is not YOLO text, and source frames appear across splits. Preserve its mapping while repairing a derived version. |
 | `data/**/images/{train,val,test}/` | JPG/PNG | Model inputs split before training. Frames from the same source recording must not be split across train and validation/test sets. |
 | `data/**/labels/{train,val,test}/` | YOLO TXT | One annotation file per image with the same base filename. `classes.txt` is informative; the dataset YAML remains the training source of truth. |
@@ -199,7 +208,9 @@ Create a Python file below only when its first behavior and tests are implemente
 
 | Planned file | Responsibility |
 | --- | --- |
-| `video.py` | Probe video metadata, validate codecs/FPS/duration, sample frames, and expose timestamp-preserving frame iteration. This becomes the reusable home for logic currently demonstrated in `scripts/extract_frames_ffmpeg.py`.
+| `video.py` | Current timestamp-preserving video frame reader with FPS and dimension validation, and optional start/end segments that seek directly and keep the full-run sample grid. Codec diagnostics and richer preprocessing remain future work. |
+| `camera_motion.py` | Current. Estimates a moving camera's pan/zoom between samples from background features (people masked out), chains it into per-shot reference coordinates, and starts a new shot at cuts or unmeasurable steps. Pure measurement; analysis decides how to use it. |
+| `recording_time.py` | Current. Reads recording-time tags with ffprobe (Apple `com.apple.quicktime.creationdate` preferred, then UTC `creation_time`), video duration, frames, frame rate, and camera make/model; converts video positions to clock time. Whole-second camera-clock precision: coarse alignment only, not frame-level camera sync. |
 | `dataset.py` | Validate image/label pairs, enforce class mappings, detect train/validation leakage by source video, and build immutable versioned splits. |
 
 ### `src/inference/`
@@ -208,23 +219,24 @@ Create a Python file below only when its first behavior and tests are implemente
 | --- | --- |
 | `detection.py` | Load the one-class YOLO person detector and return boxes and confidences in a model-independent record shape. Camera context supplies an expected role; ambiguous tracks remain unknown. |
 | `tracking.py` | Associate detections over time with anonymous temporary IDs using ByteTrack or BoT-SORT and report track-quality information. IDs must reset between recordings. |
-| `pose.py` | Run pose estimation and convert keypoints into normalized, confidence-aware observations. It must not directly claim attention, engagement, or emotion. |
+| `pose.py` | Current local YOLO26 Pose + ByteTrack adapter, returning normalized person boxes and confidence-aware COCO-17 joints. It never claims attention, engagement, or emotion. A separate detector/tracker module is unnecessary for this List A path. |
 
 
 ### `src/analysis/`
 
 | Planned file | Responsibility |
 | --- | --- |
-| `events.py` | Define and validate the canonical timestamped event schema shared by inference, analysis, and reporting. Serialize events to JSONL. |
-| `visual_indicators.py` | Convert tracks and pose observations into defensible visual events such as presence, counts, hand raises, position, zones, or movement. |
+| `events.py` | Current validated timestamped event schema and streaming JSONL serialization. |
+| `visual_indicators.py` | Current List A presence/count/role-context/position/zone/visibility/posture/motion rules. After each sample it also exposes the per-track rule state (`last_sample`) used by review overlays. With camera-motion input it measures motion and path positions in camera-shot coordinates. Hand raises are not implemented here yet. |
 | `interaction_indicators.py` | Link teacher prompts, student responses, hand raises, feedback, orientation, and proximity into cross-modal interaction events. |
 | `quality.py` | Measure blur, brightness, coverage, audio quality, ASR confidence, occlusion, and tracking reliability; provide the validity denominator for every metric. |
-| `aggregates.py` | Produce lesson-level counts, rates, percentages, distributions, and timelines from events without changing the underlying evidence. |
+| `aggregates.py` | Current List A JSON summary derived from saved events. Full report/chart aggregation remains planned. |
 
 ### `src/reporting/`
 
 | Planned file | Responsibility |
 | --- | --- |
+| `annotated_video.py` | Current. Draws each analyzed sample's boxes, confident joints, anonymous IDs, assumed roles, and rule states from `PosePerson` observations and the analyzer's `SampleSnapshot`. Optionally draws teacher/all path trails in camera-shot coordinates. Writes `outputs/debug/<id>.list_a.mp4` atomically and runs the optional live OpenCV window. No model or rule logic belongs here. |
 | `charts.py` | Build deterministic timelines, heatmaps, and summary charts from aggregate tables. Save plots under `outputs/visualizations/`. |
 | `renderer.py` | Validate report inputs, render the Jinja2 template, attach evidence/limitations, and write HTML under `outputs/reports/`. PDF export may be added behind the same interface. |
 | `templates/report.html.j2` | Own the semantic HTML report layout and Jinja2 placeholders. It should display observation, denominator, confidence, and limitation together. |
@@ -243,13 +255,13 @@ Pose action rules should first be evaluated using the pretrained pose model. Add
 
 | Planned file | Responsibility |
 | --- | --- |
-| `config.py` | Load YAML, merge overrides, validate required keys and ranges, and return a typed configuration object. |
-| `paths.py` | Resolve repository-relative paths consistently and create only authorized output directories. |
+| `config.py` | Current YAML loader, local overrides, range validation, List A switches, and optional camera-zone calibration. |
+| `paths.py` | Current consistent repository-relative path resolution. |
 | `logging.py` | Configure console/file logs with timestamps, stage names, video IDs, and run IDs while excluding personal data. |
 
 ### `src/pipeline.py`
 
-This planned module will orchestrate one analysis run: load configuration, validate input, call preprocessing and inference, save events, aggregate indicators, and render the report. It should coordinate modules rather than contain detector, indicator, or plotting logic itself.
+This module currently orchestrates one List A run: validate input, call preprocessing and pose tracking, save JSONL events, write the annotated review MP4 and optional live preview through `src/reporting/annotated_video.py`, and generate a JSON summary. HTML/PDF rendering remains planned. It coordinates modules rather than containing model or indicator logic.
 
 ## 8. Scripts
 
@@ -259,8 +271,9 @@ Scripts are thin developer-facing entry points. Reusable behavior belongs under 
 | --- | --- | --- |
 | `scripts/extract_frames_ffmpeg.py` | Python | Current standalone FFmpeg wrapper that extracts one image every N seconds. Later, keep the CLI here but move reusable media logic into `src/preprocessing/video.py`. |
 | `scripts/pose_action_demo.py` | Python | Current experimental YOLO pose + ByteTrack hand-raise demo. It is a proof of concept, not the production pipeline. |
+| `scripts/recording_time.py` | Python | Current thin CLI: prints each video's recording start/end (HH:MM:SS), duration, frame rate, and clock time at given positions from container metadata via `src/preprocessing/recording_time.py`; with several videos, start differences in whole seconds. Never prints GPS values. |
 | `scripts/train.py` | Python, future | Thin CLI that loads config and calls `src/training/train_detector.py`. |
-| `scripts/analyze.py` | Python, future | Thin CLI that analyzes one recording through `src/pipeline.py`. |
+| `scripts/analyze.py` | Python, current | Thin CLI that analyzes one recording through `src/pipeline.py`; `--start/--end` select a segment, and `--live`, `--save-video/--no-save-video`, and `--path` control the review outputs. |
 | `scripts/report.py` | Python, future | Re-renders a report from saved events/aggregates without rerunning expensive models. |
 
 ## 9. Tests
@@ -283,7 +296,7 @@ Test filenames should mirror source modules, for example `src/analysis/quality.p
 | `outputs/events/` | `.jsonl` | Canonical per-video timestamped evidence records. |
 | `outputs/reports/` | `.html`, later `.pdf` | Human-readable final reports. |
 | `outputs/visualizations/` | `.png`, `.svg`, `.csv` | Charts, heatmaps, and their source tables. |
-| `outputs/debug/` | annotated media/logs | Temporary overlays and diagnostics used to inspect incorrect predictions. |
+| `outputs/debug/` | annotated media/logs | Overlays and diagnostics used to inspect incorrect predictions, including `<id>.list_a.mp4` review videos. These contain original classroom footage. |
 
 Model files and generated outputs are local artifacts and remain ignored by Git. The `.gitkeep` files preserve the intended empty directory layout.
 
@@ -292,6 +305,7 @@ Model files and generated outputs are local artifacts and remain ignored by Git.
 | File | Responsibility |
 | --- | --- |
 | `docs/project_structure.md` | This architecture map and the source of truth for file ownership. Update it when a boundary or major file changes. |
+| `docs/test_recording_scenarios.pdf` | Filming plan for short static-camera test lectures (4-6 students): camera setup, behaviour codes, scenarios with per-student roles, calibration clips, and a ground-truth log template. |
 | `docs/video_indicator_catalog.md` | Full catalog of defensible visual, audio, transcript, interaction, and quality indicators plus claims TeachLens must avoid. |
 | `docs/annotation_guidelines.md` | Label names and bounding-box rules for the reviewed two-class annotation workflow. |
 | `docs/annotation_review.md` | Review checklist and audit table for labeled batches. |
@@ -321,11 +335,9 @@ Model files and generated outputs are local artifacts and remain ignored by Git.
 ## 14. Recommended implementation order
 
 1. Use the one-class `person` contract for the current two-camera pipeline. Repair missing labels and split leakage before training; preserve the historical imported two-class mapping without using it for this pipeline.
-2. Move reusable frame/video logic into `src/preprocessing/video.py` and add unit tests.
-3. Implement the canonical event model in `src/analysis/events.py` and write JSONL under `outputs/events/`.
-4. Split the pose demo into detection, tracking, pose, and `visual_indicators.py` modules while preserving a thin demo script.
-5. Add visibility and pose evidence coverage before reporting visual rates; recording-quality analysis remains deferred.
-6. Implement aggregation, charts, and an HTML report with explicit confidence and limitations.
-7. Add the audio pipeline only after visual Phase 1 is testable on held-out recordings.
+2. Completed for List A: timestamped frame iteration, canonical JSONL events, YOLO26 pose + ByteTrack adapter, visual rules, evidence flags, and a JSON summary. The old demo remains separate.
+3. Next: validate List A rules on labeled clips from both cameras; tune thresholds and audit role assumptions, pose coverage, and tracker ID switches.
+4. Later: add charts and an HTML report with explicit confidence and limitations.
+5. Audio remains out of scope for the current physical-indicator implementation.
 
 This order produces a reviewable vertical slice before introducing advanced semantic indicators or a web interface.

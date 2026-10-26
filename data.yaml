@@ -1,10 +1,14 @@
-# Current one-class person-detection experiment. This is not a role detector.
-# Train and validation currently contain the same source frames; repair the
-# split before using validation metrics.
-path: data/person_detection_v2
+# Current one-class person-detection dataset. Both downloaded folders have
+# the same Roboflow project/version and matching file paths, so use one copy.
+# Review source-image overlap between train and validation before trusting metrics.
+path: data/person_detection
 
-train: images/train
-val: images/val
+train:
+  - people_01/train/images
+val:
+  - people_01/valid/images
+test:
+  - people_01/test/images
 
 names:
   0: person

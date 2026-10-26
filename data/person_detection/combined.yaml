@@ -1,0 +1,15 @@
+# One-class person detection. people_02 appears to duplicate people_01;
+# add its paths only after confirming it is a distinct dataset.
+# Source-image names also overlap across train/valid in people_01. Rebuild
+# those splits before using validation or test scores as final evidence.
+path: data/person_detection
+
+train:
+  - people_01/train/images
+val:
+  - people_01/valid/images
+test:
+  - people_01/test/images
+
+names:
+  0: person
