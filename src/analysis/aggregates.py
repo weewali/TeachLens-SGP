@@ -10,11 +10,15 @@ from typing import Any
 def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
                      video_duration: float, sample_period: float,
                      analyzed_start: float = 0.0,
-                     analyzed_end: float | None = None) -> dict[str, Any]:
+                     analyzed_end: float | None = None,
+                     recording_start: str | None = None,
+                     recording_start_source: str | None = None) -> dict[str, Any]:
     """Report coverage explicitly; unknown/uncalibrated time is not a zero.
 
     analyzed_start/analyzed_end bound a --start/--end segment; every duration
     in the summary belongs to that range, not to the whole recording.
+    recording_start (ISO 8601) and its metadata tag are what the events'
+    real times were computed from; both are None without a tag.
     """
     if analyzed_end is None:
         analyzed_end = video_duration
@@ -64,6 +68,8 @@ def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
         "analyzed_start_seconds": round(analyzed_start, 3),
         "analyzed_end_seconds": round(analyzed_end, 3),
         "analyzed_duration_seconds": round(analyzed_seconds, 3),
+        "recording_start_real_time": recording_start,
+        "recording_start_source": recording_start_source,
         "teacher_visible_seconds": round(teacher_seconds, 3) if teacher_sample_values else None,
         "teacher_visible_fraction_of_valid_samples": (
             round(teacher_sample_values["visible"] /
@@ -89,5 +95,8 @@ def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
             "Posture and motion unknown time is excluded from known-state claims.",
             "Zone durations are per-track seconds and may exceed recording length.",
         ] + (["Only the analyzed range is summarized; tracks are cut at its boundaries."]
-             if analyzed_start > 0 or analyzed_end < video_duration else []),
+             if analyzed_start > 0 or analyzed_end < video_duration else [])
+        + (["Real times are the camera's whole-second recording-start tag plus video time; "
+            "accurate to about 1 s."] if recording_start else
+           ["The video has no recording-time tag, so real times are null."]),
     }

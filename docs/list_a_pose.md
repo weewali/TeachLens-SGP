@@ -47,6 +47,28 @@ Outputs and weights are local and ignored by Git. `--debug` logs the detected
 track count per sampled frame. Existing outputs are preserved by default; use
 `--overwrite` only when you intentionally want to replace them.
 
+**Sampling.** The default analyzes **one frame per second**
+(`video.sample_every_seconds: 1.0`); 5 per second was too costly. A track is
+confirmed after 2 samples (about 1 s) and survives one missed sample
+(`max_track_gap_seconds: 2.5`). At this rate someone walking briskly can move
+farther than their own width between samples, so tracker IDs fragment more
+and motion levels are coarser than at 5 per second; seated students and a
+standing teacher are affected least. For a closer look at one moment, rerun a
+short `--start/--end` segment with a smaller `sample_every_seconds` in a local
+override.
+
+**Real time.** Every event also has `start_real_time` and `end_real_time`:
+the wall-clock time, as ISO 8601 with the camera's UTC offset (for example
+`2026-10-26T19:09:25.200+04:00`). They are the recording-start time from the
+video's metadata (read with ffprobe; Apple's `com.apple.quicktime.creationdate`
+first, else `creation_time`) plus the event's position in the video, so events
+from the two cameras can be put on one clock. The summary repeats the start
+time and its tag as `recording_start_real_time` and `recording_start_source`.
+Limits: the tag holds whole seconds, and on tested iPhones it was 0.7-0.95 s
+after the first frame, so real times are good to **about 1 second**. Videos
+without the tag (downloads, edited or re-encoded files) get `null` real times
+and a warning; if ffprobe is missing, the run continues with `null` real times.
+
 ## Analyzing part of a long video
 
 `--start` and `--end` limit a run to one segment. Both accept seconds
@@ -63,9 +85,9 @@ python scripts/analyze.py --video data/raw_videos/HowToSpeak.mp4 --video-id inst
 - Event times stay **relative to the start of the original video**, so
   `50:08.2` in the panel and `3008.2` in the JSONL both point at the same
   moment of the source recording.
-- The segment analyzes exactly the frames a full run would analyze there. At
-  29.97 fps the 0.2-second grid falls at 2999.997 s and 3000.197 s, so a
-  segment starting at `50:00` begins at 3000.197 s.
+- The segment analyzes exactly the frames a full run would analyze there. For
+  example, at 29.97 fps with 0.2-second sampling the grid falls at 2999.997 s
+  and 3000.197 s, so a segment starting at `50:00` begins at 3000.197 s.
 - The summary adds `analyzed_start_seconds`, `analyzed_end_seconds`, and
   `analyzed_duration_seconds`; all durations in it cover only that range, and a
   limitation line says so. `video_duration_seconds` is still the whole source.
@@ -203,8 +225,8 @@ without rerunning the model. Both are drawn from the observations and rule
 state that produced the JSONL in the same run; they add no rules and do not
 change the evidence.
 
-Only **analyzed (sampled) frames** are drawn. With the default 0.2-second
-sampling the MP4 plays at about 5 frames per second and keeps the source's
+Only **analyzed (sampled) frames** are drawn. With the default 1-second
+sampling the MP4 plays at about 1 frame per second and keeps the source's
 timing, so every frame in it is one the rules actually saw. Frames in between
 were never analyzed and are not shown.
 
@@ -289,8 +311,9 @@ validation still needs labelled clips (see below).
 | Camera motion | Moving, compensated cameras only: per-sample shot, measured pan/zoom, background inliers, and the matrix into shot coordinates. |
 
 All events include `video_id`, anonymous `track_id` when applicable,
-`role`, indicator name, start/end/duration, value, nullable confidence,
-coverage, and optional zone. `confidence` is null for camera-assigned roles
+`role`, indicator name, start/end/duration (seconds into the video), value,
+nullable confidence, coverage, optional zone, and `start_real_time`/
+`end_real_time` (wall clock, null without a recording-time tag). `confidence` is null for camera-assigned roles
 and heuristic states/transitions because no calibrated probability exists;
 individual pose keypoints retain their model confidence. JSONL
 records are evidence; the JSON summary aggregates valid samples and includes
@@ -307,9 +330,10 @@ polygons overlap, the first named zone in the YAML wins. The example file is
 not a valid calibration.
 
 Tune `video.sample_every_seconds`, `inference.keypoint_confidence`, and the
-`analysis` thresholds in a local override. At 5 sampled frames per second,
-the default three-sample track confirmation delays counts by about 0.4 s.
-The 0.6-second gap tolerates brief missed tracks. Motion thresholds are
+`analysis` thresholds in a local override. At 1 sampled frame per second,
+the default two-sample track confirmation delays counts by about 1 s, and the
+2.5-second gap tolerates one missed sample. `sample_every_seconds` must not
+exceed `max_track_gap_seconds`. Motion thresholds are
 starting values, **not validated classroom measurements**. Both cameras are
 static by default; set a camera's `fixed_camera: false` only if it pans or
 shakes (as in the web samples); then `compensate_camera_motion` decides
@@ -335,7 +359,8 @@ experimental YOLO11 demo, not the production List A pipeline.
 - `src/preprocessing/camera_motion.py`: camera pan/zoom/cut estimate and shot coordinates.
 - `src/inference/pose.py`: local YOLO26 model, ByteTrack, normalized pose adapter.
 - `src/analysis/visual_indicators.py`: pure List A geometry and temporal rules.
-- `src/analysis/events.py`: validated event schema and JSONL output.
+- `src/analysis/events.py`: validated event schema, real-time fields, and JSONL output.
+- `src/preprocessing/recording_time.py`: recording-start time from metadata (also `scripts/recording_time.py`).
 - `src/analysis/aggregates.py`: evidence-to-summary reduction.
 - `src/reporting/annotated_video.py`: overlay drawing, atomic MP4 writer, live window.
 - `src/utils/config.py` / `src/utils/paths.py`: YAML validation and paths.

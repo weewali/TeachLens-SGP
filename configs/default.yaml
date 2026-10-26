@@ -15,8 +15,11 @@ paths:
   runs: runs
 
 video:
-  # 5 sampled frames/second; 2-second gaps are too sparse for motion/tracking.
-  sample_every_seconds: 0.2
+  # 1 analyzed frame/second (user decision 2026-10-26; 5/s was too costly).
+  # Fast walking can move a person farther than their own width between
+  # samples, so tracker IDs fragment more than at 5/s; much sparser sampling
+  # breaks tracking and motion.
+  sample_every_seconds: 1.0
 
 models:
   person_detector: yolo11n.pt
@@ -75,8 +78,8 @@ inference:
 analysis:
   minimum_event_duration_seconds: 0.5
   merge_gap_seconds: 0.25
-  min_track_samples: 3
-  max_track_gap_seconds: 0.6
+  min_track_samples: 2  # confirmed after being seen in 2 samples (1 s at 1 sample/s)
+  max_track_gap_seconds: 2.5  # tolerates one missed sample at 1 sample/s; must be >= sampling
   edge_margin: 0.05
   sitting_angle_degrees: 135
   standing_angle_degrees: 160

@@ -21,6 +21,13 @@ class SummaryTests(unittest.TestCase):
             self.assertEqual((summary["analyzed_start_seconds"], summary["analyzed_end_seconds"],
                               summary["analyzed_duration_seconds"]), (0.0, 60.0, 60.0))
             self.assertFalse(any("analyzed range" in item for item in summary["limitations"]))
+            self.assertIsNone(summary["recording_start_real_time"])
+            self.assertTrue(any("real times are null" in item for item in summary["limitations"]))
+            tagged = summarize_list_a(path, "student_view", "v1", 60.0, .2, 0.0, None,
+                                      "2026-10-26T19:08:27.000+04:00",
+                                      "com.apple.quicktime.creationdate")
+            self.assertEqual(tagged["recording_start_source"], "com.apple.quicktime.creationdate")
+            self.assertTrue(any("about 1 s" in item for item in tagged["limitations"]))
 
     def test_segment_caps_valid_seconds_and_adds_limitation(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -55,7 +55,8 @@ Every event should eventually include:
 - anonymous `track_id`, when applicable
 - `role`: `teacher`, `student`, `unknown`, `both`, `classroom`, or `recording`
 - `indicator_name`
-- `start_time`, `end_time`, and `duration`
+- `start_time`, `end_time`, and `duration` (seconds into the video)
+- `start_real_time` and `end_real_time` (wall clock from the recording-start metadata; null without it)
 - observed value or event label
 - model or rule confidence
 - evidence-coverage or media-quality flag
@@ -226,7 +227,7 @@ Create a Python file below only when its first behavior and tests are implemente
 
 | Planned file | Responsibility |
 | --- | --- |
-| `events.py` | Current validated timestamped event schema and streaming JSONL serialization. |
+| `events.py` | Current validated timestamped event schema and streaming JSONL serialization; `with_real_time()` adds wall-clock `start_real_time`/`end_real_time` from the recording-start metadata. |
 | `visual_indicators.py` | Current List A presence/count/role-context/position/zone/visibility/posture/motion rules. After each sample it also exposes the per-track rule state (`last_sample`) used by review overlays. With camera-motion input it measures motion and path positions in camera-shot coordinates. Hand raises are not implemented here yet. |
 | `interaction_indicators.py` | Link teacher prompts, student responses, hand raises, feedback, orientation, and proximity into cross-modal interaction events. |
 | `quality.py` | Measure blur, brightness, coverage, audio quality, ASR confidence, occlusion, and tracking reliability; provide the validity denominator for every metric. |

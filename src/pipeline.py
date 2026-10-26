@@ -1,6 +1,7 @@
 """Orchestrate one physical List A analysis run; no rules are defined here."""
 
 from contextlib import ExitStack
+from datetime import datetime
 import json
 import logging
 import os
@@ -9,10 +10,11 @@ import tempfile
 from typing import Any
 
 from src.analysis.aggregates import summarize_list_a
-from src.analysis.events import write_jsonl
+from src.analysis.events import with_real_time, write_jsonl
 from src.analysis.visual_indicators import FoundationAnalyzer, restrict_joints
 from src.inference.pose import YoloPoseTracker, joint_indices
 from src.preprocessing.camera_motion import CameraMotionEstimator
+from src.preprocessing.recording_time import read_recording_time
 from src.preprocessing.video import VideoInfo, frames
 from src.reporting.annotated_video import (
     AnnotatedVideoWriter, LivePreview, ReviewOverlay, camera_notes,
@@ -26,6 +28,18 @@ LOGGER = logging.getLogger(__name__)
 
 class AnalysisStopped(RuntimeError):
     """The user stopped the run from the live preview; nothing was published."""
+
+
+def recording_start(video: Path) -> tuple[datetime | None, str | None]:
+    """Recording start time and the metadata tag it came from, or (None, None)."""
+    try:
+        recording = read_recording_time(video)
+    except RuntimeError as exc:
+        LOGGER.warning("Real times will be null: %s", exc)
+        return None, None
+    if recording.local_start is None:
+        LOGGER.warning("%s has no recording-time tag; real times will be null", video.name)
+    return recording.local_start, recording.start_source
 
 
 def analyze_video(video: Path, video_id: str, camera_id: str,
@@ -71,6 +85,7 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
                 raise FileExistsError(f"Output already exists: {path}; choose a new video ID or --overwrite")
     zones = load_zones(camera.get("zones"), camera_id)
     joints = joint_indices(camera.get("pose_joints"))
+    started, started_source = recording_start(video)
     enabled = load_indicator_flags(config["paths"]["indicators"])
     if enabled["classroom_zone"] and not zones:
         LOGGER.warning("camera=%s has no calibrated zones; classroom_zone will be unknown", camera_id)
@@ -133,7 +148,8 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
             camera_motion = (estimator.update(frame, [person.box for person in people])
                              if estimator is not None else None)
             LOGGER.debug("video=%s t=%.3f tracked_people=%d", video_id, timestamp, len(people))
-            yield from analyzer.process(timestamp, people, camera_motion)
+            for event in analyzer.process(timestamp, people, camera_motion):
+                yield with_real_time(event, started)
             if overlay is not None:
                 image = overlay.draw(frame, people, analyzer.last_sample)
                 if annotated is not None:
@@ -145,7 +161,8 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
             raise ValueError(f"No decodable frames found: {video}"
                              + (f" in the requested range; is --start ({start:g}s) before the video ends?"
                                 if segment else ""))
-        yield from analyzer.finish(analyzed_end())
+        for event in analyzer.finish(analyzed_end()):
+            yield with_real_time(event, started)
 
     # The MP4 is published right after the JSONL; any failure or stop discards both.
     with ExitStack() as stack:
@@ -156,7 +173,9 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
     assert info is not None
     duration = info.duration if info.duration > 0 else last_time + info.sample_period
     summary = summarize_list_a(events_path, camera_id, video_id, duration, info.sample_period,
-                               start, analyzed_end())
+                               start, analyzed_end(),
+                               started.isoformat(timespec="milliseconds") if started else None,
+                               started_source)
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = None
     try:

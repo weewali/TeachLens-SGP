@@ -21,9 +21,11 @@ class ConfigurationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             load_zones("configs/zones.example.yaml", "student_view")
 
-    def test_sparse_sampling_rejected_for_tracking(self):
+    def test_one_sample_per_second_and_sparser_sampling_rejected(self):
         config = deepcopy(load_config(project_path("configs/default.yaml")))
-        config["video"]["sample_every_seconds"] = 2.0
+        self.assertEqual(config["video"]["sample_every_seconds"], 1.0)
+        self.assertGreaterEqual(config["analysis"]["max_track_gap_seconds"], 2.0)  # one missed sample
+        config["video"]["sample_every_seconds"] = 5.0
         with self.assertRaisesRegex(ValueError, "max_track_gap_seconds"):
             validate_config(config)
 
