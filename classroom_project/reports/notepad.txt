@@ -1,0 +1,41 @@
+look at the prototype code
+
+look at the SGP1 report and check if the pipeline is compatible
+
+fix the pipeline according to SGP1 reportG11
+
+upload it as a branch in github
+
+fix the report generation in the end of the code for better understanding
+
+Skipped optional parts: emotion recognition and the LLM text step are optional in the report, and I left them out
+
+Not built: the training stage, the dashboard and the ER-diagram data layer.
+
+Frames are sampled every 2 s, so short actions can be missed. (should be every 1 second)
+
+Indicator model used is yolov8 should be yolo26m-pose for indicator and finetune
+
+
+
+
+
+--
+focus on LLM's for better reasoning
+
+explanation from results
+
+How can we read the results? (make a conclusion)
+
+Make correlation with T and S from same files. Easily we can result as the S are focused/engaged
+
+Independent T conclusion and S 
+
+Find realationship and output of Lag analysis layer and explain the conclusion and get the best data/files managed to get
+
+enhance the LLM accuracy
+
+integration of LLM for better reasoning (Dr mohammed amin)
+
+interpret text for LLM that reason and output the report.
+

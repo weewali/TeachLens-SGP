@@ -1,0 +1,9 @@
+event_id,label,seat,time,start_s,end_s,image,is_real,note
+1,reading,seat_08,00:02,2.0,4.0,images/event_001_reading_seat_08.jpg,,
+2,hand_raise,seat_08,01:14,74.0,80.0,images/event_002_hand_raise_seat_08.jpg,,
+3,hand_raise,seat_08,01:44,104.0,120.0,images/event_003_hand_raise_seat_08.jpg,,
+4,reading,seat_07,02:42,162.0,164.0,images/event_004_reading_seat_07.jpg,,
+5,hand_raise,seat_11,03:38,218.0,224.0,images/event_005_hand_raise_seat_11.jpg,,
+6,hand_raise,seat_10,04:26,266.0,270.0,images/event_006_hand_raise_seat_10.jpg,,
+7,hand_raise,seat_05,04:28,268.0,274.0,images/event_007_hand_raise_seat_05.jpg,,
+8,phone_use,seat_09,06:54,414.0,416.0,images/event_008_phone_use_seat_09.jpg,,

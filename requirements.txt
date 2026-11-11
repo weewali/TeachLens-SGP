@@ -7,3 +7,4 @@ pyyaml
 scipy
 statsmodels
 jinja2
+anthropic

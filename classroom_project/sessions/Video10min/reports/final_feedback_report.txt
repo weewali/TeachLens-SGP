@@ -1,0 +1,12 @@
+positive points:
+
+- Focus was highest at 09:10-09:40: about 58% of the observable students were focused while the instructor was explaining to the class.
+- Students took part: 5 hand raises were detected (for example at 01:14, 01:44, 03:38), most often while the instructor was explaining to the class (which describes 54% of all windows).
+
+negative points:
+
+- In the 29 windows (290 s in total) where the instructor was explaining to the class, about 46% of the observable students were focused, compared with 54% in the other windows. This gap is unlikely to be pure chance (p < 0.01, allowing for neighbouring windows being alike).
+- In the 13 windows (130 s in total) where the instructor was close to the students, about 44% of the observable students were focused, compared with 52% in the other windows. This gap is unlikely to be pure chance (p = 0.02, allowing for neighbouring windows being alike).
+- Focus was lowest at 02:40-03:10: only about 29% of the observable students were focused while the instructor was explaining to the class.
+
+Note: "focused" means head up rather than looking down; it is a posture proxy, not a measure of attention or learning. Times are mm:ss from the start of the lecture. Where the camera moves, roles and posture can be wrong; see analysis_details.txt for the indicators, statistics and limitations.

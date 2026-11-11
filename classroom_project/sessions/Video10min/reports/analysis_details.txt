@@ -1,0 +1,62 @@
+Classroom Analytics: analysis details
+==================================================
+
+Video: Video10min.mp4
+Lecture duration: 10:01  |  Frames analysed: 301 (one every 2 s)  |  Windows: 61 x 10 s
+Mode: pose + object cues
+
+1. Instructor indicators
+- Instructor visible in 84% of analysed frames.
+- Visible explanation time (facing the students, not writing on the board): 05:12 (52% of the lecture).
+- Board writing: 00:00 (0%).
+- Interaction (facing the students and gesturing): 0 events, 00:00 in total. The rule never triggered, so the absence of interaction is not established.
+- Movement: path length 13.57 frame-widths, 16 changes between the board and the teacher zone.
+- Posture was readable in 26% of the frames where the instructor was visible; seated in 0% of those.
+- Gesture reach (wrist distance from the shoulder, in shoulder-widths): 1.61 on average.
+- Average distance from the instructor to the nearest student: 0.25 frame-widths.
+- The instructor barely moved between samples in 34% of the sample pairs.
+
+2. Student indicators
+- Average students detected per frame: 9.0, in 6.1 of the 12 seats ever occupied (maximum 17 people per frame including the instructor).
+- Attention level (focused seat-frames / seats observed): 50% on average.
+- Off-task rate (sustained head-down without a book, or a phone): 7% on average.
+- Hand raises: 5 events. Pose state was readable for 57% of seat-frames.
+- Phone use: 1 event. Reading (book detected): 2 events.
+- Hand-raise participation: 3 of the 7 seats seen in at least half of the frames had a hand raise.
+- Students read as standing: 0.21 per frame on average (legs are often hidden behind desks, so this undercounts).
+
+3. Teacher-student linkage (lag analysis)
+- Hypotheses fixed in advance (6 tests, so p must be below 0.0083):
+- teacher_seated_ratio -> attention_level: not testable in this lecture (too few windows with readable data, or no variation).
+- teacher_student_distance -> hand_raise_count after 20 s: r = +0.07 (p = 0.622 controlling for the previous window, does not survive correction for 6 tests; 55 windows). Correlation, not proof of causation.
+- Exploratory (42 tests; treat these as leads, not findings):
+- teacher_student_distance -> strongest positive: attention_level after 10 s: r = +0.32 (p = 0.763 controlling for the previous window, does not survive correction for 42 tests; 56 windows). Correlation, not proof of causation.
+- teacher_student_distance -> strongest negative: off_task_rate after 10 s: r = -0.51 (p = 0.018 controlling for the previous window, does not survive correction for 42 tests; 56 windows). Correlation, not proof of causation.
+- Lagged model for attention_level (R2 = 0.50, n = 60): previous_outcome (+0.69).
+- Lagged model for hand_raise_count (R2 = 0.06, n = 60): no predictor reached p < 0.05.
+- Lagged model for off_task_rate (R2 = 0.49, n = 60): previous_outcome (+0.66).
+
+4. Suggestions
+- Look at the lower-focus stretches and consider a short check-in question there.
+- Review the video around 02:40-03:10 to see what happened.
+- Break long explanations with a question or short activity.
+- Check the flagged segments for off-task phone use.
+
+5. Supporting evidence (timestamps are mm:ss from the start of the lecture)
+- Lowest focus: 02:40-03:10 (29% of observable students focused).
+- Hand raise: seat_08, 01:14-01:20.
+- Hand raise: seat_08, 01:44-02:00.
+- Hand raise: seat_11, 03:38-03:44.
+- Hand raise: seat_10, 04:26-04:30.
+- Hand raise: seat_05, 04:28-04:34.
+- Stretch with no student hand raise: 08:20-09:40.
+- Phone use: seat_09, 06:54-06:56.
+
+6. Limitations
+- Behaviour labels come from rule-based heuristics on pose and COCO object cues, not from trained instructor / student behaviour models.
+- Roles come from the calibration zones: anyone inside the teacher zone is treated as the instructor.
+- The calibration assumes a fixed camera. If the camera pans, zooms or cuts to a close-up, the instructor can fall outside the teacher zone and be labelled a student, so events in those segments are unreliable.
+- Seat IDs are grid cells, so crowded or moving students can share or switch seats.
+- Writing cannot be told apart from looking down, so note-taking may count as off-task.
+- Board writing needs a raised wrist and interaction needs facing plus a raised wrist; both rules are strict and unvalidated, so zero counts can mean a missed behaviour.
+- Frames are sampled every 2 s, so short actions can be missed.

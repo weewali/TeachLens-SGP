@@ -1,0 +1,182 @@
+{
+  "schema_version": 1,
+  "lecture": {
+    "video": "Video10min.mp4",
+    "duration": "10:01",
+    "frames_analysed": 301,
+    "sampling_seconds": 2,
+    "window_seconds": 10,
+    "windows": 61
+  },
+  "data_quality": {
+    "mode": "pose + object cues",
+    "instructor_visible_pct": 84,
+    "student_posture_readable_pct": 57,
+    "instructor_posture_readable_pct": 26,
+    "limitations": [
+      "Behaviour labels come from rule-based heuristics on pose and COCO object cues, not from trained instructor / student behaviour models.",
+      "Roles come from the calibration zones: anyone inside the teacher zone is treated as the instructor.",
+      "The calibration assumes a fixed camera. If the camera pans, zooms or cuts to a close-up, the instructor can fall outside the teacher zone and be labelled a student, so events in those segments are unreliable.",
+      "Seat IDs are grid cells, so crowded or moving students can share or switch seats.",
+      "Writing cannot be told apart from looking down, so note-taking may count as off-task.",
+      "Board writing needs a raised wrist and interaction needs facing plus a raised wrist; both rules are strict and unvalidated, so zero counts can mean a missed behaviour.",
+      "Frames are sampled every 2 s, so short actions can be missed."
+    ]
+  },
+  "indicator_validation": {
+    "instructor_role": {
+      "checked_against_human_labels": false
+    },
+    "head_up_posture": {
+      "checked_against_human_labels": false
+    },
+    "hand_raise": {
+      "checked_against_human_labels": false
+    },
+    "phone_use": {
+      "checked_against_human_labels": false
+    },
+    "instructor_seated": {
+      "checked_against_human_labels": false
+    }
+  },
+  "glossary": {
+    "observable students": "Seats where a student's head and shoulders were readable in the video. Not every student in the room.",
+    "focused": "Head up rather than looking down. A posture proxy; it is not a measure of attention, understanding or learning.",
+    "window": "A 10-second slice of the lecture.",
+    "explaining to the class": "The instructor was visible, facing the students, and not writing on the board.",
+    "not facing the class": "The instructor was visible but not turned toward the students or the board.",
+    "moving around": "The most mobile quarter of windows, by how far the instructor travelled.",
+    "close to the students": "The quarter of windows where the instructor was closest to the nearest student.",
+    "seated": "The instructor's thighs looked short beside the torso (needs hips and knees in view).",
+    "evidence.strength": "weak = the gap could easily be chance; suggestive = unlikely to be pure chance; descriptive = a single observation or a count, not a test."
+  },
+  "alternative_explanations": {
+    "E1": "Students may have looked down to write notes, which the head-up rule counts as not focused.",
+    "E2": "Students may have been reading a slide or the board rather than watching the instructor.",
+    "E3": "The camera moves in this recording, so some people may have been mislabelled or out of view.",
+    "E4": "The comparison rests on a small number of 10-second windows.",
+    "E5": "The type of activity (lecture, seat-work, discussion) was not recorded, and it changes posture on its own."
+  },
+  "facts": [
+    {
+      "id": "F1",
+      "direction": "unfavourable",
+      "kind": "comparison",
+      "instructor_activity": "the instructor was explaining to the class",
+      "windows": 29,
+      "seconds": 290,
+      "students_focused_pct": 46,
+      "other_windows": 22,
+      "other_windows_focused_pct": 54,
+      "gap_points": 8,
+      "evidence": {
+        "strength": "suggestive",
+        "test_p": "< 0.01",
+        "notes": [
+          "The test allows for neighbouring windows being alike."
+        ]
+      }
+    },
+    {
+      "id": "F2",
+      "direction": "unfavourable",
+      "kind": "comparison",
+      "instructor_activity": "the instructor was close to the students",
+      "windows": 13,
+      "seconds": 130,
+      "students_focused_pct": 44,
+      "other_windows": 38,
+      "other_windows_focused_pct": 52,
+      "gap_points": 8,
+      "evidence": {
+        "strength": "suggestive",
+        "test_p": "= 0.02",
+        "notes": [
+          "The test allows for neighbouring windows being alike."
+        ]
+      }
+    },
+    {
+      "id": "F3",
+      "direction": "favourable",
+      "kind": "highest_focus_stretch",
+      "span": "09:10-09:40",
+      "stretch_seconds": 30,
+      "students_focused_pct": 58,
+      "instructor_activity": "the instructor was explaining to the class",
+      "evidence": {
+        "strength": "descriptive",
+        "notes": [
+          "A single 30-second stretch is noisy."
+        ]
+      }
+    },
+    {
+      "id": "F4",
+      "direction": "unfavourable",
+      "kind": "lowest_focus_stretch",
+      "span": "02:40-03:10",
+      "stretch_seconds": 30,
+      "students_focused_pct": 29,
+      "instructor_activity": "the instructor was explaining to the class",
+      "evidence": {
+        "strength": "descriptive",
+        "notes": [
+          "A single 30-second stretch is noisy."
+        ]
+      }
+    },
+    {
+      "id": "F5",
+      "direction": "favourable",
+      "kind": "hand_raises",
+      "count": 5,
+      "example_times": [
+        "01:14",
+        "01:44",
+        "03:38"
+      ],
+      "most_common_instructor_activity": "the instructor was explaining to the class",
+      "that_activity_share_of_all_windows_pct": 54,
+      "evidence": {
+        "strength": "descriptive",
+        "notes": [
+          "Detections have not been checked against human labels.",
+          "If the camera moves, the instructor can be mislabelled as a student and gestures counted as hand raises."
+        ]
+      }
+    },
+    {
+      "id": "F6",
+      "direction": "unfavourable",
+      "kind": "no_participation_stretch",
+      "span": "08:20-09:40",
+      "windows": 8,
+      "missing": "student hand raise",
+      "instructor_activity": "the instructor was explaining to the class",
+      "evidence": {
+        "strength": "descriptive",
+        "notes": [
+          "Hand raises that the detector missed would make this stretch look quieter than it was."
+        ]
+      }
+    },
+    {
+      "id": "F7",
+      "direction": "unfavourable",
+      "kind": "phone_use",
+      "count": 1,
+      "first_seat": "seat_09",
+      "first_time": "06:54",
+      "instructor_activity": "the instructor was not facing the class",
+      "evidence": {
+        "strength": "descriptive",
+        "notes": [
+          "A phone is a small object, and this detection has not been checked against human labels."
+        ]
+      }
+    }
+  ],
+  "report_note": "Note: \"focused\" means head up rather than looking down; it is a posture proxy, not a measure of attention or learning. Times are mm:ss from the start of the lecture. Where the camera moves, roles and posture can be wrong; see analysis_details.txt for the indicators, statistics and limitations."
+}
