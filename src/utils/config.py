@@ -99,6 +99,11 @@ def validate_config(config: dict[str, Any]) -> None:
         raise ValueError("thigh_axis_tolerance_degrees must be in (0, 45)")
     if float(analysis.get("thigh_torso_min_ratio", 0.5)) <= 0:
         raise ValueError("thigh_torso_min_ratio must be positive")
+    distance = analysis.get("duplicate_max_keypoint_distance")
+    if distance is not None and not 0 < float(distance) <= 1:
+        raise ValueError("duplicate_max_keypoint_distance must be null or in (0, 1] shoulder widths")
+    if not 0 < float(analysis.get("duplicate_min_box_inside", 0.9)) <= 1:
+        raise ValueError("duplicate_min_box_inside must be in (0, 1]")
     if not (0 < float(analysis.get("shoulder_rise_sitting_max", 0.35))
             < float(analysis.get("shoulder_rise_standing_min", 0.7))):
         raise ValueError("Expected 0 < shoulder_rise_sitting_max < shoulder_rise_standing_min")

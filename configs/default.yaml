@@ -88,6 +88,14 @@ analysis:
   min_track_samples: 2  # confirmed after being seen in 2 samples (1 s at 1 sample/s)
   max_track_gap_seconds: 2.5  # tolerates one missed sample at 1 sample/s; must be >= sampling
   edge_margin: 0.05
+  # One detection per body: desks split seated people into an above-desk box
+  # and a full-body box that both survive the model's overlap check. Two
+  # detections are the same person when their shared head/shoulder points lie
+  # within this many shoulder widths (measured 0.01-0.03 for duplicates, >=
+  # 0.35 for two people); without such points, when the smaller box lies at
+  # least duplicate_min_box_inside inside the other. null turns this off.
+  duplicate_max_keypoint_distance: 0.25
+  duplicate_min_box_inside: 0.9
   sitting_angle_degrees: 135
   standing_angle_degrees: 160
   # Without visible ankles (feet cut off or hidden), judge posture from

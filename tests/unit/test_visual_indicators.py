@@ -4,8 +4,8 @@ import unittest
 
 from src.analysis.visual_indicators import (
     FoundationAnalyzer, motion_level, point_in_polygon, posture_with_basis,
-    restrict_joints, shoulder_rise_posture, shoulder_sample, sitting_standing,
-    starts_below, visibility, zone_for,
+    DuplicateFilter, restrict_joints, same_person, shoulder_rise_posture, shoulder_sample,
+    sitting_standing, starts_below, visibility, zone_for,
 )
 from src.inference.pose import Keypoint, PosePerson, joint_indices
 from src.preprocessing.camera_motion import IDENTITY, CameraMotion
@@ -87,6 +87,30 @@ class GeometryTests(unittest.TestCase):
             knees[knee] = Keypoint(knees[knee].x + .05, knees[knee].y, .9)
         bent = PosePerson(1, bent.box, .9, tuple(knees), 640, 480)
         self.assertEqual(posture_with_basis(bent, .35, 135, 160, upper_legs=True), ("unknown", None))
+
+    def test_same_person_by_head_and_shoulders_or_box_inside(self):
+        body = person(1)  # shoulders 64 px apart
+        above_desk = PosePerson(2, (.25, .15, .75, .60), .5, body.keypoints, 640, 480)
+        self.assertTrue(same_person(body, above_desk, .35, .25, .9))
+        neighbour = person(3, x_shift=.3)
+        self.assertFalse(same_person(body, neighbour, .35, .25, .9))
+        blind, blind_part = person(4, visible=False), person(5, visible=False)  # no confident points
+        inner = PosePerson(5, (.30, .20, .70, .60), .5, blind_part.keypoints, 640, 480)
+        self.assertTrue(same_person(blind, inner, .35, .25, .9))
+        beside = PosePerson(5, (.60, .20, .99, .60), .5, blind_part.keypoints, 640, 480)
+        self.assertFalse(same_person(blind, beside, .35, .25, .9))
+
+    def test_duplicate_filter_keeps_one_stable_id_per_body(self):
+        keep = DuplicateFilter(.35)
+        body = person(1)
+        twin = PosePerson(2, (.25, .15, .75, .60), .5, body.keypoints, 640, 480)
+        other = person(3, x_shift=.3)
+        self.assertEqual([p.track_id for p in keep((twin, body, other))], [1, 3])
+        # The twin is now more confident, but ID 1 has been kept before.
+        louder = PosePerson(2, twin.box, .95, body.keypoints, 640, 480)
+        quieter = PosePerson(1, body.box, .6, body.keypoints, 640, 480)
+        self.assertEqual([p.track_id for p in keep((louder, quieter, other))], [1, 3])
+        self.assertEqual(keep.dropped, 2)
 
     def test_starts_below_flags_heads_at_the_bottom_only(self):
         pose = person()  # box top 0.15: a standing instructor

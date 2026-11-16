@@ -123,6 +123,19 @@ keypoints and the overlay, and visibility parts that need them are `null`
 (not evaluated) rather than `false`. The HUD notes `joints not used: knees,
 ankles` for the student camera.
 
+**One detection per person.** Desks split seated people: the model can
+return one box for the part above the desk and another tall box that also
+covers the legs under it, and the model's own overlap check keeps both. Two
+detections whose shared head and shoulder points lie within
+`analysis.duplicate_max_keypoint_distance` (0.25) shoulder widths are the same
+person (measured duplicates: 0.01-0.03; two real people: 0.35 or more);
+without such points, a box lying at least `duplicate_min_box_inside` (0.9)
+inside another counts as the same person. Only one is kept: the tracker ID
+kept most often so far, then the more confident box. The run log reports how
+many were removed; `null` turns this off. On the instructor camera, boxes
+starting in the lowest quarter of the image (student heads in front of it)
+are dropped first (`ignore_people_starting_below`).
+
 **`legs` posture** (instructor) uses hip and knee angles from full legs; when
 no ankle is visible it falls back to shoulder-hip-knee (`standing (partial)`),
 and with no knees it stays unknown.

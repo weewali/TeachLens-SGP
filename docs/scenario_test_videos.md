@@ -86,6 +86,19 @@ indicators can share one run (`--indicators position entry_exit`).
 
 ## Real-room obstacles the pipeline must cope with
 
+- **Duplicate boxes on seated students.** Desks split each front-row student
+  into an above-desk box and a full-body box (legs under the desk), and some
+  back-row students got two boxes; the model's overlap check keeps both. So
+  A1's `visible_student_count` read 7-9 for six students (adequate samples:
+  6 in 82 of 236). Duplicates share their head and shoulder points (0.01-0.03
+  shoulder widths apart; two real people >= 0.35), so
+  `analysis.duplicate_max_keypoint_distance: 0.25` keeps one box per person.
+  On 40 sampled frames the count was 6 in 39 (A1, was 7), 32 (A3, was 22),
+  and 25 (B1, was 19); the remaining 5s are students the model misses.
+  Full A1 student run (only this indicator, 2026-11-17): 274 duplicates
+  removed; adequate samples 6 in 259 of 264 (was 82 of 236) and never
+  above 6; the five 5s are a student not detected at all.
+
 - **Student heads at the bottom of the instructor view.** The pose model
   detects them, and any second person makes the instructor's role `unknown`.
   `cameras.instructor_view.ignore_people_starting_below: 0.75` drops boxes

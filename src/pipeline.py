@@ -11,7 +11,9 @@ from typing import Any, Sequence
 
 from src.analysis.aggregates import summarize_list_a
 from src.analysis.events import with_real_time, write_jsonl
-from src.analysis.visual_indicators import FoundationAnalyzer, restrict_joints, starts_below
+from src.analysis.visual_indicators import (
+    DuplicateFilter, FoundationAnalyzer, restrict_joints, starts_below,
+)
 from src.inference.pose import YoloPoseTracker, joint_indices
 from src.preprocessing.camera_motion import CameraMotionEstimator
 from src.preprocessing.recording_time import read_recording_time
@@ -92,6 +94,11 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
     zones = load_zones(camera.get("zones"), camera_id)
     joints = joint_indices(camera.get("pose_joints"))
     ignore_below = camera.get("ignore_people_starting_below")
+    analysis = config["analysis"]
+    duplicates = (DuplicateFilter(float(config["inference"]["keypoint_confidence"]),
+                                  float(analysis["duplicate_max_keypoint_distance"]),
+                                  float(analysis.get("duplicate_min_box_inside", 0.9)))
+                  if analysis.get("duplicate_max_keypoint_distance") is not None else None)
     started, started_source = ((real_start, "given") if real_start is not None
                                else recording_start(video))
     enabled = select_indicators(load_indicator_flags(config["paths"]["indicators"]), indicators)
@@ -157,6 +164,8 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
             # of the instructor camera).
             people = tuple(restrict_joints(person, joints) for person in tracker.infer(frame)
                            if not starts_below(person, ignore_below))
+            if duplicates is not None:  # one detection per body (desks split seated people)
+                people = duplicates(people)
             camera_motion = (estimator.update(frame, [person.box for person in people])
                              if estimator is not None else None)
             LOGGER.debug("video=%s t=%.3f tracked_people=%d", video_id, timestamp, len(people))
@@ -202,6 +211,9 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
         if temporary is not None:
             temporary.unlink(missing_ok=True)
         raise
+    if duplicates is not None:
+        LOGGER.info("video=%s removed %d duplicate detections of the same person",
+                    video_id, duplicates.dropped)
     LOGGER.info("Wrote %s", ", ".join(str(path) for path in (events_path, summary_path, video_path)
                                         if path is not None))
     return events_path, summary_path, video_path

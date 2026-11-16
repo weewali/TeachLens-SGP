@@ -63,6 +63,78 @@ def starts_below(person: PosePerson, limit: float | None) -> bool:
     return limit is not None and person.box[1] >= limit
 
 
+HEAD_AND_SHOULDERS = tuple(range(7))  # COCO nose, eyes, ears, shoulders
+
+
+def _inside_fraction(a: tuple[float, float, float, float],
+                     b: tuple[float, float, float, float]) -> float:
+    """Share of the smaller box that lies inside the other."""
+    width = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    height = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    smaller = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]))
+    return width * height / smaller if smaller > 0 else 0.0
+
+
+def same_person(a: PosePerson, b: PosePerson, min_conf: float,
+                max_keypoint_distance: float, min_box_inside: float) -> bool:
+    """True when two detections are the same body seen twice.
+
+    Desks split seated people, so the model can return one box for the part
+    above the desk and another that also covers the legs below it, or two
+    boxes on one person; non-maximum suppression keeps both because their
+    outlines differ. Their head and shoulder points coincide (measured
+    2026-11-16: 0.01-0.03 shoulder widths apart, versus >= 0.35 for two
+    different people overlapping). With at least two shared confident head or
+    shoulder points, the median distance in shoulder widths decides; without
+    them, the smaller box must lie almost entirely inside the other.
+    """
+    shared = [i for i in HEAD_AND_SHOULDERS
+              if a.point(i, min_conf) is not None and b.point(i, min_conf) is not None]
+    widths = [math.hypot((p.keypoints[LEFT_SHOULDER].x - p.keypoints[RIGHT_SHOULDER].x) * p.width,
+                         (p.keypoints[LEFT_SHOULDER].y - p.keypoints[RIGHT_SHOULDER].y) * p.height)
+              for p in (a, b)
+              if p.point(LEFT_SHOULDER, min_conf) is not None
+              and p.point(RIGHT_SHOULDER, min_conf) is not None]
+    width = max(widths, default=0.0)
+    if len(shared) >= 2 and width >= 8:
+        distance = median(math.hypot((a.keypoints[i].x - b.keypoints[i].x) * a.width,
+                                     (a.keypoints[i].y - b.keypoints[i].y) * a.height)
+                          for i in shared)
+        return distance / width < max_keypoint_distance
+    return _inside_fraction(a.box, b.box) >= min_box_inside
+
+
+class DuplicateFilter:
+    """Keep one detection per person across a recording's samples.
+
+    Among detections of the same person, keep the tracker ID that has been
+    kept most often so far (so the counted ID stays stable), then the higher
+    detection confidence. Order of the remaining people is preserved.
+    """
+
+    def __init__(self, min_conf: float, max_keypoint_distance: float = 0.25,
+                 min_box_inside: float = 0.9):
+        self.min_conf = min_conf
+        self.max_keypoint_distance = max_keypoint_distance
+        self.min_box_inside = min_box_inside
+        self.kept: dict[int, int] = {}
+        self.dropped = 0  # detections removed so far, for logging
+
+    def __call__(self, people: tuple[PosePerson, ...]) -> tuple[PosePerson, ...]:
+        order = sorted(range(len(people)),
+                       key=lambda i: (-self.kept.get(people[i].track_id, 0), -people[i].confidence))
+        chosen: list[int] = []
+        for i in order:
+            if any(same_person(people[i], people[j], self.min_conf,
+                               self.max_keypoint_distance, self.min_box_inside) for j in chosen):
+                self.dropped += 1
+                continue
+            chosen.append(i)
+        for i in chosen:
+            self.kept[people[i].track_id] = self.kept.get(people[i].track_id, 0) + 1
+        return tuple(people[i] for i in sorted(chosen))
+
+
 def _angle(person: PosePerson, a: int, b: int, c: int, min_conf: float) -> float | None:
     points = [person.point(i, min_conf) for i in (a, b, c)]
     if any(point is None for point in points):
