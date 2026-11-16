@@ -45,7 +45,10 @@ names are based on this ID. One run writes three files:
 
 Outputs and weights are local and ignored by Git. `--debug` logs the detected
 track count per sampled frame. Existing outputs are preserved by default; use
-`--overwrite` only when you intentionally want to replace them.
+`--overwrite` only when you intentionally want to replace them. On Windows a
+file that is open in another program (for example the review MP4 playing in
+VLC) cannot be replaced, so `--overwrite` checks this before analysis starts
+and stops with a message to close it, instead of failing at the end.
 
 **Sampling.** The default analyzes **one frame per second**
 (`video.sample_every_seconds: 1.0`); 5 per second was too costly. A track is

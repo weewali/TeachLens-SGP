@@ -84,7 +84,7 @@ def main() -> int:
     except AnalysisStopped as exc:
         logging.warning("%s", exc)
         return 1
-    except (FileNotFoundError, FileExistsError, ValueError, RuntimeError) as exc:
+    except (FileNotFoundError, FileExistsError, PermissionError, ValueError, RuntimeError) as exc:
         logging.error("Analysis failed: %s", exc)
         return 1
     print(f"Events: {events}\nSummary: {summary}")

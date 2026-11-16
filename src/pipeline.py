@@ -22,7 +22,7 @@ from src.reporting.annotated_video import (
     AnnotatedVideoWriter, LivePreview, ReviewOverlay, camera_notes,
 )
 from src.utils.config import load_indicator_flags, load_zones, select_indicators
-from src.utils.paths import project_path
+from src.utils.paths import file_in_use, project_path
 
 
 LOGGER = logging.getLogger(__name__)
@@ -91,6 +91,13 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
         for path in (events_path, summary_path, video_path):
             if path is not None and path.exists():
                 raise FileExistsError(f"Output already exists: {path}; choose a new video ID or --overwrite")
+    else:
+        # Check now rather than fail after the whole run when publishing.
+        busy = [path for path in (events_path, summary_path, video_path)
+                if path is not None and file_in_use(path)]
+        if busy:
+            raise PermissionError(f"Cannot replace {', '.join(str(path) for path in busy)}: it is open "
+                                  "in another program (for example a video player); close it and run again")
     zones = load_zones(camera.get("zones"), camera_id)
     joints = joint_indices(camera.get("pose_joints"))
     ignore_below = camera.get("ignore_people_starting_below")

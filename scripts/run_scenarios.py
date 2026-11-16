@@ -182,7 +182,7 @@ def main() -> int:
                           overwrite=args.overwrite, save_video=args.save_video,
                           live_preview=False, start=run.start, end=run.end, path=run.path,
                           indicators=args.indicators, real_start=run.real_start)
-        except (AnalysisStopped, FileNotFoundError, FileExistsError,
+        except (AnalysisStopped, FileNotFoundError, FileExistsError, PermissionError,
                 ValueError, RuntimeError) as exc:
             LOGGER.error("%s failed: %s", run.video_id, exc)
             failed.append(run.video_id)
