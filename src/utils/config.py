@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from src.inference.pose import JOINT_GROUPS
 from src.utils.paths import project_path
@@ -63,6 +63,10 @@ def validate_config(config: dict[str, Any]) -> None:
             raise ValueError(f"cameras.{name}: posture_method legs needs knees in pose_joints")
         if method == "shoulder_rise" and not camera.get("fixed_camera", True):
             raise ValueError(f"cameras.{name}: posture_method shoulder_rise needs fixed_camera: true")
+        below = camera.get("ignore_people_starting_below")
+        if below is not None and (isinstance(below, bool) or not isinstance(below, (int, float))
+                                  or not 0 < below <= 1):
+            raise ValueError(f"cameras.{name}.ignore_people_starting_below must be null or in (0, 1]")
     if float(video.get("sample_every_seconds", 0)) <= 0:
         raise ValueError("video.sample_every_seconds must be positive")
     for key in ("confidence_threshold", "iou_threshold", "keypoint_confidence"):
@@ -152,9 +156,27 @@ def load_indicator_flags(path: str | Path) -> dict[str, bool]:
     with project_path(path).open("r", encoding="utf-8") as stream:
         document = yaml.safe_load(stream) or {}
     visual = document.get("visual", {})
-    names = (
-        "teacher_presence", "visible_student_count", "anonymous_tracking",
-        "role_classification", "position", "classroom_zone", "entry_exit",
-        "visibility_occlusion", "sitting_standing", "motion_level",
-    )
-    return {name: bool(visual.get(name, {}).get("enabled", False)) for name in names}
+    return {name: bool(visual.get(name, {}).get("enabled", False)) for name in LIST_A_INDICATORS}
+
+
+LIST_A_INDICATORS = (
+    "teacher_presence", "visible_student_count", "anonymous_tracking",
+    "role_classification", "position", "classroom_zone", "entry_exit",
+    "visibility_occlusion", "sitting_standing", "motion_level",
+)
+
+
+def select_indicators(enabled: dict[str, bool],
+                      chosen: Sequence[str] | None) -> dict[str, bool]:
+    """Keep only the chosen List A switches on (None keeps the file's switches).
+
+    Used to test one indicator at a time: the JSONL and the review video then
+    show only what was chosen. A chosen switch is turned on even if the file
+    has it off.
+    """
+    if chosen is None:
+        return enabled
+    unknown = sorted(set(chosen) - set(LIST_A_INDICATORS))
+    if unknown or not chosen:
+        raise ValueError(f"Unknown or no indicators {unknown}; choose from {list(LIST_A_INDICATORS)}")
+    return {name: name in chosen for name in enabled}

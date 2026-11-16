@@ -94,9 +94,13 @@ def describe_track(person: PosePerson, track: TrackSnapshot | None) -> list[str]
 def camera_notes(camera: dict[str, Any], enabled: dict[str, bool], has_zones: bool) -> tuple[str, ...]:
     """Fixed reminders about why some states are unknown for this camera."""
     notes = [f"roles: camera context ({camera['role_policy']}), not verified"]
+    if enabled and not all(enabled.values()):
+        notes.append(f"showing: {', '.join(name for name, on in enabled.items() if on) or 'none'}")
     unused = [group for group in JOINT_GROUPS if group not in camera.get("pose_joints", JOINT_GROUPS)]
     if unused:
         notes.append(f"joints not used: {', '.join(unused)}")
+    if camera.get("ignore_people_starting_below") is not None:
+        notes.append(f"ignored: boxes starting below {camera['ignore_people_starting_below']:.0%} of height")
     if (enabled.get("motion_level") and not camera.get("fixed_camera", True)
             and not camera.get("compensate_camera_motion", False)):
         notes.append("motion: unknown, camera not fixed")

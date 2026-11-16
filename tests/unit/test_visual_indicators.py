@@ -5,7 +5,7 @@ import unittest
 from src.analysis.visual_indicators import (
     FoundationAnalyzer, motion_level, point_in_polygon, posture_with_basis,
     restrict_joints, shoulder_rise_posture, shoulder_sample, sitting_standing,
-    visibility, zone_for,
+    starts_below, visibility, zone_for,
 )
 from src.inference.pose import Keypoint, PosePerson, joint_indices
 from src.preprocessing.camera_motion import IDENTITY, CameraMotion
@@ -87,6 +87,15 @@ class GeometryTests(unittest.TestCase):
             knees[knee] = Keypoint(knees[knee].x + .05, knees[knee].y, .9)
         bent = PosePerson(1, bent.box, .9, tuple(knees), 640, 480)
         self.assertEqual(posture_with_basis(bent, .35, 135, 160, upper_legs=True), ("unknown", None))
+
+    def test_starts_below_flags_heads_at_the_bottom_only(self):
+        pose = person()  # box top 0.15: a standing instructor
+        head = PosePerson(2, (.60, .86, .74, 1.0), .7, pose.keypoints, 640, 480)
+        seated = PosePerson(3, (.70, .58, .85, .77), .8, pose.keypoints, 640, 480)
+        self.assertTrue(starts_below(head, .75))
+        self.assertFalse(starts_below(pose, .75))
+        self.assertFalse(starts_below(seated, .75))
+        self.assertFalse(starts_below(head, None))  # check switched off
 
     def test_restrict_joints_drops_unused_and_out_of_frame_joints(self):
         pose = person()

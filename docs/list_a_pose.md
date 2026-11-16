@@ -60,14 +60,19 @@ override.
 **Real time.** Every event also has `start_real_time` and `end_real_time`:
 the wall-clock time, as ISO 8601 with the camera's UTC offset (for example
 `2026-10-26T19:09:25.200+04:00`). They are the recording-start time from the
-video's metadata (read with ffprobe; Apple's `com.apple.quicktime.creationdate`
-first, else `creation_time`) plus the event's position in the video, so events
+video's metadata (Apple's `com.apple.quicktime.creationdate` first, read with
+ffprobe; else the 3GPP `moov/udta/date` box, read directly because ffprobe does
+not report it; else `creation_time`) plus the event's position in the video, so events
 from the two cameras can be put on one clock. The summary repeats the start
 time and its tag as `recording_start_real_time` and `recording_start_source`.
 Limits: the tag holds whole seconds, and on tested iPhones it was 0.7-0.95 s
 after the first frame, so real times are good to **about 1 second**. Videos
 without the tag (downloads, edited or re-encoded files) get `null` real times
 and a warning; if ffprobe is missing, the run continues with `null` real times.
+iPhone clips that were trimmed and re-exported keep the recording time only
+in `udta/date`, while their `creation_time` is the export time (found
+2026-11-16 on the instructor scenario clips), which is why that box comes
+before `creation_time`.
 
 ## Analyzing part of a long video
 

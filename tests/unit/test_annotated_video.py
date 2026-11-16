@@ -66,6 +66,14 @@ class OverlayTests(unittest.TestCase):
         notes = camera_notes({"role_policy": "all_tracks", "pose_joints": ["head", "arms", "hips"]},
                              {}, False)
         self.assertIn("joints not used: knees, ankles", notes)
+        teacher = camera_notes({"role_policy": "single_visible",
+                                "ignore_people_starting_below": .75}, {}, False)
+        self.assertIn("ignored: boxes starting below 75% of height", teacher)
+        one = camera_notes({"role_policy": "all_tracks"},
+                           {"sitting_standing": True, "motion_level": False}, False)
+        self.assertIn("showing: sitting_standing", one)
+        every = camera_notes({"role_policy": "all_tracks"}, {"sitting_standing": True}, False)
+        self.assertFalse(any(note.startswith("showing") for note in every))
 
     def test_hud_reports_counts_coverage_and_camera_notes(self):
         notes = camera_notes({"role_policy": "single_visible", "fixed_camera": False},

@@ -10,7 +10,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.pipeline import AnalysisStopped, analyze_video  # noqa: E402
-from src.utils.config import load_config  # noqa: E402
+from src.preprocessing.recording_time import parse_timestamp  # noqa: E402
+from src.utils.config import LIST_A_INDICATORS, load_config  # noqa: E402
 from src.utils.paths import project_path  # noqa: E402
 
 
@@ -27,6 +28,14 @@ def parse_seconds(value: str) -> float:
     for part in parts:
         seconds = seconds * 60 + part
     return seconds
+
+
+def parse_real_time(value: str):
+    """An ISO 8601 recording start such as 2026-11-03T19:23:43.07+04:00."""
+    moment = parse_timestamp(value, naive_is_utc=False)
+    if moment is None:
+        raise argparse.ArgumentTypeError(f"expected an ISO 8601 date and time, got {value!r}")
+    return moment
 
 
 def main() -> int:
@@ -51,6 +60,13 @@ def main() -> int:
                         help="Write the annotated debug/<id>.list_a.mp4; default: review.save_video")
     parser.add_argument("--path", choices=("off", "teacher", "all"),
                         help="Draw foot-point trails in the review video; default: review.path")
+    parser.add_argument("--indicators", nargs="+", choices=LIST_A_INDICATORS, metavar="NAME",
+                        help="Turn on only these List A indicators, so the JSONL and the review "
+                             f"video show just them; default: configs/indicators.yaml. "
+                             f"Choices: {', '.join(LIST_A_INDICATORS)}")
+    parser.add_argument("--recording-start", type=parse_real_time,
+                        help="Real start of the first frame (ISO 8601, e.g. 2026-11-03T19:23:43.07+04:00) "
+                             "when the file's tag is wrong, e.g. after trimming on an iPhone")
     parser.add_argument("--debug", action="store_true", help="Log per-sampled-frame counts")
     args = parser.parse_args()
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO,
@@ -63,7 +79,8 @@ def main() -> int:
             output_dir=args.output_dir.resolve() if args.output_dir else None,
             device=args.device, overwrite=args.overwrite,
             save_video=args.save_video, live_preview=args.live,
-            start=args.start, end=args.end, path=args.path)
+            start=args.start, end=args.end, path=args.path,
+            indicators=args.indicators, real_start=args.recording_start)
     except AnalysisStopped as exc:
         logging.warning("%s", exc)
         return 1

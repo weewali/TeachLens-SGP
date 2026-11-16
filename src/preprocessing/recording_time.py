@@ -10,15 +10,19 @@ of day and for coarse alignment of two cameras, not for frame-level sync.
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 import json
+import os
 from pathlib import Path
 import re
 import shutil
+import struct
 import subprocess
-from typing import Any
+from typing import Any, BinaryIO, Iterator
 
 # Preferred first: Apple's tag is the local start time with its UTC offset;
-# creation_time (MP4/MOV header) is UTC.
-START_TAGS = ("com.apple.quicktime.creationdate", "creation_time")
+# "udta/date" (the 3GPP date box, read directly because ffprobe does not show
+# it) is also local with an offset; creation_time (MP4/MOV header) is UTC.
+UDTA_DATE = "udta/date"
+START_TAGS = ("com.apple.quicktime.creationdate", UDTA_DATE, "creation_time")
 CAMERA_TAGS = (("com.apple.quicktime.make", "com.apple.quicktime.model"),
                ("com.android.manufacturer", "com.android.model"),
                ("make", "model"))
@@ -126,8 +130,57 @@ def probe(path: Path, ffprobe: str = "ffprobe") -> dict[str, Any]:
     return json.loads(result.stdout)
 
 
+def _child_boxes(handle: BinaryIO, start: int, end: int) -> Iterator[tuple[bytes, int, int]]:
+    """(type, body start, box end) of each MP4/MOV box between start and end."""
+    position = start
+    while position + 8 <= end:
+        handle.seek(position)
+        header = handle.read(16)
+        if len(header) < 8:
+            return
+        size, kind = struct.unpack(">I4s", header[:8])
+        body = position + 8
+        if size == 1:  # 64-bit size follows the type
+            if len(header) < 16:
+                return
+            size = struct.unpack(">Q", header[8:16])[0]
+            body += 8
+        elif size == 0:  # box runs to the end of its parent
+            size = end - position
+        if size < body - position or position + size > end:
+            return
+        yield kind, body, position + size
+        position += size
+
+
+def read_udta_date(path: Path, max_bytes: int = 1024) -> str | None:
+    """Text of the 3GPP date box (moov/udta/date), or None.
+
+    iPhone videos saved again by Photos (for example after trimming) can keep
+    the recording time only here, while their creation_time becomes the time
+    of the export. ffprobe does not report this box, so it is read directly;
+    only box headers and the date text are read, never the media data.
+    """
+    with open(path, "rb") as handle:
+        box = (b"", 0, os.fstat(handle.fileno()).st_size)
+        for wanted in (b"moov", b"udta", b"date"):
+            box = next((child for child in _child_boxes(handle, box[1], box[2])
+                        if child[0] == wanted), None)
+            if box is None:
+                return None
+        if box[2] - box[1] > max_bytes:
+            return None
+        handle.seek(box[1])
+        text = handle.read(box[2] - box[1]).split(b"\x00")[0].decode("ascii", "replace").strip()
+    return text or None
+
+
 def read_recording_time(path: Path, ffprobe: str = "ffprobe") -> RecordingTime:
-    return from_probe(probe(path, ffprobe))
+    data = probe(path, ffprobe)
+    date = read_udta_date(path)
+    if date is not None:
+        data.setdefault("format", {}).setdefault("tags", {})[UDTA_DATE] = date
+    return from_probe(data)
 
 
 def format_clock(moment: datetime, milliseconds: bool = False) -> str:

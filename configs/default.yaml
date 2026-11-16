@@ -62,6 +62,10 @@ cameras:
     # frame, and posture then falls back to shoulder-hip-knee or unknown.
     pose_joints: [head, arms, hips, knees, ankles]
     posture_method: legs
+    # Ignore detections whose box starts in the lowest quarter of the image:
+    # heads of students sitting in front of this camera (measured 2026-11-16
+    # at 0.80-0.89; the seated instructor's box starts near 0.58). null = off.
+    ignore_people_starting_below: 0.75
     zones: null
 
 # Background feature matching for cameras with fixed_camera: false and

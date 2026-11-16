@@ -6,7 +6,10 @@ import unittest
 from pathlib import Path
 
 from src.inference.pose import YoloPoseTracker, joint_indices
-from src.utils.config import load_config, load_indicator_flags, load_zones, validate_config
+from src.utils.config import (
+    LIST_A_INDICATORS, load_config, load_indicator_flags, load_zones, select_indicators,
+    validate_config,
+)
 from src.utils.paths import project_path
 
 
@@ -68,6 +71,28 @@ class ConfigurationTests(unittest.TestCase):
             broken["cameras"]["student_view"][key] = value
             with self.assertRaises(ValueError):
                 validate_config(broken)
+
+    def test_instructor_camera_ignores_bottom_heads_and_value_is_validated(self):
+        config = load_config(project_path("configs/default.yaml"))
+        self.assertEqual(config["cameras"]["instructor_view"]["ignore_people_starting_below"], .75)
+        self.assertIsNone(config["cameras"]["student_view"].get("ignore_people_starting_below"))
+        for value in (0, 1.5, "low", True):
+            broken = deepcopy(config)
+            broken["cameras"]["instructor_view"]["ignore_people_starting_below"] = value
+            with self.assertRaises(ValueError):
+                validate_config(broken)
+
+    def test_select_indicators_keeps_only_chosen_switches(self):
+        enabled = load_indicator_flags("configs/indicators.yaml")
+        self.assertIs(select_indicators(enabled, None), enabled)
+        chosen = select_indicators(enabled, ["sitting_standing"])
+        self.assertEqual([name for name, on in chosen.items() if on], ["sitting_standing"])
+        self.assertEqual(set(chosen), set(LIST_A_INDICATORS))
+        both = select_indicators(dict.fromkeys(LIST_A_INDICATORS, False), ["motion_level", "position"])
+        self.assertEqual(sum(both.values()), 2)  # switched on even if the file has them off
+        for bad in (["hand_raise"], []):
+            with self.assertRaises(ValueError):
+                select_indicators(enabled, bad)
 
     def test_missing_checkpoint_does_not_auto_download(self):
         with tempfile.TemporaryDirectory() as directory:

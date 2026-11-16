@@ -7,11 +7,11 @@ import logging
 import os
 from pathlib import Path
 import tempfile
-from typing import Any
+from typing import Any, Sequence
 
 from src.analysis.aggregates import summarize_list_a
 from src.analysis.events import with_real_time, write_jsonl
-from src.analysis.visual_indicators import FoundationAnalyzer, restrict_joints
+from src.analysis.visual_indicators import FoundationAnalyzer, restrict_joints, starts_below
 from src.inference.pose import YoloPoseTracker, joint_indices
 from src.preprocessing.camera_motion import CameraMotionEstimator
 from src.preprocessing.recording_time import read_recording_time
@@ -19,7 +19,7 @@ from src.preprocessing.video import VideoInfo, frames
 from src.reporting.annotated_video import (
     AnnotatedVideoWriter, LivePreview, ReviewOverlay, camera_notes,
 )
-from src.utils.config import load_indicator_flags, load_zones
+from src.utils.config import load_indicator_flags, load_zones, select_indicators
 from src.utils.paths import project_path
 
 
@@ -50,14 +50,20 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
                   save_video: bool | None = None,
                   live_preview: bool | None = None,
                   start: float = 0.0, end: float | None = None,
-                  path: str | None = None) -> tuple[Path, Path, Path | None]:
+                  path: str | None = None,
+                  indicators: Sequence[str] | None = None,
+                  real_start: datetime | None = None) -> tuple[Path, Path, Path | None]:
     """Write JSONL evidence, a JSON summary, and optionally an annotated MP4.
 
     save_video, live_preview, and path (overlay trail: off/teacher/all)
     default to the config's review section. The MP4 path is None when no
     video is saved. start/end (seconds from the source start, end exclusive)
     limit analysis to one segment; event times stay source-relative so they
-    can be matched with the original video.
+    can be matched with the original video. indicators (List A switch
+    names) turns on only those indicators, so the JSONL and the review video
+    show just them. real_start replaces the file's recording-start tag, for
+    clips whose tag is known to be wrong (e.g. trimmed on an iPhone, which
+    keeps the uncut start).
     """
     if not video.is_file():
         raise FileNotFoundError(f"Video not found: {video}")
@@ -85,8 +91,10 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
                 raise FileExistsError(f"Output already exists: {path}; choose a new video ID or --overwrite")
     zones = load_zones(camera.get("zones"), camera_id)
     joints = joint_indices(camera.get("pose_joints"))
-    started, started_source = recording_start(video)
-    enabled = load_indicator_flags(config["paths"]["indicators"])
+    ignore_below = camera.get("ignore_people_starting_below")
+    started, started_source = ((real_start, "given") if real_start is not None
+                               else recording_start(video))
+    enabled = select_indicators(load_indicator_flags(config["paths"]["indicators"]), indicators)
     if enabled["classroom_zone"] and not zones:
         LOGGER.warning("camera=%s has no calibrated zones; classroom_zone will be unknown", camera_id)
     tracker = YoloPoseTracker(model_path, float(config["inference"]["confidence_threshold"]),
@@ -143,8 +151,11 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
                 if annotated is not None:
                     # One video frame per analyzed sample keeps source timing.
                     annotated.open(1 / info.sample_period, info.width, info.height)
-            # Rules and overlays see only the joints this camera may use.
-            people = tuple(restrict_joints(person, joints) for person in tracker.infer(frame))
+            # Rules and overlays see only the joints this camera may use, and
+            # not people cut off at the bottom (e.g. student heads in front
+            # of the instructor camera).
+            people = tuple(restrict_joints(person, joints) for person in tracker.infer(frame)
+                           if not starts_below(person, ignore_below))
             camera_motion = (estimator.update(frame, [person.box for person in people])
                              if estimator is not None else None)
             LOGGER.debug("video=%s t=%.3f tracked_people=%d", video_id, timestamp, len(people))

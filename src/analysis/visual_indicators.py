@@ -52,6 +52,17 @@ def restrict_joints(person: PosePerson, allowed: frozenset[int]) -> PosePerson:
         for index, point in enumerate(person.keypoints)))
 
 
+def starts_below(person: PosePerson, limit: float | None) -> bool:
+    """True if the person's box top is at or below limit (normalized y).
+
+    On the instructor camera, heads and shoulders of students sitting just
+    in front of it show at the bottom of the frame; their boxes start in the
+    lowest part of the image, while the instructor's head is always higher.
+    None disables the check.
+    """
+    return limit is not None and person.box[1] >= limit
+
+
 def _angle(person: PosePerson, a: int, b: int, c: int, min_conf: float) -> float | None:
     points = [person.point(i, min_conf) for i in (a, b, c)]
     if any(point is None for point in points):
