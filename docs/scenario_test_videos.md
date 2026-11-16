@@ -94,9 +94,13 @@ indicators can share one run (`--indicators position entry_exit`).
   frames, frames with more than one person fell from 26 to 5 (A3), 12 to 4
   (A5), and 7 to 0 (B1). Measured on the 720p copies; same framing as the 4K
   files.
-- **Duplicate boxes on one seated instructor.** A second track appears on
-  the same person and presence becomes `unknown`: in the new A4_t1 file
-  (only `teacher_presence` on) 26 of 58 samples were `unknown` for this
-  reason (visible 29, not detected 3). Not fixed yet.
+- **A second person, or a duplicate box on the seated instructor.** Before
+  2026-11-16 any second track made everyone `unknown`. Now
+  `cameras.instructor_view.keep_teacher_track: true` keeps the teacher role
+  on the tracker ID that was alone in view; the other track is `unknown`
+  and presence stays `visible`. A4_t1 presence `unknown` samples: 27 of 93
+  -> 1 (old 720p clip, person walking past the screen) and 26 of 58 -> 2
+  (4K MOV, duplicate boxes). Limit: if two people cross and ByteTrack swaps
+  their IDs, the role moves with the ID.
 - **The student camera was reframed between A2 and A3.** No zones are
   calibrated, so nothing depends on the exact view yet.

@@ -63,6 +63,8 @@ def validate_config(config: dict[str, Any]) -> None:
             raise ValueError(f"cameras.{name}: posture_method legs needs knees in pose_joints")
         if method == "shoulder_rise" and not camera.get("fixed_camera", True):
             raise ValueError(f"cameras.{name}: posture_method shoulder_rise needs fixed_camera: true")
+        if not isinstance(camera.get("keep_teacher_track", False), bool):
+            raise ValueError(f"cameras.{name}.keep_teacher_track must be true or false")
         below = camera.get("ignore_people_starting_below")
         if below is not None and (isinstance(below, bool) or not isinstance(below, (int, float))
                                   or not 0 < below <= 1):

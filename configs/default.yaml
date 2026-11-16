@@ -54,8 +54,11 @@ cameras:
     zones: null
   instructor_view:
     expected_role: teacher
-    # More than one confirmed visible person makes their roles unknown.
+    # The teacher role goes to a confirmed person who is alone in view.
     role_policy: single_visible
+    # Keep that role on the same tracker ID while other people appear (they
+    # are unknown); false makes everyone unknown whenever two are in view.
+    keep_teacher_track: true
     fixed_camera: true
     compensate_camera_motion: false
     # Legs are used when visible; near the camera the feet or knees leave the

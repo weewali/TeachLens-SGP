@@ -168,6 +168,54 @@ class TimelineTests(unittest.TestCase):
         self.assertTrue(any(event.indicator_name == "role_classification"
                             and event.role == "unknown" for event in events))
 
+    def test_kept_teacher_track_keeps_its_role_when_someone_enters(self):
+        teacher, visitor = person(1), person(2, x_shift=.3)
+        for keep, expected_roles, expected_presence in (
+                (True, {1: "teacher", 2: "unknown"}, ["visible"] * 3),
+                (False, {1: "unknown", 2: "unknown"}, ["unknown"] * 3)):
+            analyzer = FoundationAnalyzer("video_12", "teacher", "single_visible", True,
+                                          {}, .2, SETTINGS, keep_teacher_track=keep)
+            for time in (0, .2):  # the teacher is confirmed while alone
+                analyzer.process(time, (teacher,))
+            presence = []
+            for time in (.4, .6, .8):  # someone else walks in and stays
+                presence += [event.value for event in analyzer.process(time, (teacher, visitor))
+                             if event.indicator_name == "teacher_presence_sample"]
+            self.assertEqual({t.track_id: t.role for t in analyzer.last_sample.tracks},
+                             expected_roles)
+            self.assertEqual(presence, expected_presence)
+
+    def test_kept_teacher_track_needs_someone_alone_first(self):
+        analyzer = FoundationAnalyzer("video_13", "teacher", "single_visible", True,
+                                      {}, .2, SETTINGS, keep_teacher_track=True)
+        for time in (0, .2, .4):  # two people from the start: nobody can be told apart
+            analyzer.process(time, (person(1), person(2, x_shift=.3)))
+        self.assertEqual({t.role for t in analyzer.last_sample.tracks}, {"unknown"})
+
+    def test_briefly_hidden_teacher_is_not_replaced(self):
+        analyzer = FoundationAnalyzer("video_14", "teacher", "single_visible", True, {}, .2,
+                                      {**SETTINGS, "max_track_gap_seconds": 1.0},
+                                      keep_teacher_track=True)
+        teacher, visitor = person(1), person(2, x_shift=.3)
+        for time in (0, .2):
+            analyzer.process(time, (teacher,))
+        analyzer.process(.4, (visitor,))  # teacher hidden; the visitor is alone
+        events = analyzer.process(.6, (visitor,))
+        self.assertEqual([e.value for e in events if e.indicator_name == "teacher_presence_sample"],
+                         ["unknown"])  # the visitor does not take the role
+        analyzer.process(.8, (teacher, visitor))  # same tracker ID back within the gap
+        self.assertEqual({t.track_id: t.role for t in analyzer.last_sample.tracks},
+                         {1: "teacher", 2: "unknown"})
+
+    def test_new_track_takes_the_role_after_the_old_one_retires(self):
+        analyzer = FoundationAnalyzer("video_15", "teacher", "single_visible", True,
+                                      {}, .2, SETTINGS, keep_teacher_track=True)
+        for time in (0, .2):
+            analyzer.process(time, (person(1),))
+        for time in (1.0, 1.2):  # track 1 unseen > max gap: retired; ID 3 is alone
+            analyzer.process(time, (person(3),))
+        self.assertEqual({t.track_id: t.role for t in analyzer.last_sample.tracks}, {3: "teacher"})
+
     def test_instructor_presence_has_visible_and_unknown_samples(self):
         analyzer = FoundationAnalyzer("video_05", "teacher", "single_visible", True,
                                       {}, .2, SETTINGS)

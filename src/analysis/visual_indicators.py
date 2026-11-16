@@ -421,9 +421,17 @@ class FoundationAnalyzer:
                  camera_fixed: bool, zones: dict[str, tuple[tuple[float, float], ...]],
                  sample_period: float, settings: dict[str, Any],
                  enabled: dict[str, bool] | None = None, start_time: float = 0.0,
-                 posture_method: str = "legs", joints: frozenset[int] | None = None):
+                 posture_method: str = "legs", joints: frozenset[int] | None = None,
+                 keep_teacher_track: bool = False):
         """start_time is where analysis begins (a --start segment); people
         already visible then are not reported as entries.
+
+        keep_teacher_track (single_visible only): a track that was the only
+        confirmed person in view keeps the expected role while the tracker
+        keeps its ID, even when other people appear; they are unknown. A new
+        track takes over only after the old one has been retired (unseen for
+        longer than max_track_gap_seconds), so a briefly hidden teacher is not
+        replaced by whoever is left in view.
 
         posture_method is "legs" or "shoulder_rise" (fixed camera, legs not
         used). joints is the camera's pose_joints; people passed to process()
@@ -455,6 +463,8 @@ class FoundationAnalyzer:
         self.rise_history = max(1, round(float(settings.get("shoulder_rise_history_seconds", 3.0))
                                          / sample_period))
         self.tracks: dict[int, _Track] = {}
+        self.keep_teacher_track = keep_teacher_track and role_policy == "single_visible"
+        self.teacher_track: int | None = None  # track holding the expected role (keep_teacher_track)
         self.segments = _Segments(video_id, sample_period, self.max_gap)
         # State behind the most recent process() call; read-only for overlays.
         self.last_sample: SampleSnapshot | None = None
@@ -530,13 +540,21 @@ class FoundationAnalyzer:
             state.last_box = person.box
         confirmed = [person for person in unique.values()
                      if self.tracks[person.track_id].samples >= self.min_samples]
-        role = self._role(len(confirmed), len(unique))
+        sample_role = self._role(len(confirmed), len(unique))
+        if self.keep_teacher_track:
+            if self.teacher_track not in self.tracks:  # retired: the role is free again
+                self.teacher_track = None
+            if self.teacher_track is None and sample_role == self.expected_role:
+                self.teacher_track = confirmed[0].track_id  # alone and confirmed
         teacher_seen = False
         student_count = 0
         snapshots: dict[int, TrackSnapshot] = {}
         for person in confirmed:
             track_id = person.track_id
             state = self.tracks[track_id]
+            # The kept teacher track holds the role; everyone else is unknown.
+            role = (sample_role if self.teacher_track is None
+                    else self.expected_role if track_id == self.teacher_track else "unknown")
             posture = basis = rise = motion = zone = smoothed = visible = None
             # Same person in the current shot's coordinates, so samples are
             # comparable while the camera pans or zooms; None if not measurable.
@@ -662,7 +680,7 @@ class FoundationAnalyzer:
         count = count_coverage = presence = None
         if self.enabled["visible_student_count"] and self.expected_role == "student":
             count = student_count
-            count_coverage = "limited" if role == "unknown" or provisional else "adequate"
+            count_coverage = "limited" if sample_role == "unknown" or provisional else "adequate"
             events.append(make_event(self.video_id, "visible_student_count", time, time,
                                      student_count, coverage=count_coverage))
         if self.enabled["teacher_presence"] and self.expected_role == "teacher":
@@ -680,7 +698,7 @@ class FoundationAnalyzer:
         if self.enabled["teacher_presence"] and teacher_seen and self.expected_role == "teacher":
             events.extend(self.segments.update("teacher_presence", None, time, "visible",
                                                "teacher", None, "limited"))
-        elif confirmed and role == "unknown":
+        elif confirmed and not teacher_seen:
             closed = self.segments.close(("teacher_presence", None))
             if closed is not None:
                 events.append(closed)

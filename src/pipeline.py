@@ -134,7 +134,8 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
                                                "keypoint_confidence": config["inference"]["keypoint_confidence"]},
                                               enabled, start_time=start,
                                               posture_method=camera.get("posture_method", "legs"),
-                                              joints=joints)
+                                              joints=joints,
+                                              keep_teacher_track=bool(camera.get("keep_teacher_track", False)))
                 LOGGER.info("video=%s camera=%s fps=%.2f sample_period=%.3fs range=%.3fs-%s",
                             video_id, camera_id, info.fps, info.sample_period, start,
                             f"{end:.3f}s" if end is not None else "end")

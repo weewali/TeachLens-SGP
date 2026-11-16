@@ -81,6 +81,11 @@ class ConfigurationTests(unittest.TestCase):
             broken["cameras"]["instructor_view"]["ignore_people_starting_below"] = value
             with self.assertRaises(ValueError):
                 validate_config(broken)
+        self.assertIs(config["cameras"]["instructor_view"]["keep_teacher_track"], True)
+        broken = deepcopy(config)
+        broken["cameras"]["instructor_view"]["keep_teacher_track"] = "yes"
+        with self.assertRaises(ValueError):
+            validate_config(broken)
 
     def test_select_indicators_keeps_only_chosen_switches(self):
         enabled = load_indicator_flags("configs/indicators.yaml")

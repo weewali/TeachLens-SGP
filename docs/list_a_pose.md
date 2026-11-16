@@ -305,7 +305,7 @@ validation still needs labelled clips (see below).
 | Teacher presence | Visible intervals plus per-sample `visible`, `not_detected`, or `unknown`; only meaningful for the instructor camera. |
 | Visible student count | Count at each sampled time, based on confirmed pose tracks; provisional tracks make coverage limited. Not attendance. |
 | Persistent anonymous identity | Temporary tracker ID and observed interval. Reacquisition/ID switches can split one person into several tracks. |
-| Role classification | Camera-context assignment, **not a learned role classifier**. `student_view` assumes all tracks are students; `instructor_view` assigns teacher only when exactly one confirmed person is visible. Otherwise role is `unknown`. |
+| Role classification | Camera-context assignment, **not a learned role classifier**. `student_view` assumes all tracks are students; `instructor_view` assigns teacher to a confirmed person who is alone in view; with `keep_teacher_track: true` (default) that tracker ID keeps the teacher role while others appear (they are `unknown`) until the track is retired. Otherwise role is `unknown`. |
 | Position | Normalized person box, box center, the camera's usable COCO-17 keypoints, ankle-based foot point or box-bottom proxy (`frame_bottom_cut_off` when the box reaches the image bottom), and path data in camera-shot coordinates (`foot_point_in_shot`, `hip_center_in_shot`, `camera_shot`). |
 | Classroom zone | Optional per-track intervals in calibrated camera polygons; `unknown` while the person is cut off at the image bottom. No zone is emitted until a real camera-specific YAML is set. |
 | Entry and exit | Only **apparent** appearances/disappearances near the left, top, or right frame edge (or with the box centre near any edge), away from recording boundaries. A door or true room entry cannot be proven from a disappearing track. |
@@ -351,7 +351,14 @@ scope) so guessed legs are not used.
 If the student camera includes the teacher, change `role_policy` to `unknown`
 until you have a defensible role assignment method; otherwise they will be
 counted as a student. The instructor camera's `single_visible` policy is
-deliberately cautious when multiple people appear.
+deliberately cautious when multiple people appear: nobody is the teacher
+until one confirmed person has been alone in view. After that,
+`keep_teacher_track` lets ByteTrack's ID carry the role, so a visitor or a
+duplicate box on the same instructor is `unknown` and presence stays
+`visible`. A new ID takes over only after the old one is retired (unseen
+for longer than `max_track_gap_seconds`). If ByteTrack swaps IDs between
+two people who cross, the role follows the swap; check such moments in the
+review video.
 
 List A switches in `configs/indicators.yaml` control emitted indicators.
 Hand raises and all other List B/C, interaction, object, and audio indicators
