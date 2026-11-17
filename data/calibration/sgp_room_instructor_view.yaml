@@ -1,0 +1,26 @@
+# Instructor camera of the room used for the 2026-11-03 scenario recordings
+# (A1-A6, B1; also A4_t2 and 20261103_162859000_iOS). Read on 2026-11-17 from
+# upright 4K frames of A1, A3, and B1, which line up to within ~0.5% of the
+# frame (the tripod did not move). Points are normalized [0, 1] image
+# coordinates (x right, y down). Recalibrate if the camera is moved.
+
+camera_id: instructor_view
+
+# Floor regions in front of the front wall, tested against a person's foot
+# point (the box bottom when the ankles are hidden). First match wins.
+zones:
+  front_left:      # open floor left of the screen
+    points: [[0.00, 0.70], [0.33, 0.70], [0.33, 1.00], [0.00, 1.00]]
+  front_center:    # in front of the screen
+    points: [[0.33, 0.70], [0.60, 0.70], [0.60, 1.00], [0.33, 1.00]]
+  desk_area:       # at or behind the teacher's desk, below the whiteboard
+    points: [[0.60, 0.62], [1.00, 0.62], [1.00, 1.00], [0.60, 1.00]]
+
+# Things the teacher can face, point at, or write on (List B targets).
+targets:
+  screen:          # wall-mounted display showing the slides
+    points: [[0.333, 0.360], [0.637, 0.360], [0.637, 0.675], [0.333, 0.675]]
+  board:           # whiteboard
+    points: [[0.656, 0.337], [0.931, 0.334], [0.919, 0.648], [0.655, 0.648]]
+  desk:            # teacher's desk surface (laptops, notes)
+    points: [[0.580, 0.800], [0.650, 0.770], [1.000, 0.760], [1.000, 0.880], [0.680, 0.920], [0.580, 0.930]]

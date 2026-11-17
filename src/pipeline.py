@@ -12,7 +12,7 @@ from typing import Any, Sequence
 from src.analysis.aggregates import summarize_list_a
 from src.analysis.events import with_real_time, write_jsonl
 from src.analysis.visual_indicators import (
-    DuplicateFilter, FoundationAnalyzer, restrict_joints, starts_below,
+    DuplicateFilter, FoundationAnalyzer, inside_any_target, restrict_joints, starts_below,
 )
 from src.inference.pose import YoloPoseTracker, joint_indices
 from src.preprocessing.camera_motion import CameraMotionEstimator
@@ -21,7 +21,7 @@ from src.preprocessing.video import VideoInfo, frames
 from src.reporting.annotated_video import (
     AnnotatedVideoWriter, LivePreview, ReviewOverlay, camera_notes,
 )
-from src.utils.config import load_indicator_flags, load_zones, select_indicators
+from src.utils.config import load_indicator_flags, load_targets, load_zones, select_indicators
 from src.utils.paths import file_in_use, project_path
 
 
@@ -109,6 +109,8 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
             raise PermissionError(f"Cannot replace {', '.join(str(path) for path in busy)}: it is open "
                                   "in another program (for example a video player); close it and run again")
     zones = load_zones(camera.get("zones"), camera_id)
+    targets = load_targets(camera.get("zones"), camera_id)  # List B board/screen/desk
+    ignore_inside = tuple(camera.get("ignore_people_inside_targets") or ())
     joints = joint_indices(camera.get("pose_joints"))
     ignore_below = camera.get("ignore_people_starting_below")
     analysis = config["analysis"]
@@ -160,14 +162,15 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
                                               enabled, start_time=start,
                                               posture_method=camera.get("posture_method", "legs"),
                                               joints=joints,
-                                              keep_teacher_track=bool(camera.get("keep_teacher_track", False)))
+                                              keep_teacher_track=bool(camera.get("keep_teacher_track", False)),
+                                              targets=targets, teacher_settings=config.get("teacher"))
                 LOGGER.info("video=%s camera=%s fps=%.2f sample_period=%.3fs range=%.3fs-%s",
                             video_id, camera_id, info.fps, info.sample_period, start,
                             f"{end:.3f}s" if end is not None else "end")
                 if annotated is not None or preview is not None:
                     overlay = ReviewOverlay(
                         f"{video_id} | {camera_id}", float(config["inference"]["keypoint_confidence"]),
-                        duration=info.duration or None, zones=zones,
+                        duration=info.duration or None, zones=zones, targets=targets,
                         notes=camera_notes(camera, enabled, bool(zones)),
                         show_rejected_keypoints=bool(review.get("show_rejected_keypoints", False)),
                         time_range=(start, end) if segment else None, path=path_mode,
@@ -181,7 +184,8 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
             # not people cut off at the bottom (e.g. student heads in front
             # of the instructor camera).
             people = tuple(restrict_joints(person, joints) for person in tracker.infer(frame)
-                           if not starts_below(person, ignore_below))
+                           if not starts_below(person, ignore_below)
+                           and not inside_any_target(person, targets, ignore_inside))
             if duplicates is not None:  # one detection per body (desks split seated people)
                 people = duplicates(people)
             camera_motion = (estimator.update(frame, [person.box for person in people])
@@ -214,7 +218,8 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
     summary = summarize_list_a(events_path, camera_id, video_id, duration, info.sample_period,
                                start, analyzed_end(),
                                started.isoformat(timespec="milliseconds") if started else None,
-                               started_source)
+                               started_source,
+                               frame_aspect=info.width / info.height if info.height else None)
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = None
     try:

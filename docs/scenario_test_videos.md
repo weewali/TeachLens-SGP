@@ -84,7 +84,16 @@ indicators can share one run (`--indicators position entry_exit`).
 | sitting_standing | both | `show_indicator.py <id> sitting_standing`; students also `... shoulder_rise --track <TRACK_ID>` | sitting, standing, unknown |
 | motion_level | both | `show_indicator.py <id> motion_level` and `... motion_speed --track <TRACK_ID>` | still, low, medium, high, unknown |
 
+List B (teacher behaviour) uses the same commands with its own indicator
+names; see `docs/list_b_teacher.md`. The room's floor zones and board,
+screen, and desk targets are in `data/calibration/sgp_room_instructor_view.yaml`,
+loaded by `configs/sgp_room.yaml`, which `run_scenarios.py` uses by default.
+
 ## Real-room obstacles the pipeline must cope with
+- **People shown on the screen.** At 1280-pixel input the model detects the
+  people in slide photos (A2, A3), which made the instructor's role
+  `unknown` for whole lessons. `cameras.instructor_view.ignore_people_inside_targets:
+  [screen]` drops boxes lying inside the screen.
 
 - **Duplicate boxes on seated students.** Desks split each front-row student
   into an above-desk box and a full-body box (legs under the desk), and some

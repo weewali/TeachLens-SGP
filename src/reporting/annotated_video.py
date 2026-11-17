@@ -41,6 +41,11 @@ SKELETON = (
 ROLE_COLORS = {"teacher": (0, 140, 255), "student": (255, 160, 0), "unknown": (255, 0, 255)}
 PROVISIONAL_COLOR = (170, 170, 170)
 ZONE_COLOR = (80, 220, 80)
+TARGET_COLOR = (0, 200, 255)  # board/screen/desk targets (List B)
+POINTING_COLOR = (0, 0, 255)
+# Short overlay words for List B labels; anything else is shown as is.
+TEACHER_SHORT = {"toward_class": "faces class", "away_from_class": "back to class",
+                 "sideways_left": "side-on (left)", "sideways_right": "side-on (right)"}
 PATH_COLOR = (0, 255, 255)  # teacher path; "all" paths use role colours
 PATH_MODES = ("off", "teacher", "all")
 
@@ -88,7 +93,34 @@ def describe_track(person: PosePerson, track: TrackSnapshot | None) -> list[str]
         flags.append("cut off")
     if flags:
         lines.append(" | ".join(flags))
+    lines.extend(describe_teacher(track.teacher))
     return lines
+
+
+def describe_teacher(teacher: dict[str, Any] | None) -> list[str]:
+    """List B label lines for a teacher track; only evaluated indicators appear."""
+    if not teacher:
+        return []
+    parts = []
+    if teacher.get("facing"):
+        parts.append(TEACHER_SHORT.get(teacher["facing"], teacher["facing"]))
+    if teacher.get("head"):
+        parts.append(f"head: {teacher['head']}")
+    if teacher.get("board") not in (None, "none"):
+        parts.append(f"at {teacher['board']}")
+    if teacher.get("writing") == "writing":
+        parts.append("WRITING")
+    if teacher.get("pointing") not in (None, "none"):
+        parts.append(f"points: {teacher['pointing']}")
+    if teacher.get("gesture") == "gesturing":
+        parts.append("gesturing")
+    if teacher.get("raised") in ("one", "both"):
+        parts.append(f"hand up ({teacher['raised']})")
+    if teacher.get("lean") not in (None, "upright", "unknown"):
+        parts.append(teacher["lean"].replace("_", " "))
+    if teacher.get("stationary") == "stationary":
+        parts.append("stationary")
+    return [" | ".join(parts[i:i + 3]) for i in range(0, len(parts), 3)]
 
 
 def camera_notes(camera: dict[str, Any], enabled: dict[str, bool], has_zones: bool) -> tuple[str, ...]:
@@ -99,6 +131,8 @@ def camera_notes(camera: dict[str, Any], enabled: dict[str, bool], has_zones: bo
     unused = [group for group in JOINT_GROUPS if group not in camera.get("pose_joints", JOINT_GROUPS)]
     if unused:
         notes.append(f"joints not used: {', '.join(unused)}")
+    if camera.get("ignore_people_inside_targets"):
+        notes.append(f"ignored: people inside {', '.join(camera['ignore_people_inside_targets'])}")
     if camera.get("ignore_people_starting_below") is not None:
         notes.append(f"ignored: boxes starting below {camera['ignore_people_starting_below']:.0%} of height")
     if (enabled.get("motion_level") and not camera.get("fixed_camera", True)
@@ -152,6 +186,7 @@ class ReviewOverlay:
     def __init__(self, title: str, keypoint_confidence: float, *,
                  duration: float | None = None,
                  zones: dict[str, tuple[tuple[float, float], ...]] | None = None,
+                 targets: dict[str, tuple[tuple[float, float], ...]] | None = None,
                  notes: Sequence[str] = (), show_rejected_keypoints: bool = False,
                  time_range: tuple[float, float | None] | None = None,
                  path: str = "off", path_seconds: float | None = None,
@@ -162,6 +197,7 @@ class ReviewOverlay:
         self.min_conf = keypoint_confidence
         self.duration = duration
         self.zones = zones or {}
+        self.targets = targets or {}
         self.notes = tuple(notes)
         self.show_rejected = show_rejected_keypoints
         self.time_range = time_range  # (start, end or None) of a --start/--end segment
@@ -270,6 +306,7 @@ class ReviewOverlay:
             -(p.box[2] - p.box[0]) * (p.box[3] - p.box[1])))
         for person in reversed(ordered):
             self._draw_body(cv2, image, person, states.get(person.track_id), scale)
+            self._draw_pointing(cv2, image, states.get(person.track_id), scale)
         hud = self.hud_lines(sample)
         hud_rect = _clamp(image, 0, 0, _text_size(cv2, hud, scale))
         placed = [hud_rect]
@@ -280,7 +317,7 @@ class ReviewOverlay:
         return image
 
     def _draw_zones(self, cv2: Any, image: Any, scale: float) -> None:
-        if not self.zones:
+        if not self.zones and not self.targets:
             return
         import numpy as np
         height, width = image.shape[:2]
@@ -289,6 +326,23 @@ class ReviewOverlay:
             cv2.polylines(image, [points], True, ZONE_COLOR, max(1, round(scale)), cv2.LINE_AA)
             cv2.putText(image, name, tuple(int(v) for v in points[0]), cv2.FONT_HERSHEY_SIMPLEX,
                         0.5 * scale, ZONE_COLOR, max(1, round(scale)), cv2.LINE_AA)
+        for name, polygon in self.targets.items():
+            points = np.array([(round(x * width), round(y * height)) for x, y in polygon], np.int32)
+            cv2.polylines(image, [points], True, TARGET_COLOR, max(1, round(scale)), cv2.LINE_AA)
+            cv2.putText(image, name, tuple(int(v) for v in points[0]), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5 * scale, TARGET_COLOR, max(1, round(scale)), cv2.LINE_AA)
+
+    @staticmethod
+    def _draw_pointing(cv2: Any, image: Any, track: TrackSnapshot | None, scale: float) -> None:
+        """Arrow along a pointing arm (List B), from the wrist outward."""
+        ray = (track.teacher or {}).get("pointing_ray") if track is not None else None
+        if not ray:
+            return
+        height, width = image.shape[:2]
+        (x0, y0), (x1, y1) = ray
+        cv2.arrowedLine(image, (round(x0 * width), round(y0 * height)),
+                        (round(x1 * width), round(y1 * height)), POINTING_COLOR,
+                        max(2, round(2 * scale)), cv2.LINE_AA, tipLength=0.2)
 
     @staticmethod
     def _color(track: TrackSnapshot | None) -> tuple[int, int, int]:

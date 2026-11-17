@@ -31,7 +31,7 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.preprocessing.recording_time import parse_timestamp  # noqa: E402
-from src.utils.config import LIST_A_INDICATORS  # noqa: E402
+from src.utils.config import INDICATORS  # noqa: E402
 from src.utils.paths import project_path  # noqa: E402
 
 LOGGER = logging.getLogger("run_scenarios")
@@ -115,7 +115,8 @@ def main() -> int:
                         help="Camera to run (repeatable); default: both")
     parser.add_argument("--tag", help="Suffix for every video ID, e.g. base or rise060")
     parser.add_argument("--config", type=Path, default=project_path("configs/default.yaml"))
-    parser.add_argument("--local-config", type=Path, help="Uncommitted YAML override")
+    parser.add_argument("--local-config", type=Path, default=project_path("configs/sgp_room.yaml"),
+                        help="YAML override; default: the scenario room's zones (configs/sgp_room.yaml)")
     parser.add_argument("--weight", type=Path, help="Local YOLO26 pose .pt; never auto-downloaded")
     parser.add_argument("--output-dir", type=Path, help="Root for events/, reports/ and debug/")
     parser.add_argument("--device", help="Ultralytics device, e.g. cpu or 0")
@@ -127,9 +128,9 @@ def main() -> int:
                           help="Skip runs whose summary already exists")
     parser.add_argument("--full", action="store_true",
                         help="Analyze whole files instead of each row's synced window")
-    parser.add_argument("--indicators", nargs="+", choices=LIST_A_INDICATORS, metavar="NAME",
-                        help="Turn on only these List A indicators (default: configs/indicators.yaml); "
-                             f"choices: {', '.join(LIST_A_INDICATORS)}")
+    parser.add_argument("--indicators", nargs="+", choices=INDICATORS, metavar="NAME",
+                        help="Turn on only these List A/B indicators (default: configs/indicators.yaml); "
+                             f"choices: {', '.join(INDICATORS)}")
     parser.add_argument("--dry-run", action="store_true", help="List the planned runs and stop")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO,

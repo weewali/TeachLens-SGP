@@ -65,6 +65,10 @@ def validate_config(config: dict[str, Any]) -> None:
             raise ValueError(f"cameras.{name}: posture_method shoulder_rise needs fixed_camera: true")
         if not isinstance(camera.get("keep_teacher_track", False), bool):
             raise ValueError(f"cameras.{name}.keep_teacher_track must be true or false")
+        inside = camera.get("ignore_people_inside_targets")
+        if inside is not None and (not isinstance(inside, list)
+                                   or not all(isinstance(name, str) for name in inside)):
+            raise ValueError(f"cameras.{name}.ignore_people_inside_targets must be a list of target names")
         below = camera.get("ignore_people_starting_below")
         if below is not None and (isinstance(below, bool) or not isinstance(below, (int, float))
                                   or not 0 < below <= 1):
@@ -158,16 +162,43 @@ def load_zones(path: str | Path | None, camera_id: str) -> dict[str, tuple[tuple
     return zones
 
 
+def load_targets(path: str | Path | None, camera_id: str) -> dict[str, tuple[tuple[float, float], ...]]:
+    """Optional `targets:` polygons (board, screen, desk) from a camera's zone file.
+
+    They are what List B rules test head direction, pointing rays, and wrists
+    against, unlike `zones:`, which locate a person's feet. No file or no
+    section means no target claims.
+    """
+    if path is None:
+        return {}
+    import yaml
+    resolved = project_path(path)
+    with resolved.open("r", encoding="utf-8") as stream:
+        document = yaml.safe_load(stream) or {}
+    if document.get("camera_id") != camera_id:
+        raise ValueError(f"Zone file camera_id must be {camera_id}: {resolved}")
+    targets = {}
+    for name, item in (document.get("targets") or {}).items():
+        polygon = tuple((float(x), float(y)) for x, y in item.get("points", []))
+        if len(polygon) < 3 or any(not 0 <= v <= 1 for point in polygon for v in point):
+            raise ValueError(f"Target {name} needs at least three points in [0, 1]")
+        targets[name] = polygon
+    return targets
+
+
 def load_indicator_flags(path: str | Path) -> dict[str, bool]:
-    """Read List A switches; absent switches are disabled, not assumed ready."""
+    """Read List A (visual:) and List B (teacher:) switches; absent ones are off."""
     try:
         import yaml
     except ImportError as exc:
         raise RuntimeError("PyYAML is required for indicator configuration") from exc
     with project_path(path).open("r", encoding="utf-8") as stream:
         document = yaml.safe_load(stream) or {}
-    visual = document.get("visual", {})
-    return {name: bool(visual.get(name, {}).get("enabled", False)) for name in LIST_A_INDICATORS}
+    visual, teacher = document.get("visual", {}), document.get("teacher", {})
+    flags = {name: bool(visual.get(name, {}).get("enabled", False)) for name in LIST_A_INDICATORS}
+    flags.update({name: bool(teacher.get(name, {}).get("enabled", False))
+                  for name in LIST_B_INDICATORS})
+    return flags
 
 
 LIST_A_INDICATORS = (
@@ -177,9 +208,17 @@ LIST_A_INDICATORS = (
 )
 
 
+# List B: teacher visual behaviour (src/analysis/teacher_indicators.py).
+LIST_B_INDICATORS = (
+    "stationary_episodes", "facing_direction", "head_orientation", "board_interaction",
+    "writing_on_board", "pointing", "gestures", "raised_hand", "torso_lean",
+)
+INDICATORS = LIST_A_INDICATORS + LIST_B_INDICATORS
+
+
 def select_indicators(enabled: dict[str, bool],
                       chosen: Sequence[str] | None) -> dict[str, bool]:
-    """Keep only the chosen List A switches on (None keeps the file's switches).
+    """Keep only the chosen List A/B switches on (None keeps the file's switches).
 
     Used to test one indicator at a time: the JSONL and the review video then
     show only what was chosen. A chosen switch is turned on even if the file
@@ -187,7 +226,7 @@ def select_indicators(enabled: dict[str, bool],
     """
     if chosen is None:
         return enabled
-    unknown = sorted(set(chosen) - set(LIST_A_INDICATORS))
+    unknown = sorted(set(chosen) - set(INDICATORS))
     if unknown or not chosen:
-        raise ValueError(f"Unknown or no indicators {unknown}; choose from {list(LIST_A_INDICATORS)}")
+        raise ValueError(f"Unknown or no indicators {unknown}; choose from {list(INDICATORS)}")
     return {name: name in chosen for name in enabled}

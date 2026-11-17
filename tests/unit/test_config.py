@@ -7,7 +7,7 @@ from pathlib import Path
 
 from src.inference.pose import YoloPoseTracker, joint_indices
 from src.utils.config import (
-    LIST_A_INDICATORS, load_config, load_indicator_flags, load_zones, select_indicators,
+    INDICATORS, LIST_A_INDICATORS, load_config, load_indicator_flags, load_zones, select_indicators,
     validate_config,
 )
 from src.utils.paths import project_path
@@ -112,7 +112,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIs(select_indicators(enabled, None), enabled)
         chosen = select_indicators(enabled, ["sitting_standing"])
         self.assertEqual([name for name, on in chosen.items() if on], ["sitting_standing"])
-        self.assertEqual(set(chosen), set(LIST_A_INDICATORS))
+        self.assertEqual(set(chosen), set(INDICATORS))
         both = select_indicators(dict.fromkeys(LIST_A_INDICATORS, False), ["motion_level", "position"])
         self.assertEqual(sum(both.values()), 2)  # switched on even if the file has them off
         for bad in (["hand_raise"], []):

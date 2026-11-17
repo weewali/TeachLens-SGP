@@ -71,6 +71,9 @@ cameras:
     # heads of students sitting in front of this camera (measured 2026-11-16
     # at 0.80-0.89; the seated instructor's box starts near 0.58). null = off.
     ignore_people_starting_below: 0.75
+    # Ignore people whose box lies inside these calibrated targets: photos or
+    # video of people on the screen. Needs a zone file with targets.
+    ignore_people_inside_targets: [screen]
     zones: null
 
 # Background feature matching for cameras with fixed_camera: false and
@@ -126,6 +129,23 @@ analysis:
   motion_smoothing_samples: 3
   # Metrics use valid visible time, not the full video duration by default.
   require_evidence_coverage: true
+
+# List B (teacher behaviour) thresholds; unvalidated starting values, set
+# on the scenario videos (2026-11-17). Speeds are per second.
+teacher:
+  head_down_ratio: 1.0            # nose this many eye-gaps below the eyes -> looking down (notes)
+  pointing_min_elbow_degrees: 150 # straight arm
+  pointing_min_reach: 0.6         # shoulder-to-wrist distance / torso length
+  pointing_min_raise_degrees: 40  # arm lifted at least this far from hanging down
+  raised_max_from_vertical_degrees: 35  # a straight arm this close to vertical is a raised hand
+  target_margin: 0.03             # normalized x margin around board/screen targets
+  gesture_min_speed: 0.3          # wrist speed relative to the torso, torso lengths/s
+  locomotion_min_speed: 0.25      # hip speed (body heights/s) counted as walking
+  stationary_max_speed: 0.08      # hip speed (body heights/s) counted as standing still
+  stationary_min_seconds: 5.0     # shortest stationary episode reported
+  lean_upright_max_degrees: 10    # sideways torso tilt still counted as upright
+  lean_strong_min_degrees: 25
+  writing_smoothing_samples: 3    # writing = majority of the last N samples
 
 # Visual check of what List A saw in each analyzed (sampled) frame. The MP4
 # holds original classroom footage: it stays local under outputs/debug/

@@ -11,6 +11,7 @@ from statistics import median
 from typing import Any
 
 from src.analysis.events import Event, make_event
+from src.analysis.teacher_indicators import SEGMENT_NAMES as TEACHER_SEGMENTS, TeacherBehavior
 from src.inference.pose import (
     LEFT_ANKLE, LEFT_ELBOW, LEFT_EYE, LEFT_HIP, LEFT_KNEE, LEFT_SHOULDER,
     LEFT_WRIST, NOSE, RIGHT_ANKLE, RIGHT_ELBOW, RIGHT_EYE, RIGHT_HIP,
@@ -61,6 +62,28 @@ def starts_below(person: PosePerson, limit: float | None) -> bool:
     None disables the check.
     """
     return limit is not None and person.box[1] >= limit
+
+
+def box_inside_fraction(box: tuple[float, float, float, float],
+                        polygon: tuple[tuple[float, float], ...], grid: int = 6) -> float:
+    """Share of a normalized box that lies inside a polygon (grid of sample points)."""
+    x1, y1, x2, y2 = box
+    points = [(x1 + (x2 - x1) * (i + .5) / grid, y1 + (y2 - y1) * (j + .5) / grid)
+              for i in range(grid) for j in range(grid)]
+    return sum(point_in_polygon(point, polygon) for point in points) / len(points)
+
+
+def inside_any_target(person: PosePerson, targets: dict[str, tuple[tuple[float, float], ...]],
+                      names: tuple[str, ...], min_fraction: float = 0.85) -> bool:
+    """True if the person's box lies (almost) entirely inside one of the named targets.
+
+    People shown on a screen (photos or video in the slides) are detected like
+    real people; at 1280-pixel input the scenario slides' photos made the
+    instructor's role unknown for whole lessons (A2, A3; 2026-11-17). A real
+    person in front of the screen always reaches below it, so is never inside.
+    """
+    return any(box_inside_fraction(person.box, targets[name]) >= min_fraction
+               for name in names if name in targets)
 
 
 HEAD_AND_SHOULDERS = tuple(range(7))  # COCO nose, eyes, ears, shoulders
@@ -382,6 +405,7 @@ class TrackSnapshot:
     hip_center_in_shot: tuple[float, float] | None = None  # path anchor; needs both hips
     possible_occlusion: bool | None = None
     box_truncated: bool | None = None
+    teacher: dict[str, Any] | None = None  # List B labels for a teacher track (None = not evaluated)
 
 
 @dataclass(frozen=True)
@@ -494,7 +518,9 @@ class FoundationAnalyzer:
                  sample_period: float, settings: dict[str, Any],
                  enabled: dict[str, bool] | None = None, start_time: float = 0.0,
                  posture_method: str = "legs", joints: frozenset[int] | None = None,
-                 keep_teacher_track: bool = False):
+                 keep_teacher_track: bool = False,
+                 targets: dict[str, tuple[tuple[float, float], ...]] | None = None,
+                 teacher_settings: dict[str, Any] | None = None):
         """start_time is where analysis begins (a --start segment); people
         already visible then are not reported as entries.
 
@@ -524,10 +550,12 @@ class FoundationAnalyzer:
         self.zones = zones
         self.period = sample_period
         self.settings = settings
-        self.enabled = enabled or {name: True for name in (
-            "teacher_presence", "visible_student_count", "anonymous_tracking",
-            "role_classification", "position", "classroom_zone", "entry_exit",
-            "visibility_occlusion", "sitting_standing", "motion_level")}
+        list_a = ("teacher_presence", "visible_student_count", "anonymous_tracking",
+                  "role_classification", "position", "classroom_zone", "entry_exit",
+                  "visibility_occlusion", "sitting_standing", "motion_level")
+        # No switches given: all of List A on. Given: anything missing is off.
+        self.enabled = ({name: True for name in list_a} if enabled is None
+                        else {**dict.fromkeys(list_a, False), **enabled})
         self.min_samples = int(settings["min_track_samples"])
         self.max_gap = float(settings["max_track_gap_seconds"])
         self.min_conf = float(settings["keypoint_confidence"])
@@ -538,6 +566,11 @@ class FoundationAnalyzer:
         self.keep_teacher_track = keep_teacher_track and role_policy == "single_visible"
         self.teacher_track: int | None = None  # track holding the expected role (keep_teacher_track)
         self.segments = _Segments(video_id, sample_period, self.max_gap)
+        # List B (teacher behaviour) runs only on a teacher camera with a switch on.
+        teacher = TeacherBehavior(video_id, self.enabled, targets or {}, zones,
+                                  float(settings["keypoint_confidence"]), sample_period,
+                                  teacher_settings, self.segments.update)
+        self.teacher = teacher if expected_role == "teacher" and teacher.active else None
         # State behind the most recent process() call; read-only for overlays.
         self.last_sample: SampleSnapshot | None = None
 
@@ -551,7 +584,9 @@ class FoundationAnalyzer:
     def _retire(self, track_id: int, recording_end: float, *, lost_before_end: bool) -> list[Event]:
         state = self.tracks.pop(track_id)
         events = []
-        for name in ("classroom_zone", "sitting_standing", "motion_level"):
+        if self.teacher is not None:
+            events.extend(self.teacher.close(track_id, state.role, recording_end))
+        for name in ("classroom_zone", "sitting_standing", "motion_level") + TEACHER_SEGMENTS:
             event = self.segments.close((name, track_id), recording_end)
             if event is not None:
                 events.append(event)
@@ -740,13 +775,18 @@ class FoundationAnalyzer:
                                               "camera_motion_compensated": camera is not None},
                                              track_id=track_id, role=role, confidence=None))
             state.previous, state.previous_time, state.previous_shot = scene, time, shot
+            teacher_state = None
+            if self.teacher is not None and role == "teacher":
+                teacher_events, teacher_state = self.teacher.update(time, track_id, person, role)
+                events.extend(teacher_events)
             snapshots[track_id] = TrackSnapshot(
                 track_id, True, state.samples, role, posture=posture, posture_basis=basis,
                 posture_rise=rise, motion=motion, motion_score=round(smoothed, 4) if smoothed is not None else None,
                 zone=zone, foot_point=foot, foot_point_source=foot_source,
                 foot_point_in_shot=foot_in_shot, hip_center_in_shot=hip_in_shot,
                 possible_occlusion=visible["possible_occlusion"] if visible is not None else None,
-                box_truncated=visible["box_truncated"] if visible is not None else None)
+                box_truncated=visible["box_truncated"] if visible is not None else None,
+                teacher=teacher_state)
         provisional = any(self.tracks[person.track_id].samples < self.min_samples
                           for person in unique.values())
         count = count_coverage = presence = None

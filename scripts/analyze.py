@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.pipeline import AnalysisStopped, analyze_video  # noqa: E402
 from src.preprocessing.recording_time import parse_timestamp  # noqa: E402
-from src.utils.config import LIST_A_INDICATORS, load_config  # noqa: E402
+from src.utils.config import INDICATORS, load_config  # noqa: E402
 from src.utils.paths import project_path  # noqa: E402
 
 
@@ -60,10 +60,10 @@ def main() -> int:
                         help="Write the annotated debug/<id>.list_a.mp4; default: review.save_video")
     parser.add_argument("--path", choices=("off", "teacher", "all"),
                         help="Draw foot-point trails in the review video; default: review.path")
-    parser.add_argument("--indicators", nargs="+", choices=LIST_A_INDICATORS, metavar="NAME",
-                        help="Turn on only these List A indicators, so the JSONL and the review "
+    parser.add_argument("--indicators", nargs="+", choices=INDICATORS, metavar="NAME",
+                        help="Turn on only these List A/B indicators, so the JSONL and the review "
                              f"video show just them; default: configs/indicators.yaml. "
-                             f"Choices: {', '.join(LIST_A_INDICATORS)}")
+                             f"Choices: {', '.join(INDICATORS)}")
     parser.add_argument("--recording-start", type=parse_real_time,
                         help="Real start of the first frame (ISO 8601, e.g. 2026-11-03T19:23:43.07+04:00) "
                              "when the file's tag is wrong, e.g. after trimming on an iPhone")

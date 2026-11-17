@@ -26,7 +26,7 @@ The most important decisions are:
 - A pose model already returns person boxes. A separate person detector is **optional**, to be justified by missed-person measurements, not a prerequisite.
 - Camera context supplies an **assumed role**, not verified identity. Ambiguous roles must stay `unknown`.
 - **Audio is future work and outside the senior project's agreed physical-indicator scope.** A broad catalog entry is not authorization to implement it.
-- The latest implementation request was **List A only**. Hand raises are List C and remain outside this pipeline, despite a separate experimental demo.
+- List A was implemented first; **List B (teacher behaviour) was added 2026-11-17** (docs/list_b_teacher.md). Student hand raises are List C and remain outside this pipeline, despite a separate experimental demo; the List B raised-hand rule is for the teacher track only.
 - Preserve uncertainty. Unknown posture is not sitting; unknown motion is not still; no detection is not proof of absence; tracker IDs are not unique people.
 - Keep the implementation **Python-first, modular, configurable, documented, and easy to debug**, following `docs/project_structure.md`.
 
@@ -52,6 +52,7 @@ Use current user instructions and actual code/configuration to resolve conflicts
 | `README.md` | Short project purpose and links. Its long-term product description is broader than the prototype. |
 | `docs/list_a_pose.md` | Current run guide, implemented indicators, camera assumptions, calibration, limitations. |
 | `docs/scenario_test_videos.md`, `data/manifests/sgp_scenario_videos.csv` | **The test set since 2026-11-16**: own A1-A6/B1 scenario recordings, real-time sync windows per camera, per-indicator test commands, first check results. |
+| `docs/list_b_teacher.md` | **List B (teacher behaviour), 2026-11-17**: which indicators are rules vs. derived summaries, events, rules, checks, and object/facial-expression dataset candidates (not trained). |
 | `docs/project_structure.md` | Agreed architecture and file responsibilities. Some historical paths no longer exist; some files are planned. |
 | `configs/default.yaml` | Current runtime defaults. A key's presence alone does not prove code consumes it. |
 | `configs/indicators.yaml` | Current List A switches plus deferred feature plans. |
@@ -80,6 +81,7 @@ The event layer is the boundary: observations -> rules/events -> aggregates -> p
 | src/preprocessing/camera_motion.py | CameraMotionEstimator: ORB background matching (people masked), similarity fit, per-shot chaining, new shot on cut/zoom jump/few inliers; CameraMotion, Affine helpers (apply_affine/compose/invert, normalized coords). |
 | src/inference/pose.py | Keypoint/PosePerson, adapt_result(), YoloPoseTracker; local weights and Ultralytics/ByteTrack adapter. |
 | src/analysis/visual_indicators.py | Model-independent geometry, visibility, posture/motion, tracks/segments, FoundationAnalyzer; last_sample SampleSnapshot/TrackSnapshot per-sample rule state for overlays (None = not evaluated, "unknown" = evaluated without evidence). |
+| src/analysis/teacher_indicators.py | List B rules on the same keypoints for the teacher track: facing (from visible face keypoints), head-orientation target, board/screen interaction, writing on board, pointing + target, gestures/expansiveness, raised hand, torso lean/tilt, stationary episodes; TeacherBehavior holds per-track state and is called by FoundationAnalyzer on teacher cameras. |
 | src/analysis/events.py | Frozen validated Event, rounding, atomic JSONL; with_real_time() adds wall-clock start/end_real_time. |
 | src/analysis/aggregates.py | summarize_list_a() reads saved evidence. |
 | src/reporting/annotated_video.py | ReviewOverlay (boxes/joints/IDs/roles/states/HUD), AnnotatedVideoWriter (atomic MP4, avc1 via MSMF on Windows, mp4v fallback), LivePreview (space/n/q keys). |
@@ -153,7 +155,7 @@ Validator requires positive sampling <= maximum track gap, valid camera policies
 
 Some settings are scaffolding: person_detector/dataset paths, random_seed, reporting/privacy keys, require_evidence_coverage, quality.evidence_coverage. Current segmentation does not enforce minimum_event_duration_seconds=0.5 or separate merge_gap_seconds=0.25; it uses track gap. Trace consumers before claiming a setting works.
 
-load_indicator_flags() reads only ten visual switches: teacher_presence, visible_student_count, anonymous_tracking, role_classification, position, classroom_zone, entry_exit, visibility_occlusion, sitting_standing, motion_level. Missing defaults off; enabling other catalog keys does not implement them.
+load_indicator_flags() reads the List B `teacher:` switches too (stationary_episodes, facing_direction, head_orientation, board_interaction, writing_on_board, pointing, gestures, raised_hand, torso_lean; thresholds under default.yaml `teacher:`; board/screen/desk polygons under a zone file's `targets:`, read by load_targets()). List B runs only for the teacher-role track on a teacher camera. Position heatmap, path/distance, and classroom coverage are summaries of saved position/classroom_zone events (summary teacher_path, zone_track_seconds), not new detections. The scenario room's zones/targets: data/calibration/sgp_room_instructor_view.yaml via configs/sgp_room.yaml (run_scenarios.py default local config). cameras.instructor_view.ignore_people_inside_targets [screen]: at 1280 input, people in slide photos were detected and made the role unknown for whole lessons (A2, A3); boxes >= 85% inside the screen are dropped. List A reads ten visual switches: teacher_presence, visible_student_count, anonymous_tracking, role_classification, position, classroom_zone, entry_exit, visibility_occlusion, sitting_standing, motion_level. Missing defaults off; enabling other catalog keys does not implement them.
 
 Zones: configs/zones.example.yaml contains placeholder board/teacher_front/student_seating polygons and a deliberately different camera ID. Copy under data/calibration, replace all points from actual camera, use normalized [0,1] polygons with >=3 points, matching camera_id, and cameras.<camera>.zones in an explicitly loaded local override.
 

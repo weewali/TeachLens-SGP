@@ -1,10 +1,13 @@
-"""Small List A summary computed from saved evidence, without rerunning YOLO."""
+"""Small List A/B summary computed from saved evidence, without rerunning YOLO."""
 
 from collections import Counter, defaultdict
 import json
+import math
 from pathlib import Path
 from statistics import median
 from typing import Any
+
+from src.analysis.teacher_indicators import SEGMENT_NAMES as TEACHER_SEGMENTS
 
 
 def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
@@ -12,13 +15,16 @@ def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
                      analyzed_start: float = 0.0,
                      analyzed_end: float | None = None,
                      recording_start: str | None = None,
-                     recording_start_source: str | None = None) -> dict[str, Any]:
+                     recording_start_source: str | None = None,
+                     frame_aspect: float | None = None) -> dict[str, Any]:
     """Report coverage explicitly; unknown/uncalibrated time is not a zero.
 
     analyzed_start/analyzed_end bound a --start/--end segment; every duration
     in the summary belongs to that range, not to the whole recording.
     recording_start (ISO 8601) and its metadata tag are what the events'
     real times were computed from; both are None without a tag.
+    frame_aspect (width / height) turns the teacher's hip path into frame
+    heights; the path is image-plane distance, not metres on the floor.
     """
     if analyzed_end is None:
         analyzed_end = video_duration
@@ -35,6 +41,10 @@ def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
     entries = Counter()
     camera_steps = Counter()
     shots: set[int] = set()
+    teacher_seconds_by = defaultdict(lambda: defaultdict(float))
+    teacher_episodes = defaultdict(Counter)
+    stationary = {"episodes": 0, "seconds": 0.0, "by_zone": defaultdict(float)}
+    path_points: dict[int, list[tuple[float, int | None, tuple[float, float]]]] = defaultdict(list)
     with event_path.open("r", encoding="utf-8") as stream:
         for line in stream:
             event = json.loads(line)
@@ -58,9 +68,29 @@ def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
                 motion_seconds[value] += event["duration"]
             elif name == "entry_exit":
                 entries[value] += 1
+            elif name in TEACHER_SEGMENTS and event["role"] == "teacher":
+                teacher_seconds_by[name][value] += event["duration"]
+                teacher_episodes[name][value] += 1
+            elif name == "stationary_episode" and event["role"] == "teacher":
+                stationary["episodes"] += 1
+                stationary["seconds"] += event["duration"]
+                stationary["by_zone"][event["zone"] or "uncalibrated"] += event["duration"]
+            elif (name == "position" and event["role"] == "teacher"
+                  and value.get("hip_center_in_shot") is not None):
+                path_points[event["track_id"]].append(
+                    (event["start_time"], value.get("camera_shot"), tuple(value["hip_center_in_shot"])))
             elif name == "camera_motion":
                 camera_steps[{True: "measured", False: "unmeasured", None: "first"}[value["step_reliable"]]] += 1
                 shots.add(value["shot"])
+    # Teacher path: hip centre steps within one track and shot, skipping gaps.
+    path_length, path_steps = 0.0, 0
+    for points in path_points.values():
+        points.sort()
+        for (t0, shot0, a), (t1, shot1, b) in zip(points, points[1:]):
+            if shot0 == shot1 and t1 - t0 <= 2.5 * sample_period:
+                path_length += math.hypot((b[0] - a[0]) * (frame_aspect or 1.0), b[1] - a[1])
+                path_steps += 1
+    gesture_known = sum(v for k, v in teacher_seconds_by["gesture"].items() if k != "unknown")
     return {
         "video_id": video_id,
         "camera_id": camera_id,
@@ -85,6 +115,19 @@ def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
         "posture_track_seconds": {key: round(value, 3) for key, value in posture_seconds.items()},
         "motion_track_seconds": {key: round(value, 3) for key, value in motion_seconds.items()},
         "apparent_frame_edge_transitions": dict(entries),
+        # List B (teacher behaviour): seconds and episode counts per label.
+        "teacher_behavior_seconds": {name: {k: round(v, 3) for k, v in values.items()}
+                                     for name, values in teacher_seconds_by.items()},
+        "teacher_behavior_episodes": {name: dict(values) for name, values in teacher_episodes.items()},
+        "teacher_gestures_per_minute": (round(teacher_episodes["gesture"]["gesturing"] * 60 / gesture_known, 2)
+                                        if gesture_known else None),
+        "teacher_stationary": ({"episodes": stationary["episodes"],
+                                "seconds": round(stationary["seconds"], 3),
+                                "seconds_by_zone": {k: round(v, 3) for k, v in stationary["by_zone"].items()}}
+                               if stationary["episodes"] else None),
+        "teacher_path": ({"length_frame_heights": round(path_length, 3), "steps": path_steps,
+                          "basis": "hip centre, image plane" + ("" if frame_aspect else ", aspect unknown")}
+                         if path_steps else None),
         # Present only for compensated moving cameras; unmeasured steps start new shots.
         "camera_motion": ({"sample_steps": dict(camera_steps), "shots": len(shots)}
                           if camera_steps else None),

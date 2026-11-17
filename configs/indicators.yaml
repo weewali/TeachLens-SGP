@@ -30,18 +30,36 @@ visual:
     enabled: true
   motion_level:
     enabled: true
-  head_torso_orientation:
-    enabled: false
-  teacher_movement:
-    enabled: false
   student_movement:
-    enabled: false
-  teacher_position_heatmap:
-    enabled: false
-  teacher_stationary_episodes:
     enabled: false
   student_out_of_seat:
     enabled: false
+
+# List B: teacher visual behaviour, computed from the same pose keypoints on
+# the instructor camera (src/analysis/teacher_indicators.py). Position
+# heatmap, movement path and distance, and classroom coverage need no extra
+# detection: they are built from saved position and classroom_zone events in
+# the summary/report. Board, screen, and desk targets come from the camera's
+# zone file (configs/sgp_room.yaml for the scenario room).
+teacher:
+  stationary_episodes:
+    enabled: true
+  facing_direction:
+    enabled: true
+  head_orientation:
+    enabled: true
+  board_interaction:
+    enabled: true
+  writing_on_board:
+    enabled: true
+  pointing:
+    enabled: true
+  gestures:
+    enabled: true
+  raised_hand:
+    enabled: true
+  torso_lean:
+    enabled: true
 
 interaction:
   hand_raise_participation_breadth:

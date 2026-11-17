@@ -1,0 +1,8 @@
+# HowToSpeak.mp4 (web sample) shot 47:18-47:41: the camera holds still in this
+# range, so a static board outline is valid only there. Read 2026-11-17 from
+# a gridded frame. Used to test List B pointing along the board (docs/list_b_teacher.md).
+camera_id: instructor_view
+zones: {}
+targets:
+  board:
+    points: [[0.0, 0.0], [0.95, 0.0], [0.95, 0.52], [0.0, 0.53]]
