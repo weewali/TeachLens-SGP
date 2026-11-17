@@ -48,7 +48,11 @@ DEFAULTS: dict[str, float] = {
     "pointing_min_raise_degrees": 40.0,  # arm at least this far from hanging straight down
     "raised_max_from_vertical_degrees": 35.0,  # a straight arm this close to vertical is a raised hand
     "target_margin": 0.03,             # normalized x margin around a target
-    "gesture_min_speed": 0.3,          # wrist speed relative to the torso, torso lengths / s
+    "gesture_min_speed": 0.15,         # wrist speed relative to the torso, torso lengths / s
+    "gesture_raised_min_speed": 0.08,  # enough for a hand raised to chest height or above
+    "gesture_raised_max_drop": 0.6,    # "raised": wrist at most 0.6 torso lengths below the shoulders
+    "gesture_wrist_confidence": 0.5,   # wrists below this confidence are ignored for gestures
+    "gesture_face_distance": 0.6,      # wrist within this many shoulder widths of the nose = hand at the face
     "locomotion_min_speed": 0.25,      # hip speed (body heights / s) treated as walking
     "stationary_max_speed": 0.08,      # hip speed (body heights / s) treated as standing still
     "stationary_min_seconds": 5.0,
@@ -516,26 +520,46 @@ class TeacherBehavior:
         s = self.settings
         events: list[Event] = []
         hands: dict[int, Point] = {}
+        busy: set[int] = set()  # hands at the face or on the desk: not gestures
         if frame is not None:
+            nose = _px(person, NOSE, self.min_conf)
+            desk = self.targets.get("desk")
+            # Only wrists the model is fairly sure of: hidden hands (behind the
+            # back) get guessed positions that jump between samples.
             for _, _, wrist_i in ARMS:
-                wrist = _px(person, wrist_i, self.min_conf)
-                if wrist is not None:
-                    hands[wrist_i] = ((wrist[0] - frame.shoulder_mid[0]) / frame.torso,
-                                      (wrist[1] - frame.shoulder_mid[1]) / frame.torso)
-        speeds = [math.dist(hands[i], state.hands[i]) / dt for i in hands
-                  if i in state.hands and dt and dt <= 2.5 * self.period]
-        if not speeds:
+                wrist = _px(person, wrist_i, max(self.min_conf, s["gesture_wrist_confidence"]))
+                if wrist is None:
+                    continue
+                hands[wrist_i] = ((wrist[0] - frame.shoulder_mid[0]) / frame.torso,
+                                  (wrist[1] - frame.shoulder_mid[1]) / frame.torso)
+                # Chin or cheek resting on a hand, or hands typing / turning
+                # pages on the desk, move without communicating anything.
+                if ((nose is not None and math.dist(wrist, nose) < s["gesture_face_distance"] * frame.shoulder_width)
+                        or (desk is not None and inside((wrist[0] / person.width, wrist[1] / person.height), desk))):
+                    busy.add(wrist_i)
+        moves = {i: math.dist(hands[i], state.hands[i]) / dt for i in hands
+                 if i in state.hands and i not in busy and dt and dt <= 2.5 * self.period}
+        known = any(i in state.hands for i in hands) and dt and dt <= 2.5 * self.period
+        if not known:
             label = "unknown"
         elif hip_speed is not None and hip_speed >= s["locomotion_min_speed"]:
             label = "walking"  # hands swing while walking; not counted as gestures
         elif shown.get("writing") == "writing":
             label = "writing"
         else:
-            label = "gesturing" if max(speeds) >= s["gesture_min_speed"] else "hands_still"
+            # A clear hand movement, or a smaller one with the hand raised to
+            # chest height or above (talking with the hands, or holding a hand
+            # up toward the screen, which moves little between samples).
+            gesturing = any(
+                speed >= s["gesture_min_speed"]
+                or (speed >= s["gesture_raised_min_speed"]
+                    and hands[i][1] <= s["gesture_raised_max_drop"])
+                for i, speed in moves.items())
+            label = "gesturing" if gesturing else "hands_still"
         events += self.segment("gesture", track_id, time, label, role, None,
                                "limited" if label == "unknown" else "adequate")
         if label == "gesturing" and frame is not None and frame.shoulder_width > 0:
-            spread = max(abs(h[0]) * frame.torso / frame.shoulder_width for h in hands.values())
+            spread = max(abs(hands[i][0]) * frame.torso / frame.shoulder_width for i in moves)
             events.append(make_event(self.video_id, "gesture_expansiveness", time, time,
                                      {"wrist_reach_shoulder_widths": round(spread, 2)},
                                      track_id=track_id, role=role, confidence=None, coverage="limited"))

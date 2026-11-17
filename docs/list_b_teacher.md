@@ -22,7 +22,7 @@ of events List A already saves.
 | Board/screen interaction | New rule: in front of a target and looking at it, pointing at it, or back to the class with a hand on it | `teacher_indicators.py` |
 | Writing on board | New rule: board interaction + back or side to the class + wrist on the board + feet still, majority of 3 samples; board third as zone | `teacher_indicators.py` |
 | Pointing | New rule: straight, extended, lifted arm; shoulder-to-wrist ray picks the target | `teacher_indicators.py` |
-| Gesture rate and expansiveness | New rule: wrist speed relative to the torso while not walking or writing; rate per minute in the summary | `teacher_indicators.py` + summary |
+| Gesture rate and expansiveness | New rule: hand movement relative to the torso while not walking or writing, ignoring hands at the face or on the desk; rate per minute in the summary | `teacher_indicators.py` + summary |
 | Raised hand | New rule: wrist above the head (or well above the shoulder) with the elbow up | `teacher_indicators.py` |
 | Posture/torso lean | New rule: sideways torso tilt from vertical, plus a per-sample angle for tuning | `teacher_indicators.py` |
 | Visual coverage of student areas | Not done (user decision 2026-11-17: needs both cameras together) | - |
@@ -102,7 +102,16 @@ The summary adds `teacher_behavior_seconds` and `teacher_behavior_episodes`
   calibrated board it falls back to back-to-class with a lifted forearm,
   marked `limited`.
 - **Gestures**: wrist movement relative to the shoulder midpoint, in torso
-  lengths per second (>= 0.3), so walking does not count as gesturing.
+  lengths per second, so walking does not count. A hand gestures when it
+  moves at least 0.15, or at least 0.08 while raised to chest height or above
+  (holding a hand up toward the screen or talking with small hand movements
+  changes little between samples a second apart). Lowered from 0.3 on
+  2026-11-18 at the user's request: real gestures in A2 measured 0.12-0.16.
+  Ignored: wrists below 0.5 confidence (hands behind the back get jumpy
+  guesses), hands within 0.6 shoulder widths of the nose (chin or cheek
+  rests), and hands on the desk target (typing, turning pages). Gesturing
+  seconds: A1 57 -> 136 of 271, A2 54 -> 123 of 320, A3 (seated reader)
+  11 -> 51 of 242; some laptop typing just above the desk outline still counts.
 
 ## Checks so far (2026-11-17; not accuracy measurements)
 

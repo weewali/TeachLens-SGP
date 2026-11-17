@@ -116,6 +116,30 @@ class BehaviorTests(unittest.TestCase):
         teacher.update(2.0, 1, pose(moved(FRONT, dx=.25)), "teacher")  # whole body walks
         self.assertEqual(self.labels("gesture"), ["unknown", "gesturing", "walking"])
 
+    def test_small_raised_hand_movements_count_but_face_and_hidden_hands_do_not(self):
+        chest = {**FRONT, 7: (.38, .42), 9: (.36, .40)}  # forearm up, hand at chest height
+        nudged = {**chest, 9: (.36, .38)}  # moves 0.1 torso lengths in a second
+        teacher = self.behavior(gestures=True)
+        for time, points in enumerate((chest, nudged)):
+            teacher.update(float(time), 1, pose(points), "teacher")
+        self.assertEqual(self.labels("gesture")[-1], "gesturing")
+        self.calls.clear()
+        face = {**FRONT, 7: (.36, .36), 9: (.31, .32)}  # hand on the chin
+        rubbing = {**face, 9: (.32, .33)}  # still within 0.6 shoulder widths of the nose
+        teacher = self.behavior(gestures=True)
+        for time, points in enumerate((face, rubbing)):
+            teacher.update(float(time), 1, pose(points), "teacher")
+        self.assertEqual(self.labels("gesture")[-1], "hands_still")
+        self.calls.clear()
+        hidden = TeacherBehavior("v", {"gestures": True}, TARGETS, {}, .35, 1.0, None, self.segment)
+        for time, x in enumerate((.35, .45)):  # a low-confidence wrist that jumps
+            points = {**FRONT, 9: (x, .53)}
+            keypoints = tuple(Keypoint(*points[i], .4 if i == 9 else .9) if i in points
+                              else Keypoint(0, 0, 0.0) for i in range(17))
+            hidden.update(float(time), 1, PosePerson(1, (.22, .26, .38, .95), .9, keypoints, 1000, 1000),
+                          "teacher")
+        self.assertEqual(self.labels("gesture")[-1], "hands_still")
+
     def test_stationary_episode_needs_minimum_duration(self):
         teacher = self.behavior(stationary_episodes=True)
         events = []
