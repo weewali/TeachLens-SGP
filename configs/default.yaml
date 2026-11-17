@@ -155,6 +155,60 @@ faces:
   yawn_min_seconds: 2.0
   head_turn_degrees: 25           # |yaw| from the camera axis -> turned left/right (image directions)
   head_pitch_degrees: 15          # pitch change from the student's usual pitch -> down/up
+  frames_per_second: 5            # faces per second for talking and nods (extra frames between samples; 1 = samples only)
+  talk_min_range: 0.03            # inner-lip gap swing within a second (A2: silent <= 0.02, talking 0.03-0.12)
+  talk_min_seconds: 2             # of the last 3 seconds
+  nod_min_degrees: 5
+  nod_window_seconds: 1.2
+  shake_min_degrees: 8
+  shake_window_seconds: 2.0
+
+# List C (students), student camera only. Unvalidated starting values,
+# distances in shoulder widths. See docs/list_c_students.md.
+students:
+  raise_face_dx: 0.55             # face box around the nose (sideways, above, below): a wrist in it
+  raise_face_above: 0.8           # counts as a raise only with an open palm from the gesture model
+  raise_face_below: 0.9           # (A1: a raise beside the face and a cheek rest look alike)
+  raise_high_above_nose: 0.5      # high: wrist this far above the nose; medium: above the nose
+  raise_max_tilt_degrees: 35      # forearm within this of vertical
+  raise_low_min_lift: 0.6         # low raise: wrist above the elbow by this share of the forearm
+  raise_low_min_seconds: 2.0      # low raises without an open palm must last this long
+  seat_min_samples: 5             # steady seated samples before a home seat is set
+  seat_match_widths: 0.8
+  out_of_seat_widths: 1.5
+  out_of_seat_min_seconds: 2.0
+  head_down_drop: 0.35
+  head_down_min_height: 0.1
+  head_hidden_shoulder_drop: 0.3  # face hidden and shoulders this far below the seated level
+  head_on_desk_room: 0.9          # face hidden and box top this close above the shoulders = head on the desk (B1 sleeper)
+  bowed_ear_rise: 0.45            # ears this many eye distances above the eyes = head bowed (upright A1 -0.17..0.08, B1 up to -0.52)
+  bowed_nose_drop: 0.75           # nose this many eye distances below the eyes = looking down (upright up to 0.69)
+  head_rest_height: 0.0           # head at or below the shoulder line = resting on the desk (sleep needs this or a hidden face)
+  laptop_open_ratio: 0.7          # laptop box height/width; A2: closed 0.34-0.54 (not in use), open ~1.07
+  head_down_pitch_degrees: 15
+  eyes_down_min: 0.45             # mean eyeLookDown...
+  eyes_down_rise: 0.15            # ...and this much above the student's usual level (camera above the teacher)
+  sleep_min_seconds: 20           # head down and still this long -> possible_sleep
+  long_eyes_closed_seconds: 10
+  object_near_wrist: 0.5          # phone centre this close to a wrist = in hand
+  held_phone_max_gap: 0.6         # wrists this close, still, in front of the body + looking down = phone held (not seen)
+  writing_min_speed: 0.03         # wrist speed relative to the shoulders, widths per second
+  writing_max_speed: 0.6
+  hidden_phone_min_seconds: 3.0
+  gesture_min_score: 0.6
+  peer_row_widths: 1.5
+  peer_max_widths: 6.0
+  outcome_window_seconds: 12      # talking or standing up to this long after a raise = answered
+  outcome_talk_seconds: 3.0       # talking while facing the front (talk to a neighbour is a chat)
+  object_classes: [cell phone, laptop, book]
+  gesture_model: models/hands/gesture_recognizer.task
+
+# Join tracker IDs of one walking person (src/inference/tracking.py): at one
+# frame per second ByteTrack cannot link boxes that do not overlap.
+tracking:
+  stitch: true
+  stitch_max_speed: 1.5           # box heights per second
+  stitch_margin: 0.5              # box heights added to the walking distance
 
 # Classroom objects (scripts/detect_objects.py, run_scenarios.py --objects):
 # the COCO-trained YOLO26 detector, run on its own without the pose model.

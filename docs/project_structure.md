@@ -105,14 +105,14 @@ TeachLens-SGP/
 |   |   `-- dataset.py                     [planned]
 |   |-- inference/
 |   |   |-- detection.py                   [planned]
-|   |   |-- tracking.py                    [planned]
+|   |   |-- tracking.py                    [implemented 2026-11-17: TrackStitcher]
 |   |   |-- pose.py                        [current, YOLO26 + ByteTrack adapter]
 |   |   `-- speech.py                      [planned]
 |   |-- analysis/
 |   |   |-- events.py                      [current]
 |   |   |-- visual_indicators.py           [current, List A]
 |   |   |-- speech_indicators.py           [planned]
-|   |   |-- interaction_indicators.py      [planned]
+|   |   |-- interaction_indicators.py      [implemented 2026-11-17: head targets, orientation proxy, hand-raise outcomes]
 |   |   |-- quality.py                     [planned]
 |   |   `-- aggregates.py                  [current, List A JSON summary]
 |   |-- reporting/

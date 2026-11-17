@@ -18,7 +18,9 @@ class ConfigurationTests(unittest.TestCase):
         config = load_config(project_path("configs/default.yaml"))
         self.assertEqual(config["models"]["pose_estimator"], "models/pose/yolo26n-pose.pt")
         self.assertTrue(load_indicator_flags("configs/indicators.yaml")["sitting_standing"])
-        self.assertNotIn("hand_raise", load_indicator_flags("configs/indicators.yaml"))
+        # Student hand raises are List C, read from the students: section (2026-11-17).
+        self.assertTrue(load_indicator_flags("configs/indicators.yaml")["hand_raise"])
+        self.assertNotIn("student_movement", load_indicator_flags("configs/indicators.yaml"))
 
     def test_camera_zone_id_is_required(self):
         with self.assertRaises(ValueError):
@@ -115,7 +117,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(set(chosen), set(INDICATORS))
         both = select_indicators(dict.fromkeys(LIST_A_INDICATORS, False), ["motion_level", "position"])
         self.assertEqual(sum(both.values()), 2)  # switched on even if the file has them off
-        for bad in (["hand_raise"], []):
+        for bad in (["student_movement"], []):
             with self.assertRaises(ValueError):
                 select_indicators(enabled, bad)
 

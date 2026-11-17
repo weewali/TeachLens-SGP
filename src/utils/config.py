@@ -82,11 +82,25 @@ def validate_config(config: dict[str, Any]) -> None:
         if key in faces and not 0 <= float(faces[key]) <= 1:
             raise ValueError(f"faces.{key} must be in [0, 1]")
     for key in ("baseline_seconds", "eyes_closed_min_seconds", "yawn_min_seconds",
-                "head_turn_degrees", "head_pitch_degrees", "crop_size"):
+                "head_turn_degrees", "head_pitch_degrees", "crop_size", "talk_min_range",
+                "nod_min_degrees", "nod_window_seconds", "shake_min_degrees", "shake_window_seconds"):
         if key in faces and float(faces[key]) <= 0:
             raise ValueError(f"faces.{key} must be positive")
     if int(faces.get("baseline_min_samples", 1)) < 1:
         raise ValueError("faces.baseline_min_samples must be at least one")
+    if not 0 <= int(faces.get("frames_per_second", 1)) <= 30:
+        raise ValueError("faces.frames_per_second must be from 0 to 30")
+    tracking = config.get("tracking") or {}
+    if tracking.get("stitch") not in (None, True, False):
+        raise ValueError("tracking.stitch must be true or false")
+    for key in ("stitch_max_speed", "stitch_margin"):
+        if key in tracking and float(tracking[key]) <= 0:
+            raise ValueError(f"tracking.{key} must be positive")
+    students = config.get("students") or {}
+    for key in ("seat_min_samples", "out_of_seat_widths", "sleep_min_seconds", "outcome_window_seconds",
+                "outcome_talk_seconds", "raise_low_min_seconds"):
+        if key in students and float(students[key]) <= 0:
+            raise ValueError(f"students.{key} must be positive")
     objects = config.get("objects") or {}
     classes = objects.get("classes", [])
     if not isinstance(classes, list) or not all(isinstance(c, str) and c for c in classes):
@@ -218,11 +232,14 @@ def load_indicator_flags(path: str | Path) -> dict[str, bool]:
         document = yaml.safe_load(stream) or {}
     visual, teacher = document.get("visual", {}), document.get("teacher", {})
     faces = document.get("faces", {})
+    students = document.get("students", {})
     flags = {name: bool(visual.get(name, {}).get("enabled", False)) for name in LIST_A_INDICATORS}
     flags.update({name: bool(teacher.get(name, {}).get("enabled", False))
                   for name in LIST_B_INDICATORS})
     flags.update({name: bool(faces.get(name, {}).get("enabled", False))
                   for name in FACE_INDICATORS})
+    flags.update({name: bool(students.get(name, {}).get("enabled", False))
+                  for name in STUDENT_INDICATORS})
     return flags
 
 
@@ -240,8 +257,13 @@ LIST_B_INDICATORS = (
 )
 # Student facial actions from face landmarks, student cameras only
 # (src/analysis/facial_actions.py; same names as its INDICATOR_NAMES).
-FACE_INDICATORS = ("smile", "brows", "eyes_closed", "yawn", "head_direction")
-INDICATORS = LIST_A_INDICATORS + LIST_B_INDICATORS + FACE_INDICATORS
+FACE_INDICATORS = ("smile", "brows", "eyes_closed", "yawn", "head_direction", "talking", "head_gesture")
+# List C: student behaviour, student cameras only (src/analysis/student_indicators.py
+# and interaction_indicators.py; same names as their INDICATOR_NAMES).
+STUDENT_INDICATORS = ("seat_occupancy", "hand_raise", "out_of_seat", "head_down", "alertness",
+                      "device_use", "note_taking", "reading", "response_gesture",
+                      "head_target", "orientation_proxy", "hand_raise_outcome")
+INDICATORS = LIST_A_INDICATORS + LIST_B_INDICATORS + FACE_INDICATORS + STUDENT_INDICATORS
 
 
 def select_indicators(enabled: dict[str, bool],

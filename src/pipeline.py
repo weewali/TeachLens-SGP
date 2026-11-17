@@ -11,20 +11,26 @@ from typing import Any, Sequence
 
 from src.analysis.aggregates import summarize_list_a, summarize_objects
 from src.analysis.events import make_event, with_real_time, write_jsonl
+from collections import defaultdict
+
 from src.analysis.visual_indicators import (
-    DuplicateFilter, FoundationAnalyzer, inside_any_target, restrict_joints, starts_below,
+    FACE_DEPENDENT_STUDENT_INDICATORS, DuplicateFilter, FoundationAnalyzer, inside_any_target,
+    restrict_joints, starts_below,
 )
 from src.inference.face_mesh import FaceLandmarker
+from src.inference.hands import HandGestures
 from src.inference.objects import ObjectDetector
+from src.inference.tracking import TrackStitcher
 from src.inference.pose import YoloPoseTracker, joint_indices
 from src.preprocessing.camera_motion import CameraMotionEstimator
 from src.preprocessing.recording_time import read_recording_time
-from src.preprocessing.video import VideoInfo, frames
+from src.preprocessing.video import VideoInfo, frames, frames_with_subsamples
 from src.reporting.annotated_video import (
     AnnotatedVideoWriter, LivePreview, ObjectOverlay, ReviewOverlay, camera_notes,
 )
 from src.utils.config import (
-    FACE_INDICATORS, load_indicator_flags, load_targets, load_zones, select_indicators,
+    FACE_INDICATORS, STUDENT_INDICATORS, load_indicator_flags, load_targets, load_zones,
+    select_indicators,
 )
 from src.utils.paths import file_in_use, project_path
 
@@ -134,14 +140,38 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
     # Face landmarks: student camera only (user decision 2026-11-17), and only
     # when a facial switch is on; points and crops never leave memory.
     face_settings = config.get("faces") or {}
-    landmarker = None
-    if any(enabled.get(name) for name in FACE_INDICATORS):
-        if camera["expected_role"] == "student":
-            landmarker = FaceLandmarker(
-                project_path(face_settings.get("model", "models/face/face_landmarker.task")),
-                face_settings, float(config["inference"]["keypoint_confidence"]))
-        else:
-            LOGGER.warning("camera=%s: facial actions run only on student cameras; skipped", camera_id)
+    student_settings = config.get("students") or {}
+    keypoint_conf = float(config["inference"]["keypoint_confidence"])
+    is_student_camera = camera["expected_role"] == "student"
+    on = {name for name, value in enabled.items() if value}
+    landmarker = gestures_model = object_model = None
+    if on & set(FACE_INDICATORS + STUDENT_INDICATORS) and not is_student_camera:
+        LOGGER.warning("camera=%s: facial actions and List C run only on student cameras; skipped", camera_id)
+    if is_student_camera and on & set(FACE_INDICATORS + FACE_DEPENDENT_STUDENT_INDICATORS):
+        landmarker = FaceLandmarker(
+            project_path(face_settings.get("model", "models/face/face_landmarker.task")),
+            face_settings, keypoint_conf)
+    # Talking and nods need several faces per second: extra frames between
+    # samples, face model only (no pose), on the last sample's face crops.
+    extra_faces = (max(0, int(face_settings.get("frames_per_second", 5)) - 1)
+                   if landmarker is not None and on & {"talking", "head_gesture", "hand_raise_outcome",
+                                                       "head_target", "orientation_proxy"} else 0)
+    if is_student_camera and on & {"device_use", "note_taking", "reading"}:
+        objects_settings = config.get("objects") or {}
+        object_model = ObjectDetector(
+            project_path(objects_settings.get("detector", "models/detection/yolo26n.pt")),
+            list(student_settings.get("object_classes") or ["cell phone", "laptop", "book"]),
+            float(objects_settings.get("confidence_threshold", 0.25)),
+            float(objects_settings.get("iou_threshold", 0.45)), objects_settings.get("image_size"), device)
+    if is_student_camera and on & {"response_gesture", "hand_raise", "hand_raise_outcome"}:
+        gestures_model = HandGestures(
+            project_path(student_settings.get("gesture_model", "models/hands/gesture_recognizer.task")),
+            None, keypoint_conf)
+    tracking = config.get("tracking") or {}
+    stitcher = (TrackStitcher(float(config["analysis"]["max_track_gap_seconds"]),
+                              float(tracking.get("stitch_max_speed", 1.5)),
+                              float(tracking.get("stitch_margin", 0.5)))
+                if tracking.get("stitch", True) else None)
     info: VideoInfo | None = None
     last_time = 0.0
     analyzer: FoundationAnalyzer | None = None
@@ -165,8 +195,13 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
 
     def evidence():
         nonlocal info, last_time, analyzer, overlay
-        for info, timestamp, frame in frames(video, float(config["video"]["sample_every_seconds"]),
-                                             start, end):
+        series: dict[int, list] = defaultdict(list)  # faces on frames between samples
+        for info, timestamp, frame, is_sample in frames_with_subsamples(
+                video, float(config["video"]["sample_every_seconds"]), start, end, extra_faces):
+            if not is_sample:
+                for track_id, mesh in landmarker.estimate_crops(frame).items():
+                    series[track_id].append((timestamp, mesh))
+                continue
             if analyzer is None:
                 analyzer = FoundationAnalyzer(video_id, camera["expected_role"],
                                               camera["role_policy"],
@@ -179,7 +214,8 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
                                               joints=joints,
                                               keep_teacher_track=bool(camera.get("keep_teacher_track", False)),
                                               targets=targets, teacher_settings=config.get("teacher"),
-                                              face_settings=face_settings)
+                                              face_settings=face_settings,
+                                              student_settings=student_settings)
                 LOGGER.info("video=%s camera=%s fps=%.2f sample_period=%.3fs range=%.3fs-%s",
                             video_id, camera_id, info.fps, info.sample_period, start,
                             f"{end:.3f}s" if end is not None else "end")
@@ -204,14 +240,20 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
                            and not inside_any_target(person, targets, ignore_inside))
             if duplicates is not None:  # one detection per body (desks split seated people)
                 people = duplicates(people)
+            if stitcher is not None:  # one ID for a person walking between samples
+                people = stitcher(timestamp, people)
             camera_motion = (estimator.update(frame, [person.box for person in people])
                              if estimator is not None else None)
             faces = landmarker.estimate(frame, people) if landmarker is not None else None
+            found = object_model.detect(frame) if object_model is not None else ()
+            hands = gestures_model.estimate(frame, people) if gestures_model is not None else None
             LOGGER.debug("video=%s t=%.3f tracked_people=%d", video_id, timestamp, len(people))
-            for event in analyzer.process(timestamp, people, camera_motion, faces):
+            for event in analyzer.process(timestamp, people, camera_motion, faces,
+                                          face_series=series, objects=found, gestures=hands):
                 yield with_real_time(event, started)
+            series = defaultdict(list)
             if overlay is not None:
-                image = overlay.draw(frame, people, analyzer.last_sample, faces)
+                image = overlay.draw(frame, people, analyzer.last_sample, faces, objects=found)
                 if annotated is not None:
                     annotated.write(image)
                 if preview is not None and not preview.show(image):
@@ -226,16 +268,21 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
 
     # The MP4 is published right after the JSONL; any failure or stop discards both.
     with ExitStack() as stack:
-        if landmarker is not None:
-            stack.callback(landmarker.close)
+        for model in (landmarker, gestures_model):
+            if model is not None:
+                stack.callback(model.close)
         for resource in (annotated, preview):
             if resource is not None:
                 stack.enter_context(resource)
         write_jsonl(events_path, evidence(), overwrite=overwrite)
     assert info is not None
-    if landmarker is not None:
-        LOGGER.info("video=%s faces: %s", video_id,
-                    ", ".join(f"{key} {value}" for key, value in landmarker.counts.items()))
+    for name, model in (("faces", landmarker), ("hands", gestures_model)):
+        if model is not None:
+            LOGGER.info("video=%s %s: %s", video_id, name,
+                        ", ".join(f"{key} {value}" for key, value in model.counts.items()))
+    if stitcher is not None and stitcher.stitched:
+        LOGGER.info("video=%s joined %d tracker IDs of people moving between samples",
+                    video_id, stitcher.stitched)
     duration = info.duration if info.duration > 0 else last_time + info.sample_period
     summary = summarize_list_a(events_path, camera_id, video_id, duration, info.sample_period,
                                start, analyzed_end(),

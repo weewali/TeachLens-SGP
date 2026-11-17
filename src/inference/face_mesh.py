@@ -49,6 +49,7 @@ class FaceMesh:
     pitch: float
     roll: float
     width_px: float
+    mouth_open: float = 0.0  # inner-lip gap / face height (forehead to chin)
 
 
 def face_crop(person: PosePerson, min_conf: float) -> tuple[float, float, float] | None:
@@ -91,6 +92,16 @@ def head_angles(matrix: Any) -> tuple[float, float, float]:
     rotation = rotation / np.linalg.norm(rotation, axis=0)  # remove scale
     (pitch, yaw, roll), *_ = cv2.RQDecomp3x3(rotation)
     return float(yaw), float(pitch), float(roll)
+
+
+# Face-mesh indices: inner lips (13 upper, 14 lower), forehead top 10, chin 152.
+UPPER_LIP, LOWER_LIP, FOREHEAD, CHIN = 13, 14, 10, 152
+
+
+def mouth_opening(points: Sequence[tuple[float, float]]) -> float:
+    """Inner-lip gap as a share of face height; about 0 with the mouth closed."""
+    face = math.dist(points[FOREHEAD], points[CHIN])
+    return math.dist(points[UPPER_LIP], points[LOWER_LIP]) / face if face > 0 else 0.0
 
 
 def plausible(points: Sequence[tuple[float, float]], crop: tuple[float, float, float],
@@ -140,10 +151,13 @@ class FaceLandmarker:
         self.landmarker.close()
 
     def estimate(self, frame: Any, people: Sequence[PosePerson]) -> dict[int, FaceMesh]:
-        """Face meshes by track ID for people whose face is turned toward the camera."""
-        import cv2
+        """Face meshes by track ID for people whose face is turned toward the camera.
+
+        The crops used are kept in last_crops, so estimate_crops() can reuse
+        them on the frames between samples.
+        """
         height, width = frame.shape[:2]
-        size = int(self.settings["crop_size"])
+        self.last_crops = {}
         meshes = {}
         for person in people:
             crop = face_crop(person, self.min_conf)
@@ -151,39 +165,58 @@ class FaceLandmarker:
                 self.counts["no_face"] += 1
                 continue
             self.counts["crops"] += 1
-            left, top, side = crop
-            x0, y0, s = round(left), round(top), max(1, round(side))
-            patch = np.zeros((s, s, 3), np.uint8)  # black where the crop leaves the frame
-            sx0, sy0, sx1, sy1 = max(0, x0), max(0, y0), min(width, x0 + s), min(height, y0 + s)
-            if sx1 <= sx0 or sy1 <= sy0:
-                self.counts["no_mesh"] += 1
-                continue
-            patch[sy0 - y0:sy1 - y0, sx0 - x0:sx1 - x0] = frame[sy0:sy1, sx0:sx1]
-            patch = cv2.resize(patch, (size, size),
-                               interpolation=cv2.INTER_CUBIC if s < size else cv2.INTER_AREA)
-            image = self._mp.Image(image_format=self._mp.ImageFormat.SRGB,
-                                   data=np.ascontiguousarray(cv2.cvtColor(patch, cv2.COLOR_BGR2RGB)))
-            found = self.landmarker.detect(image)
-            if not found.face_landmarks:
-                self.counts["no_mesh"] += 1
-                continue
-            points = [(p.x, p.y) for p in found.face_landmarks[0]]
             nose = person.point(NOSE, self.min_conf)
-            if not plausible(points, (x0, y0, s), (nose.x * width, nose.y * height),
-                             float(self.settings["max_nose_offset"]),
-                             float(self.settings["min_mesh_width"])):
-                self.counts["rejected"] += 1
-                continue
-            xs = [x for x, _ in points]
-            width_px = (max(xs) - min(xs)) * s
-            if width_px < float(self.settings["min_face_width_px"]):
-                self.counts["too_small"] += 1
-                continue
-            yaw, pitch, roll = head_angles(found.facial_transformation_matrixes[0])
-            meshes[person.track_id] = FaceMesh(
-                person.track_id,
-                tuple(((x0 + x * s) / width, (y0 + y * s) / height) for x, y in points),
-                {b.category_name: round(float(b.score), 4) for b in found.face_blendshapes[0]},
-                round(yaw, 1), round(pitch, 1), round(roll, 1), round(width_px, 1))
-            self.counts["meshes"] += 1
+            box = (round(crop[0]), round(crop[1]), max(1, round(crop[2])))
+            self.last_crops[person.track_id] = (box, (nose.x * width, nose.y * height))
+            mesh = self._mesh(frame, person.track_id, *self.last_crops[person.track_id])
+            if mesh is not None:
+                meshes[person.track_id] = mesh
+                self.counts["meshes"] += 1
         return meshes
+
+    def estimate_crops(self, frame: Any) -> dict[int, FaceMesh]:
+        """Meshes on the last sample's crops, for a frame between samples."""
+        meshes = {}
+        for track_id, (box, nose) in getattr(self, "last_crops", {}).items():
+            mesh = self._mesh(frame, track_id, box, nose, count=False)
+            if mesh is not None:
+                meshes[track_id] = mesh
+                self.counts["between_meshes"] = self.counts.get("between_meshes", 0) + 1
+        return meshes
+
+    def _mesh(self, frame: Any, track_id: int, box: tuple[int, int, int],
+              nose: tuple[float, float], count: bool = True) -> FaceMesh | None:
+        import cv2
+        height, width = frame.shape[:2]
+        size = int(self.settings["crop_size"])
+        x0, y0, s = box
+
+        def miss(reason: str) -> None:
+            if count:
+                self.counts[reason] += 1
+        patch = np.zeros((s, s, 3), np.uint8)  # black where the crop leaves the frame
+        sx0, sy0, sx1, sy1 = max(0, x0), max(0, y0), min(width, x0 + s), min(height, y0 + s)
+        if sx1 <= sx0 or sy1 <= sy0:
+            return miss("no_mesh")
+        patch[sy0 - y0:sy1 - y0, sx0 - x0:sx1 - x0] = frame[sy0:sy1, sx0:sx1]
+        patch = cv2.resize(patch, (size, size),
+                           interpolation=cv2.INTER_CUBIC if s < size else cv2.INTER_AREA)
+        image = self._mp.Image(image_format=self._mp.ImageFormat.SRGB,
+                               data=np.ascontiguousarray(cv2.cvtColor(patch, cv2.COLOR_BGR2RGB)))
+        found = self.landmarker.detect(image)
+        if not found.face_landmarks:
+            return miss("no_mesh")
+        points = [(p.x, p.y) for p in found.face_landmarks[0]]
+        if not plausible(points, (x0, y0, s), nose, float(self.settings["max_nose_offset"]),
+                         float(self.settings["min_mesh_width"])):
+            return miss("rejected")
+        xs = [x for x, _ in points]
+        width_px = (max(xs) - min(xs)) * s
+        if width_px < float(self.settings["min_face_width_px"]):
+            return miss("too_small")
+        yaw, pitch, roll = head_angles(found.facial_transformation_matrixes[0])
+        return FaceMesh(
+            track_id, tuple(((x0 + x * s) / width, (y0 + y * s) / height) for x, y in points),
+            {b.category_name: round(float(b.score), 4) for b in found.face_blendshapes[0]},
+            round(yaw, 1), round(pitch, 1), round(roll, 1), round(width_px, 1),
+            round(mouth_opening(points), 4))

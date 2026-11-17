@@ -12,6 +12,15 @@ in [0, 1] and head yaw/pitch/roll; the rules read a few of them:
 | eyes_closed | closed, open | eyeBlink high and above usual for >= eyes_closed_min_seconds |
 | yawn | yawning, not_yawning | jawOpen high and above usual for >= yawn_min_seconds |
 | head_direction | toward_camera, turned_left, turned_right, down, up | yaw from the camera; pitch against the person's usual pitch |
+| talking | talking, silent | inner-lip gap swings >= talk_min_range within a second, in >= 2 of the last 3 seconds |
+| head_gesture | nod, shake, none | pitch swings back within nod_window_seconds (nod); yaw reverses twice within shake_window_seconds (shake) |
+
+talking and head_gesture need several faces per second: the pipeline runs the
+landmarker on extra frames between samples (faces.frames_per_second, on the
+last sample's face crops) and passes them as `series`. Measured on A2
+(2026-11-17): students not talking moved the inner-lip gap by at most 0.02
+of face height within a second, a talking and laughing student by
+0.03-0.12. Chewing and laughing also move the mouth.
 
 Why a per-person baseline: the cameras look down on the class, and on the
 scenario videos neutral faces already read eyeSquint 0.4-0.8, eyeLookUp up
@@ -34,14 +43,14 @@ sample where their minimum duration is reached.
 
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 import numpy as np
 
 from src.analysis.events import Event, make_event
 
 # Interval indicators closed with the track (see FoundationAnalyzer._retire).
-SEGMENT_NAMES = ("smile", "brows", "eyes_closed", "yawn", "head_direction")
+SEGMENT_NAMES = ("smile", "brows", "eyes_closed", "yawn", "head_direction", "talking", "head_gesture")
 INDICATOR_NAMES = SEGMENT_NAMES
 SCORE_KEYS = ("smile", "brow_down", "brow_up", "eye_blink", "jaw_open", "yaw", "pitch")
 # Usual (resting) level per score, as a quantile of the student's own recent
@@ -72,7 +81,29 @@ DEFAULTS: dict[str, float] = {
     "yawn_min_seconds": 2.0,
     "head_turn_degrees": 25.0,      # |yaw| from the camera axis
     "head_pitch_degrees": 15.0,     # pitch change from the usual pitch
+    "talk_min_range": 0.03,         # inner-lip gap swing within one second, share of face height
+    "talk_min_seconds": 2,          # seconds (of the last 3) with such a swing
+    "nod_min_degrees": 5.0,         # pitch swing that counts
+    "nod_window_seconds": 1.2,      # down and back up within this time
+    "shake_min_degrees": 8.0,       # yaw swing that counts
+    "shake_window_seconds": 2.0,    # two yaw reversals within this time
 }
+
+
+def reversals(values: list[float], min_swing: float) -> int:
+    """Direction changes of at least min_swing (hysteresis), e.g. down-up = 1."""
+    if len(values) < 3:
+        return 0
+    direction, extreme, count = 0, values[0], 0
+    for value in values[1:]:
+        if direction == 0:
+            if abs(value - extreme) >= min_swing:
+                direction, extreme = (1 if value > extreme else -1), value
+        elif direction * (value - extreme) > 0:
+            extreme = value  # still moving the same way
+        elif abs(value - extreme) >= min_swing:
+            count, direction, extreme = count + 1, -direction, value
+    return count
 
 
 def face_values(mesh: Any) -> dict[str, float]:
@@ -105,6 +136,9 @@ class _FaceTrack:
     history: deque = field(default_factory=deque)
     eyes_since: float | None = None   # start of the current eyes-closed candidate run
     yawn_since: float | None = None
+    mouth_ranges: deque = field(default_factory=lambda: deque(maxlen=3))  # per-second lip-gap swings
+    last_mouth: float | None = None
+    angles: deque = field(default_factory=lambda: deque(maxlen=40))  # (time, pitch, yaw) of recent faces
 
 
 Segments = Callable[..., list[Event]]  # _Segments.update(name, track_id, time, label, role, confidence, coverage, zone=None)
@@ -114,8 +148,10 @@ class StudentFaces:
     """Facial-action rules for student tracks; holds per-track baselines."""
 
     def __init__(self, video_id: str, enabled: dict[str, bool], sample_period: float,
-                 settings: dict[str, Any] | None, update_segment: Segments):
+                 settings: dict[str, Any] | None, update_segment: Segments, always: bool = False):
+        """always: compute labels for other rules even when no facial switch is on."""
         self.video_id = video_id
+        self.always = always
         self.on = {name: bool(enabled.get(name, False)) for name in INDICATOR_NAMES}
         self.period = sample_period
         self.settings = {**DEFAULTS, **{k: v for k, v in (settings or {}).items() if k in DEFAULTS}}
@@ -125,7 +161,7 @@ class StudentFaces:
 
     @property
     def active(self) -> bool:
-        return any(self.on.values())
+        return self.always or any(self.on.values())
 
     def _run(self, since: float | None, candidate: bool, time: float,
              minimum: float) -> tuple[float | None, bool]:
@@ -135,15 +171,21 @@ class StudentFaces:
         since = time if since is None else since
         return since, time - since + self.period >= minimum - 1e-6
 
-    def update(self, time: float, track_id: int, mesh: Any | None,
-               role: str) -> tuple[list[Event], dict[str, Any]]:
-        """Events for one student sample, plus overlay state (label per indicator)."""
+    def update(self, time: float, track_id: int, mesh: Any | None, role: str,
+               series: Sequence[tuple[float, Any]] = ()) -> tuple[list[Event], dict[str, Any]]:
+        """Events for one student sample, plus overlay state (label per indicator).
+
+        series: (time, FaceMesh) from the frames since the previous sample,
+        oldest first, for talking and head gestures.
+        """
         s = self.settings
         state = self.tracks.setdefault(track_id, _FaceTrack(deque(maxlen=self.history)))
         events: list[Event] = []
-        shown: dict[str, Any] = {"face": mesh is not None}
+        shown: dict[str, Any] = {"face": mesh is not None,
+                                 "labels": dict.fromkeys(INDICATOR_NAMES, "unknown")}
         if mesh is None:  # no usable face this sample: unknown, and runs are broken
-            state.eyes_since = state.yawn_since = None
+            state.eyes_since = state.yawn_since = state.last_mouth = None
+            state.mouth_ranges.clear()
             for name in INDICATOR_NAMES:
                 if self.on[name]:
                     events += self.segment(name, track_id, time, "unknown", role, None, "limited")
@@ -179,12 +221,30 @@ class StudentFaces:
             labels["head_direction"] = head_direction(values["yaw"], values["pitch"] - base["pitch"],
                                                       float(s["head_turn_degrees"]),
                                                       float(s["head_pitch_degrees"]))
+        # Talking and head gestures need no baseline: they are changes within seconds.
+        faces = [(t, m) for t, m in series if m is not None] + [(time, mesh)]
+        mouths = ([state.last_mouth] if state.last_mouth is not None else []) + [m.mouth_open for _, m in faces]
+        state.last_mouth = mesh.mouth_open
+        state.mouth_ranges.append(max(mouths) - min(mouths) if len(mouths) >= 2 else None)
+        known = [r for r in state.mouth_ranges if r is not None]
+        labels["talking"] = ("unknown" if not known else
+                             "talking" if sum(r >= s["talk_min_range"] for r in known) >= int(s["talk_min_seconds"])
+                             else "silent")
+        state.angles.extend((t, m.pitch, m.yaw) for t, m in faces)
+        nod = [p for t, p, _ in state.angles if time - t <= float(s["nod_window_seconds"]) + 1e-6]
+        shake = [y for t, _, y in state.angles if time - t <= float(s["shake_window_seconds"]) + 1e-6]
+        labels["head_gesture"] = (
+            "unknown" if len(shake) < 5 else
+            "shake" if reversals(shake, float(s["shake_min_degrees"])) >= 2 else
+            "nod" if reversals(nod, float(s["nod_min_degrees"])) >= 1 else "none")
+        values["mouth_range"] = round(state.mouth_ranges[-1], 4) if state.mouth_ranges[-1] is not None else None
         coverage = "adequate" if base is not None else "limited"
         for name in INDICATOR_NAMES:
             if self.on[name]:
                 events += self.segment(name, track_id, time, labels[name], role, None, coverage)
                 shown[name] = labels[name]
         shown["values"] = values
+        shown["labels"] = labels  # all labels, for the student rules (alertness, targets, answers)
         # Unsmoothed scores behind the labels, for threshold tuning.
         events.append(make_event(self.video_id, "facial_scores", time, time,
                                  {**values, "face_width_px": mesh.width_px,

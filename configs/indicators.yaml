@@ -21,11 +21,7 @@ visual:
     enabled: true  # only apparent transitions at a frame edge
   visibility_occlusion:
     enabled: true
-  hand_raise:
-    enabled: false  # List C; intentionally deferred
-    minimum_keypoint_confidence: 0.25
-    smoothing_window_seconds: 0.5
-    positive_frame_ratio: 0.70
+  # Student hand raises moved to students.hand_raise (List C, 2026-11-17).
   sitting_standing:
     enabled: true
   motion_level:
@@ -75,6 +71,40 @@ faces:
   yawn:
     enabled: true
   head_direction:
+    enabled: true
+  talking:
+    enabled: true  # mouth movement on extra face frames (faces.frames_per_second)
+  head_gesture:
+    enabled: true  # nod / shake, same extra face frames
+
+# List C: student behaviour on the student camera (src/analysis/student_indicators.py,
+# interaction_indicators.py). Some use the face model (configs/default.yaml
+# faces:), the COCO object detector (device_use, note_taking, reading), and the
+# gesture model (response_gesture; hand_raise uses it to confirm low raises).
+students:
+  seat_occupancy:
+    enabled: true
+  hand_raise:
+    enabled: true
+  hand_raise_outcome:
+    enabled: true
+  out_of_seat:
+    enabled: true
+  head_down:
+    enabled: true
+  alertness:
+    enabled: true
+  device_use:
+    enabled: true
+  note_taking:
+    enabled: true
+  reading:
+    enabled: true
+  response_gesture:
+    enabled: true
+  head_target:
+    enabled: true
+  orientation_proxy:
     enabled: true
 
 interaction:

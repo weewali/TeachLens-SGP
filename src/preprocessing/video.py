@@ -29,6 +29,22 @@ def frames(path: Path, sample_every_seconds: float, start_seconds: float = 0.0,
     frame grid as a full run (index divisible by the stride), so a segment
     analyzes exactly the frames a full run would analyze in that range.
     """
+    for info, time, frame, is_sample in frames_with_subsamples(
+            path, sample_every_seconds, start_seconds, end_seconds, 0):
+        if is_sample:
+            yield info, time, frame
+
+
+def frames_with_subsamples(path: Path, sample_every_seconds: float, start_seconds: float = 0.0,
+                           end_seconds: float | None = None, extra_per_sample: int = 0,
+                           ) -> Iterator[tuple[VideoInfo, float, object, bool]]:
+    """Like frames(), plus extra_per_sample evenly spaced frames between samples.
+
+    Yields (metadata, time, frame, is_sample). Every frame is decoded anyway,
+    so the extra frames cost no decoding; they are for cheap per-face work
+    (talking, nods) that one frame per second cannot see. The extra frames
+    after a sample come before the next sample.
+    """
     try:
         import cv2
     except ImportError as exc:
@@ -45,6 +61,10 @@ def frames(path: Path, sample_every_seconds: float, start_seconds: float = 0.0,
             raise ValueError(f"Invalid video metadata (fps or dimensions): {path}")
         stride = max(1, round(sample_every_seconds * fps))
         info = VideoInfo(fps, width, height, count, count / fps if count > 0 else 0.0, stride)
+        # Offsets of the extra frames after each sample (frame indexes).
+        extras = {round(stride * k / (extra_per_sample + 1)) for k in range(1, extra_per_sample + 1)}
+        extras.discard(0)
+        extras.discard(stride)
         # First sampled frame at or after the requested start, on the full-run grid.
         index = math.ceil(math.ceil(start_seconds * fps - 1e-6) / stride) * stride
         # Frame-accurate for the project's H.264/AV1 files; if a backend
@@ -60,7 +80,9 @@ def frames(path: Path, sample_every_seconds: float, start_seconds: float = 0.0,
             if index % stride == 0:
                 # Decoding timestamps may be missing/inaccurate; frame index is
                 # deterministic for ordinary constant-frame-rate recordings.
-                yield info, index / fps, frame
+                yield info, index / fps, frame, True
+            elif index % stride in extras:
+                yield info, index / fps, frame, False
             index += 1
     finally:
         capture.release()

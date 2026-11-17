@@ -8,10 +8,16 @@ from collections import deque
 from dataclasses import dataclass, replace
 import math
 from statistics import median
-from typing import Any
+from typing import Any, Sequence
 
 from src.analysis.events import Event, make_event
+from dataclasses import replace as _replace
+
 from src.analysis.facial_actions import SEGMENT_NAMES as FACE_SEGMENTS, StudentFaces
+from src.analysis.interaction_indicators import SEGMENT_NAMES as INTERACTION_SEGMENTS, StudentInteractions
+from src.analysis.student_indicators import (
+    SEGMENT_NAMES as STUDENT_SEGMENTS, StudentBehavior, StudentObservation,
+)
 from src.analysis.teacher_indicators import SEGMENT_NAMES as TEACHER_SEGMENTS, TeacherBehavior
 from src.inference.pose import (
     LEFT_ANKLE, LEFT_ELBOW, LEFT_EYE, LEFT_HIP, LEFT_KNEE, LEFT_SHOULDER,
@@ -382,6 +388,11 @@ def _near_edge(box: tuple[float, float, float, float], margin: float) -> bool:
             or min(center_x, center_y, 1 - center_x, 1 - center_y) <= 2 * margin)
 
 
+# Student indicators that read face labels (eyes, talking, head direction).
+FACE_DEPENDENT_STUDENT_INDICATORS = ("alertness", "reading", "note_taking", "device_use", "head_down",
+                                     "head_target", "orientation_proxy", "hand_raise_outcome")
+
+
 @dataclass(frozen=True)
 class TrackSnapshot:
     """Rule state of one tracked person at one sample, for review overlays.
@@ -408,6 +419,7 @@ class TrackSnapshot:
     box_truncated: bool | None = None
     teacher: dict[str, Any] | None = None  # List B labels for a teacher track (None = not evaluated)
     face: dict[str, Any] | None = None  # facial-action labels for a student track (None = not evaluated)
+    student: dict[str, Any] | None = None  # List C labels for a student track (None = not evaluated)
 
 
 @dataclass(frozen=True)
@@ -523,7 +535,8 @@ class FoundationAnalyzer:
                  keep_teacher_track: bool = False,
                  targets: dict[str, tuple[tuple[float, float], ...]] | None = None,
                  teacher_settings: dict[str, Any] | None = None,
-                 face_settings: dict[str, Any] | None = None):
+                 face_settings: dict[str, Any] | None = None,
+                 student_settings: dict[str, Any] | None = None):
         """start_time is where analysis begins (a --start segment); people
         already visible then are not reported as entries.
 
@@ -575,8 +588,25 @@ class FoundationAnalyzer:
                                   teacher_settings, self.segments.update)
         self.teacher = teacher if expected_role == "teacher" and teacher.active else None
         # Facial actions run only for students on a student camera, never the teacher.
-        faces = StudentFaces(video_id, self.enabled, sample_period, face_settings, self.segments.update)
-        self.faces = faces if expected_role == "student" and faces.active else None
+        # List C (students): student camera only. Interaction rules need the
+        # per-student rules, and several need face labels (talking, eyes).
+        is_student = expected_role == "student"
+        interactions = StudentInteractions(video_id, self.enabled, self.min_conf, sample_period,
+                                           student_settings, self.segments.update)
+        self.interactions = interactions if is_student and interactions.active else None
+        students = StudentBehavior(video_id, self.enabled, self.min_conf, sample_period,
+                                   student_settings, self.segments.update)
+        self.students = students if is_student and (students.active or self.interactions) else None
+        needs_face = any(self.enabled.get(name) for name in FACE_DEPENDENT_STUDENT_INDICATORS)
+        faces = StudentFaces(video_id, self.enabled, sample_period, face_settings, self.segments.update,
+                             always=needs_face)
+        self.faces = faces if is_student and faces.active else None
+        # Posture and motion feed seats, answers, and alertness even when their
+        # own indicators are off; then they are computed but not reported.
+        self.posture_needed = is_student and any(self.enabled.get(name) for name in (
+            "seat_occupancy", "out_of_seat", "hand_raise_outcome", "orientation_proxy", "head_down", "alertness"))
+        self.motion_needed = is_student and any(self.enabled.get(name) for name in (
+            "seat_occupancy", "out_of_seat", "alertness"))
         # State behind the most recent process() call; read-only for overlays.
         self.last_sample: SampleSnapshot | None = None
 
@@ -594,7 +624,12 @@ class FoundationAnalyzer:
             events.extend(self.teacher.close(track_id, state.role, recording_end))
         if self.faces is not None:
             self.faces.close(track_id)
-        for name in ("classroom_zone", "sitting_standing", "motion_level") + TEACHER_SEGMENTS + FACE_SEGMENTS:
+        if self.students is not None:
+            events.extend(self.students.close(track_id, state.role))
+        if self.interactions is not None:
+            events.extend(self.interactions.close(track_id, state.role, recording_end))
+        for name in (("classroom_zone", "sitting_standing", "motion_level") + TEACHER_SEGMENTS + FACE_SEGMENTS
+                     + STUDENT_SEGMENTS + INTERACTION_SEGMENTS):
             event = self.segments.close((name, track_id), recording_end)
             if event is not None:
                 events.append(event)
@@ -623,7 +658,9 @@ class FoundationAnalyzer:
 
     def process(self, time: float, people: tuple[PosePerson, ...],
                 camera: CameraMotion | None = None,
-                faces: dict[int, Any] | None = None) -> list[Event]:
+                faces: dict[int, Any] | None = None, *,
+                face_series: dict[int, list[tuple[float, Any]]] | None = None,
+                objects: Sequence[Any] = (), gestures: dict[int, dict[str, Any]] | None = None) -> list[Event]:
         """Analyze one sample; camera is the estimated motion of a moving camera.
 
         With camera=None, a fixed camera's image is its own shot (shot 0) and a
@@ -667,6 +704,7 @@ class FoundationAnalyzer:
         teacher_seen = False
         student_count = 0
         snapshots: dict[int, TrackSnapshot] = {}
+        student_obs: list[StudentObservation] = []
         for person in confirmed:
             track_id = person.track_id
             state = self.tracks[track_id]
@@ -729,7 +767,7 @@ class FoundationAnalyzer:
                                                    role, None,
                                                    "adequate" if foot_source == "ankles" else "limited",
                                                    zone=zone))
-            if self.enabled["sitting_standing"]:
+            if self.enabled["sitting_standing"] or self.posture_needed:
                 if self.posture_method == "shoulder_rise":
                     shoulders = shoulder_sample(person, self.min_conf)
                     posture, rise = shoulder_rise_posture(
@@ -749,16 +787,17 @@ class FoundationAnalyzer:
                         thigh_tolerance=float(self.settings.get("thigh_axis_tolerance_degrees", 30)),
                         thigh_torso_ratio=float(self.settings.get("thigh_torso_min_ratio", 0.5)))
                 # Only full legs are adequate; upper legs and shoulder rise are weaker bases.
-                events.extend(self.segments.update("sitting_standing", track_id, time, posture,
-                                                   role, None,
-                                                   "adequate" if basis == "full_legs" else "limited"))
-                if rise is not None:
+                if self.enabled["sitting_standing"]:
+                    events.extend(self.segments.update("sitting_standing", track_id, time, posture,
+                                                       role, None,
+                                                       "adequate" if basis == "full_legs" else "limited"))
+                if rise is not None and self.enabled["sitting_standing"]:
                     # Unsmoothed sample behind the label, for threshold tuning.
                     events.append(make_event(self.video_id, "shoulder_rise", time, time,
                                              {"shoulder_widths_above_seated_level": rise},
                                              track_id=track_id, role=role, confidence=None,
                                              coverage="limited"))
-            if self.enabled["motion_level"]:
+            if self.enabled["motion_level"] or self.motion_needed:
                 delta = time - state.previous_time if state.previous_time is not None else 0.0
                 previous = state.previous if state.previous_shot == shot else None
                 motion, speed = motion_level(scene or person, previous, delta, self.min_conf,
@@ -776,10 +815,11 @@ class FoundationAnalyzer:
                               else "low" if smoothed < float(self.settings["motion_medium_max"])
                               else "medium" if smoothed < float(self.settings["motion_high_min"])
                               else "high")
-                events.extend(self.segments.update("motion_level", track_id, time, motion,
-                                                   role, None,
-                                                   "adequate" if speed is not None else "limited"))
-                if speed is not None:
+                if self.enabled["motion_level"]:
+                    events.extend(self.segments.update("motion_level", track_id, time, motion,
+                                                       role, None,
+                                                       "adequate" if speed is not None else "limited"))
+                if speed is not None and self.enabled["motion_level"]:
                     events.append(make_event(self.video_id, "motion_speed", time, time,
                                              {"body_heights_per_second": speed,
                                               "assumes_fixed_camera": camera is None,
@@ -791,9 +831,16 @@ class FoundationAnalyzer:
                 teacher_events, teacher_state = self.teacher.update(time, track_id, person, role)
                 events.extend(teacher_events)
             face_state = None
+            mesh = (faces or {}).get(track_id)
             if self.faces is not None and role == "student":
-                face_events, face_state = self.faces.update(time, track_id, (faces or {}).get(track_id), role)
+                face_events, face_state = self.faces.update(time, track_id, mesh, role,
+                                                            (face_series or {}).get(track_id, ()))
                 events.extend(face_events)
+            if self.students is not None and role == "student":
+                student_obs.append(StudentObservation(
+                    track_id, person, role, posture=posture, shoulder_rise=rise, motion=motion,
+                    face=mesh, face_labels=(face_state or {}).get("labels"),
+                    gestures=(gestures or {}).get(track_id)))
             snapshots[track_id] = TrackSnapshot(
                 track_id, True, state.samples, role, posture=posture, posture_basis=basis,
                 posture_rise=rise, motion=motion, motion_score=round(smoothed, 4) if smoothed is not None else None,
@@ -802,6 +849,17 @@ class FoundationAnalyzer:
                 possible_occlusion=visible["possible_occlusion"] if visible is not None else None,
                 box_truncated=visible["box_truncated"] if visible is not None else None,
                 teacher=teacher_state, face=face_state)
+        if self.students is not None:
+            student_events, student_shown = self.students.update(time, student_obs, objects)
+            events.extend(student_events)
+            interaction_shown: dict[int, dict[str, Any]] = {}
+            if self.interactions is not None:
+                interaction_events, interaction_shown = self.interactions.update(
+                    time, student_obs, student_shown, self.students.finished_raises)
+                events.extend(interaction_events)
+            for obs in student_obs:
+                snapshots[obs.track_id] = _replace(snapshots[obs.track_id], student={
+                    **student_shown.get(obs.track_id, {}), **interaction_shown.get(obs.track_id, {})})
         provisional = any(self.tracks[person.track_id].samples < self.min_samples
                           for person in unique.values())
         count = count_coverage = presence = None
@@ -837,4 +895,8 @@ class FoundationAnalyzer:
             events.extend(self._retire(track_id, recording_end=recording_end,
                                        lost_before_end=False))
         events.extend(self.segments.close_all(recording_end))
+        if self.students is not None:
+            seat_map = self.students.seat_map_event(recording_end)
+            if seat_map is not None:
+                events.append(seat_map)
         return events

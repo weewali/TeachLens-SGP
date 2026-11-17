@@ -85,7 +85,9 @@ indicators can share one run (`--indicators position entry_exit`).
 | motion_level | both | `show_indicator.py <id> motion_level` and `... motion_speed --track <TRACK_ID>` | still, low, medium, high, unknown |
 
 List B (teacher behaviour) uses the same commands with its own indicator
-names; see `docs/list_b_teacher.md`. The room's floor zones and board,
+names; see `docs/list_b_teacher.md`. List C (students) and the student facial actions
+likewise: `docs/list_c_students.md` and `docs/facial_actions.md`, with the
+scenario that shows each behaviour. The room's floor zones and board,
 screen, and desk targets are in `data/calibration/sgp_room_instructor_view.yaml`,
 loaded by `configs/sgp_room.yaml`, which `run_scenarios.py` uses by default.
 

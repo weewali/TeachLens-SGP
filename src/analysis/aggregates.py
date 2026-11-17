@@ -8,6 +8,8 @@ from statistics import median
 from typing import Any
 
 from src.analysis.facial_actions import SEGMENT_NAMES as FACE_SEGMENTS
+from src.analysis.interaction_indicators import SEGMENT_NAMES as INTERACTION_SEGMENTS
+from src.analysis.student_indicators import SEGMENT_NAMES as STUDENT_SEGMENTS
 from src.analysis.teacher_indicators import SEGMENT_NAMES as TEACHER_SEGMENTS
 
 
@@ -49,6 +51,13 @@ def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
     face_seconds = defaultdict(lambda: defaultdict(float))
     face_episodes = defaultdict(Counter)
     face_samples = 0
+    student_seconds = defaultdict(lambda: defaultdict(float))
+    track_seconds = defaultdict(lambda: defaultdict(float))  # student track -> (indicator, label) -> s
+    raises = Counter()
+    raises_by_track = Counter()
+    outcomes = Counter()
+    answered_by_track = Counter()
+    seat_map = None
     with event_path.open("r", encoding="utf-8") as stream:
         for line in stream:
             event = json.loads(line)
@@ -70,6 +79,8 @@ def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
                 posture_seconds[value] += event["duration"]
             elif name == "motion_level":
                 motion_seconds[value] += event["duration"]
+                if event["role"] == "student":
+                    track_seconds[event["track_id"]][("motion_level", value)] += event["duration"]
             elif name == "entry_exit":
                 entries[value] += 1
             elif name in TEACHER_SEGMENTS and event["role"] == "teacher":
@@ -78,6 +89,18 @@ def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
             elif name in FACE_SEGMENTS and event["role"] == "student":
                 face_seconds[name][value] += event["duration"]
                 face_episodes[name][value] += 1
+                track_seconds[event["track_id"]][(name, value)] += event["duration"]
+            elif name in STUDENT_SEGMENTS + INTERACTION_SEGMENTS and event["role"] == "student":
+                student_seconds[name][value] += event["duration"]
+                track_seconds[event["track_id"]][(name, value)] += event["duration"]
+            elif name == "hand_raise_episode" and event["role"] == "student":
+                raises[value["max_level"]] += 1
+                raises_by_track[event["track_id"]] += 1
+            elif name == "hand_raise_outcome":
+                outcomes[value["outcome"]] += 1
+                answered_by_track[event["track_id"]] += value["outcome"] == "answered_likely"
+            elif name == "seat_map":
+                seat_map = value
             elif name == "facial_scores" and event["role"] == "student":
                 face_samples += 1
             elif name == "stationary_episode" and event["role"] == "teacher":
@@ -143,6 +166,13 @@ def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
                                  for name, values in face_seconds.items()},
         "student_face_episodes": {name: dict(values) for name, values in face_episodes.items()},
         "student_face_samples_with_mesh": face_samples if face_seconds else None,
+        # List C (students): per-track seconds summed over students, per label.
+        "student_behavior_seconds": {name: {k: round(v, 3) for k, v in values.items()}
+                                     for name, values in student_seconds.items()},
+        "student_hand_raises": ({"episodes_by_max_level": dict(raises), "outcomes": dict(outcomes)}
+                                if raises or outcomes else None),
+        "student_orientation_proxy": _orientation(student_seconds.get("orientation_proxy")),
+        "seats": _seats(seat_map, track_seconds, raises_by_track, answered_by_track, frame_aspect),
         # Present only for compensated moving cameras; unmeasured steps start new shots.
         "camera_motion": ({"sample_steps": dict(camera_steps), "shots": len(shots)}
                           if camera_steps else None),
@@ -152,7 +182,10 @@ def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
             "Track IDs can fragment or switch; unique track count is not a unique-person count.",
             "Posture and motion unknown time is excluded from known-state claims.",
             "Zone durations are per-track seconds and may exceed recording length.",
-        ] + (["Facial actions are face-landmark score changes against each student's own usual "
+        ] + (["List C student labels are pose/face/object proxies (head down may be reading or resting; "
+              "a phone may be course work); hand-raise outcomes come from talking or standing after a raise."]
+             if student_seconds else [])
+        + (["Facial actions are face-landmark score changes against each student's own usual "
               "face, not emotions or attention; faces not turned toward the camera are unknown."]
              if face_seconds else [])
         + (["Only the analyzed range is summarized; tracks are cut at its boundaries."]
@@ -161,6 +194,75 @@ def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
             "accurate to about 1 s."] if recording_start else
            ["The video has no recording-time tag, so real times are null."]),
     }
+
+
+def _orientation(seconds: dict[str, float] | None) -> dict[str, Any] | None:
+    """Share of known student time facing the current focus (a proxy, not attention)."""
+    if not seconds:
+        return None
+    on, off, down = (seconds.get(k, 0.0) for k in ("on_target", "off_target", "looking_down"))
+    return {"on_target_fraction_of_known": round(on / (on + off + down), 4) if on + off + down else None,
+            "on_target_fraction_excluding_looking_down": round(on / (on + off), 4) if on + off else None}
+
+
+# Per-seat activity: (indicator, labels) whose seconds are summed per seat.
+SEAT_ACTIVITY = {
+    "talking_seconds": ("talking", ("talking",)),
+    "smiling_seconds": ("smile", ("smiling",)),
+    "phone_seconds": ("device_use", ("phone", "phone_hidden_possible")),
+    "laptop_seconds": ("device_use", ("laptop",)),
+    "writing_seconds": ("note_taking", ("writing",)),
+    "reading_seconds": ("reading", ("reading",)),
+    "head_down_seconds": ("head_down", ("down",)),
+    "sleep_or_dozing_seconds": ("alertness", ("possible_sleep", "dozing")),
+    "on_target_seconds": ("orientation_proxy", ("on_target",)),
+    "off_target_seconds": ("orientation_proxy", ("off_target",)),
+    "out_of_seat_seconds": ("out_of_seat", ("out_of_seat",)),
+    "moving_seconds": ("motion_level", ("medium", "high")),
+}
+
+
+def _seats(seat_map: dict[str, Any] | None, track_seconds: dict[int, dict[tuple[str, str], float]],
+           raises: Counter, answered: Counter, frame_aspect: float | None) -> dict[str, Any] | None:
+    """Seats (learnt from where students sat) and rows, with activity per seat.
+
+    Rows: seats sorted from the camera (front, larger image y) to the back; a
+    new row starts where the gap in y exceeds one shoulder width. Heat-map
+    input for later reports; image-plane, not a floor plan.
+    """
+    if not seat_map or not seat_map.get("seats"):
+        return None
+    seats = sorted(seat_map["seats"], key=lambda seat: -seat["y"])
+    gap = median(seat["shoulder_width"] for seat in seats) * (frame_aspect or 1.0)
+    rows: list[list[dict[str, Any]]] = []
+    for seat in seats:
+        if rows and rows[-1][-1]["y"] - seat["y"] <= gap:
+            rows[-1].append(seat)
+        else:
+            rows.append([seat])
+    table = []
+    for row_number, row in enumerate(rows, start=1):
+        for place, seat in enumerate(sorted(row, key=lambda s: s["x"]), start=1):
+            entry = {"seat_id": seat["seat_id"], "row": row_number, "place_in_row": place,
+                     "x": seat["x"], "y": seat["y"], "tracks": seat["tracks"],
+                     "hand_raises": sum(raises[t] for t in seat["tracks"]),
+                     "answers_likely": sum(answered[t] for t in seat["tracks"]),
+                     "occupied_seconds": round(sum(track_seconds[t][("seat_occupancy", seat["seat_id"])]
+                                                   for t in seat["tracks"]), 3)}
+            for key, (indicator, labels) in SEAT_ACTIVITY.items():
+                entry[key] = round(sum(track_seconds[t][(indicator, label)]
+                                       for t in seat["tracks"] for label in labels), 3)
+            table.append(entry)
+    row_totals = []
+    for row_number in range(1, len(rows) + 1):
+        members = [e for e in table if e["row"] == row_number]
+        totals = {"row": row_number, "seats": len(members),
+                  "hand_raises": sum(e["hand_raises"] for e in members)}
+        for key in ("occupied_seconds",) + tuple(SEAT_ACTIVITY):
+            totals[key] = round(sum(e[key] for e in members), 3)
+        row_totals.append(totals)
+    return {"seats": table, "rows": row_totals,
+            "basis": "seats learnt from seated shoulder positions; row 1 = nearest the camera"}
 
 
 def summarize_objects(event_path: Path, camera_id: str, video_id: str, video_duration: float,

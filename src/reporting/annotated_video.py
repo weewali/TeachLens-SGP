@@ -55,7 +55,26 @@ FACE_WORDS = {
               "unknown": "brows ?"},
     "eyes_closed": {"closed": "EYES CLOSED", "open": "eyes open", "unknown": "eyes ?"},
     "yawn": {"yawning": "YAWNING", "not_yawning": "no yawn", "unknown": "yawn ?"},
+    "talking": {"talking": "TALKING", "silent": "silent", "unknown": "talk ?"},
+    "head_gesture": {"nod": "NOD", "shake": "SHAKE", "none": "no nod", "unknown": "nod ?"},
 }
+# Overlay words for List C labels (student_indicators.py, interaction_indicators.py).
+STUDENT_WORDS = {
+    "hand_raise": {"high": "HAND UP high", "medium": "HAND UP", "low": "HAND UP low", "none": "hand down",
+                   "unknown": "hand ?"},
+    "out_of_seat": {"out_of_seat": "OUT OF SEAT", "in_seat": "in seat", "unknown": "seat ?"},
+    "head_down": {"down": "HEAD DOWN", "up": "head up", "unknown": "head ?"},
+    "alertness": {"awake": "awake", "tired": "TIRED", "dozing": "DOZING", "possible_sleep": "SLEEP?",
+                  "unknown": "alert ?"},
+    "device_use": {"phone": "PHONE", "phone_hidden_possible": "PHONE (hidden?)",
+                   "phone_held_possible": "PHONE (held?)", "laptop": "LAPTOP",
+                   "none": "no device", "unknown": "device ?"},
+    "note_taking": {"writing": "WRITING", "not_writing": "not writing", "unknown": "notes ?"},
+    "reading": {"reading": "READING", "not_reading": "not reading", "unknown": "reading ?"},
+    "orientation_proxy": {"on_target": "on target", "off_target": "OFF TARGET", "looking_down": "looking down",
+                          "speaking": "SPEAKING", "unknown": "orient ?"},
+}
+OBJECT_COLOR = (0, 215, 255)  # phones, laptops, books used by List C
 PATH_MODES = ("off", "teacher", "all")
 
 
@@ -104,7 +123,33 @@ def describe_track(person: PosePerson, track: TrackSnapshot | None) -> list[str]
         lines.append(" | ".join(flags))
     lines.extend(describe_teacher(track.teacher))
     lines.extend(describe_face(track.face))
+    lines.extend(describe_student(track.student))
     return lines
+
+
+def describe_student(student: dict[str, Any] | None) -> list[str]:
+    """List C label lines for a student track; only evaluated indicators appear."""
+    if not student:
+        return []
+    parts = []
+    if "seat" in student:
+        parts.append(student["seat"] if student["seat"] not in ("away", "unknown") else
+                     "AWAY from seat" if student["seat"] == "away" else "seat ?")
+    for name, words in STUDENT_WORDS.items():
+        if name in student:
+            text = words.get(student[name], student[name])
+            if name == "out_of_seat" and student.get("seat_distance") is not None and student[name] == "out_of_seat":
+                text += f" {student['seat_distance']:.1f}w"
+            parts.append(text)
+    if "response_gesture" in student:
+        gesture = student["response_gesture"]
+        parts.append("gesture ?" if gesture == "unknown" else "no gesture" if gesture == "none"
+                     else gesture.replace("_", " ").upper())
+    if "head_target" in student:
+        target, peer = student["head_target"], student.get("head_target_peer")
+        parts.append("faces ?" if target == "unknown" else
+                     f"faces {target.replace('_', ' ')}" + (f" #{peer}" if peer is not None else ""))
+    return [" | ".join(parts[i:i + 3]) for i in range(0, len(parts), 3)]
 
 
 def describe_face(face: dict[str, Any] | None) -> list[str]:
@@ -114,10 +159,14 @@ def describe_face(face: dict[str, Any] | None) -> list[str]:
     if not face.get("face"):
         return ["face ? (none toward camera)"]
     names = [name for name in (*FACE_WORDS, "head_direction") if name in face]
+    if names and all(face[name] == "unknown" for name in names if name not in ("talking", "head_gesture")) \
+            and any(face.get(name) not in (None, "unknown") for name in ("talking", "head_gesture")):
+        names = [name for name in names if name in ("talking", "head_gesture")]
     if names and all(face[name] == "unknown" for name in names):
         return ["face: learning usual look"]
     values = face.get("values") or {}
-    shown = {"smile": "smile", "brows": None, "eyes_closed": "eye_blink", "yawn": "jaw_open"}
+    shown = {"smile": "smile", "brows": None, "eyes_closed": "eye_blink", "yawn": "jaw_open",
+             "talking": "mouth_range", "head_gesture": None}
     parts = []
     for name in names:
         if name == "head_direction":
@@ -126,7 +175,7 @@ def describe_face(face: dict[str, Any] | None) -> list[str]:
                          f"head {label.replace('_', ' ')} (yaw {values.get('yaw', 0):+.0f})")
             continue
         text = FACE_WORDS[name].get(face[name], face[name])
-        if shown[name] and face[name] != "unknown" and shown[name] in values:
+        if shown[name] and face[name] != "unknown" and values.get(shown[name]) is not None:
             text += f" {values[shown[name]]:.2f}"
         parts.append(text)
     return [" | ".join(parts[i:i + 3]) for i in range(0, len(parts), 3)]
@@ -166,9 +215,17 @@ def camera_notes(camera: dict[str, Any], enabled: dict[str, bool], has_zones: bo
     unused = [group for group in JOINT_GROUPS if group not in camera.get("pose_joints", JOINT_GROUPS)]
     if unused:
         notes.append(f"joints not used: {', '.join(unused)}")
-    if any(enabled.get(name) for name in ("smile", "brows", "eyes_closed", "yawn", "head_direction")):
+    if any(enabled.get(name) for name in ("smile", "brows", "eyes_closed", "yawn", "head_direction",
+                                          "talking", "head_gesture")):
         notes.append("faces: student points on face crops; no face = unknown"
                      if camera.get("expected_role") == "student" else "faces: student camera only, skipped")
+    if camera.get("expected_role") != "student" and any(enabled.get(name) for name in (
+            "seat_occupancy", "hand_raise", "out_of_seat", "head_down", "alertness", "device_use",
+            "note_taking", "reading", "response_gesture", "head_target", "orientation_proxy",
+            "hand_raise_outcome")):
+        notes.append("List C: student camera only, skipped")
+    if enabled.get("device_use") or enabled.get("note_taking") or enabled.get("reading"):
+        notes.append("objects: COCO phone/laptop/book boxes (yellow)")
     if camera.get("ignore_people_inside_targets"):
         notes.append(f"ignored: people inside {', '.join(camera['ignore_people_inside_targets'])}")
     if camera.get("ignore_people_starting_below") is not None:
@@ -373,10 +430,12 @@ class ReviewOverlay:
                            color, -1, cv2.LINE_AA)
 
     def draw(self, frame: Any, people: Sequence[PosePerson],
-             sample: SampleSnapshot | None, faces: dict[int, Any] | None = None) -> Any:
+             sample: SampleSnapshot | None, faces: dict[int, Any] | None = None,
+             objects: Sequence[Any] = ()) -> Any:
         """Return an annotated copy; the decoded frame itself is not changed.
 
-        faces (track ID -> FaceMesh) adds the face-mesh points of students.
+        faces (track ID -> FaceMesh) adds the face-mesh points of students;
+        objects (DetectedObject) adds the phones, laptops, and books List C uses.
         """
         cv2 = _cv2()
         image = frame.copy()
@@ -395,6 +454,12 @@ class ReviewOverlay:
         for person in reversed(ordered):
             self._draw_body(cv2, image, person, states.get(person.track_id), scale)
             self._draw_pointing(cv2, image, states.get(person.track_id), scale)
+        for item in objects:
+            x1, y1, x2, y2 = (round(item.box[0] * width), round(item.box[1] * height),
+                              round(item.box[2] * width), round(item.box[3] * height))
+            cv2.rectangle(image, (x1, y1), (x2, y2), OBJECT_COLOR, max(1, round(scale)), cv2.LINE_AA)
+            cv2.putText(image, f"{item.label} {item.confidence:.2f}", (x1, max(12, y1 - 4)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45 * scale, OBJECT_COLOR, max(1, round(scale)), cv2.LINE_AA)
         dot = max(1, round(0.6 * scale))  # face-mesh points on top of the head joints
         for mesh in (faces or {}).values():
             for x, y in mesh.points:
