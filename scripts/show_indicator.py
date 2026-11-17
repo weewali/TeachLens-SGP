@@ -1,6 +1,7 @@
 """Print one List A indicator from a saved run as a readable table.
 
-Reads outputs/events/<video_id>.list_a.jsonl (no video or model needed) and
+Reads outputs/events/<video_id>.list_a.jsonl, or <video_id>.objects.jsonl
+from scripts/detect_objects.py (no video or model needed), and
 lists that indicator's events in time order, optionally filtered by track,
 role, value, coverage, and a time range. Interval indicators also get a total
 per value at the end.
@@ -105,8 +106,11 @@ def main() -> int:
     args = parser.parse_args()
 
     path = args.output_dir / "events" / f"{args.video_id}.list_a.jsonl"
+    if not path.is_file():  # an object-detection run (scripts/detect_objects.py)
+        path = path.with_name(f"{args.video_id}.objects.jsonl")
     if not path.is_file():
-        print(f"No events file: {path}", file=sys.stderr)
+        print(f"No events file: {path.with_name(f'{args.video_id}.list_a.jsonl')} "
+              "or .objects.jsonl", file=sys.stderr)
         return 1
     with open(path, encoding="utf-8") as handle:
         events = [json.loads(line) for line in handle if line.strip()]

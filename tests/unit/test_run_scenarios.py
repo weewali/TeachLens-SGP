@@ -1,9 +1,11 @@
 """Scenario manifest reading and run planning; loads the script without running analysis."""
 
 import importlib.util
+import io
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from src.utils.paths import project_path
 
@@ -88,6 +90,26 @@ class PlanTests(unittest.TestCase):
     def test_student_runs_draw_no_path(self):
         runs = run_scenarios.plan_runs(self.rows, self.root, cameras=["student_view"])
         self.assertEqual({r.path for r in runs}, {"off"})
+
+
+class ObjectOptionTests(unittest.TestCase):
+    def main(self, *argv):
+        with mock.patch("sys.argv", ["run_scenarios.py", *argv]), \
+                mock.patch("sys.stdout", io.StringIO()) as output, \
+                mock.patch("sys.stderr", io.StringIO()):
+            try:
+                code = run_scenarios.main()
+            except SystemExit as exc:
+                code = exc.code
+        return code, output.getvalue()
+
+    def test_objects_runs_are_tagged_and_exclude_pose_options(self):
+        # The plan is printed even where the media are missing (exit code 1 then).
+        _, output = self.main("--scenario", "A2", "--objects", "--dry-run")
+        self.assertIn("sgp_A2_student_objects", output)
+        self.assertIn("sgp_A2_instructor_objects", output)
+        self.assertEqual(self.main("--objects", "--indicators", "position", "--dry-run")[0], 2)
+        self.assertEqual(self.main("--classes", "laptop", "--dry-run")[0], 2)
 
 
 if __name__ == "__main__":

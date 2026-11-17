@@ -10,12 +10,16 @@ recording_start (the real time of the file's first frame, corrected in the
 manifest where a trimmed file's tag is wrong) is used for the events' real
 times. Instructor recordings get the teacher hip path in their review video.
 --indicators turns on only the named indicators, so the JSONL and the review
-video show just them; the run IDs then end with those names.
+video show just them; the run IDs then end with those names. --objects runs
+the COCO object detector instead of the pose pipeline (scripts/detect_objects.py)
+on the same windows; the run IDs then end with "objects".
 
 Examples (repository root, TeachLens environment):
     python scripts/run_scenarios.py --dry-run
     python scripts/run_scenarios.py --scenario A1 --indicators sitting_standing
     python scripts/run_scenarios.py --scenario A1 --scenario A6 --tag base
+    python scripts/run_scenarios.py --scenario A2 --objects
+    python scripts/run_scenarios.py --scenario A2 --objects --classes laptop "cell phone"
 """
 
 import argparse
@@ -131,12 +135,23 @@ def main() -> int:
     parser.add_argument("--indicators", nargs="+", choices=INDICATORS, metavar="NAME",
                         help="Turn on only these List A/B indicators (default: configs/indicators.yaml); "
                              f"choices: {', '.join(INDICATORS)}")
+    parser.add_argument("--objects", action="store_true",
+                        help="Detect classroom objects with the COCO detector (no poses) instead "
+                             "of running the pose indicators; run IDs end with 'objects'")
+    parser.add_argument("--classes", nargs="+", metavar="NAME",
+                        help='With --objects: COCO classes to keep (quote "cell phone"); '
+                             "default: objects.classes in the config")
     parser.add_argument("--dry-run", action="store_true", help="List the planned runs and stop")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    if args.objects and args.indicators:
+        parser.error("--objects runs no pose indicators; leave out --indicators")
+    if args.classes and not args.objects:
+        parser.error("--classes needs --objects")
     # Name an indicator test after its indicators unless a tag is given.
-    tag = args.tag or ("_".join(args.indicators) if args.indicators else None)
+    tag = args.tag or ("objects" if args.objects
+                       else "_".join(args.indicators) if args.indicators else None)
 
     try:
         runs = plan_runs(read_manifest(args.manifest), args.data_root.resolve(),
@@ -162,27 +177,36 @@ def main() -> int:
         return 0
 
     # Heavy imports only for a real run, so --dry-run works without Ultralytics.
-    from src.pipeline import AnalysisStopped, analyze_video
+    from src.pipeline import AnalysisStopped, analyze_video, detect_objects
     from src.utils.config import load_config
 
     config = load_config(args.config, args.local_config)
     output_root = (args.output_dir.resolve() if args.output_dir
                    else project_path(config["paths"]["outputs"]))
+    suffix = "objects" if args.objects else "list_a"
     failed = []
     for number, run in enumerate(runs, start=1):
-        summary = output_root / "reports" / f"{run.video_id}.list_a.json"
+        summary = output_root / "reports" / f"{run.video_id}.{suffix}.json"
         if args.skip_existing and summary.exists():
             LOGGER.info("[%d/%d] %s: summary exists, skipped", number, len(runs), run.video_id)
             continue
         LOGGER.info("[%d/%d] %s (%s)", number, len(runs), run.video_id, run.camera)
         started = time.perf_counter()
         try:
-            analyze_video(run.video, run.video_id, run.camera, config,
-                          weight=args.weight.resolve() if args.weight else None,
-                          output_dir=output_root, device=args.device,
-                          overwrite=args.overwrite, save_video=args.save_video,
-                          live_preview=False, start=run.start, end=run.end, path=run.path,
-                          indicators=args.indicators, real_start=run.real_start)
+            if args.objects:
+                detect_objects(run.video, run.video_id, run.camera, config,
+                               weight=args.weight.resolve() if args.weight else None,
+                               output_dir=output_root, device=args.device,
+                               overwrite=args.overwrite, save_video=args.save_video,
+                               start=run.start, end=run.end, labels=args.classes,
+                               real_start=run.real_start)
+            else:
+                analyze_video(run.video, run.video_id, run.camera, config,
+                              weight=args.weight.resolve() if args.weight else None,
+                              output_dir=output_root, device=args.device,
+                              overwrite=args.overwrite, save_video=args.save_video,
+                              live_preview=False, start=run.start, end=run.end, path=run.path,
+                              indicators=args.indicators, real_start=run.real_start)
         except (AnalysisStopped, FileNotFoundError, FileExistsError, PermissionError,
                 ValueError, RuntimeError) as exc:
             LOGGER.error("%s failed: %s", run.video_id, exc)

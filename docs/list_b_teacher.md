@@ -27,7 +27,7 @@ of events List A already saves.
 | Posture/torso lean | New rule: sideways torso tilt from vertical, plus a per-sample angle for tuning | `teacher_indicators.py` |
 | Visual coverage of student areas | Not done (user decision 2026-11-17: needs both cameras together) | - |
 | Proximity to students | Not done: needs the two cameras combined | - |
-| Teaching-material use | Needs an object detector (datasets below); not trained yet | - |
+| Teaching-material use | COCO objects (laptop, phone, book...) are detected on their own since 2026-11-17 (`docs/object_detection.md`); linking an object to the teacher, and pens/markers, are not done | `scripts/detect_objects.py` |
 | Observable facial actions | Needs face crops and an expression model (datasets below); not trained yet | - |
 
 ## Running
@@ -134,16 +134,15 @@ The summary adds `teacher_behavior_seconds` and `teacher_behavior_episodes`
   `unknown` for whole lessons. `cameras.instructor_view.ignore_people_inside_targets:
   [screen]` now drops boxes lying at least 85% inside the screen.
 
-## Teaching material and facial expressions: datasets (not trained yet)
-
-Both need new detectors. Training on this CPU-only machine would be slow,
-and downloads need the team's go-ahead, so nothing is downloaded or trained.
+## Teaching material and facial expressions: datasets
 
 **Objects (teacher and students).** The COCO-pretrained YOLO26 detector
-(`yolo26n.pt`, a separate download) already knows `cell phone`, `laptop`,
-`book`, `bottle`, `cup`, `keyboard`, `mouse`, `remote`, `scissors`,
-`backpack`, so phones and laptops need no training at all. Pens, notebooks,
-calculators, and markers need fine-tuning:
+(`models/detection/yolo26n.pt`, downloaded 2026-11-17) already knows
+`cell phone`, `laptop`, `book`, `bottle`, `cup`, `keyboard`, `mouse`,
+`remote`, `scissors`, `backpack`, so phones and laptops need no training;
+it runs on its own with `scripts/detect_objects.py` (see
+`docs/object_detection.md`). Pens, notebooks, calculators, and markers need
+fine-tuning:
 - Roboflow Universe "Study desk items" (CC BY 4.0, about 1,200 images):
   calculator, laptop, mobile phone, pen, lecture notes, and more.
 - Ultralytics' Open Images V7 detectors (601 classes, YOLOv8 only) may
@@ -153,17 +152,40 @@ calculators, and markers need fine-tuning:
   closest classroom match, but its license is unstated and the student
   source register already notes it needs copyright approval.
 
-**Facial expressions.**
+**Facial expressions (checked 2026-11-17; nothing downloaded or trained).**
 - Chinese university classroom emotion images (Data in Brief 2024, Mendeley
-  Data, CC BY 4.0, 5,527 images): surprise, happiness, neutral, confusion,
-  boredom, from real classrooms.
-- Roboflow Universe face-expression detection sets in YOLO format (for
-  example "YOLO Facial Exp Detection", CC BY 4.0, seven classes): small;
-  check size and quality.
-- FER2013, RAF-DB, AffectNet, ExpW: large general sets; RAF-DB and AffectNet
-  are non-commercial academic licenses, FER2013 has no stated license.
+  Data 6dbdkb8g3d, 5,527 images; surprise, happiness, neutral, confusion,
+  boredom): the record says CC BY 4.0, but the only downloadable file is a
+  Data Use Agreement. The images are shared only after an institution signs
+  it with East China Normal University (use limited to the named study,
+  publication coordination, audit rights, data returned or destroyed at the
+  end). A university/supervisor decision, not something to download.
+- Roboflow Universe, CC BY 4.0 as declared by the uploader, YOLO detection
+  labels, free Roboflow account needed to export:
+  - "Affective states" (Malaviya National Institute of Technology Jaipur):
+    2,008 images, Boredom, Confusion, Engaged, Frustration, Sleepy, Yawning;
+    webcam close-ups; 2 exportable versions. The best fit found.
+  - "Emotion in Classroom" (sonyausaktif): 2,272 images, Bored, Confused,
+    Focused, happy; webcam images of students; no published version, so it
+    must be forked into one's own workspace before export.
+  - "student_emotion": 989 images, Neutral, Angry, Happy, Sad; look like
+    internet photos, so the uploader's license is doubtful.
+  - "Emotion Recognition" (35 images) and "Student Face Emotion" (194):
+    too small.
+- Kaggle "Facial Emotion Recognition Dataset" (fahadullaha, labelled CC BY
+  4.0, 49.8k images, 7 emotions) is built from FER2013 and RAF-DB, whose own
+  terms (RAF-DB: academic agreement) still apply; Kaggle "Natural Human Face
+  Images" (5.5k) has license "Unknown" (images scraped from the web).
+- FER2013, RAF-DB, AffectNet, ExpW, CK+, KDEF, JAFFE: large or standard
+  sets, but each has an agreement, request form, non-commercial terms, or no
+  stated license.
+- LAION EmoNet-Face (CC BY 4.0, synthetic faces) forbids emotion recognition
+  in educational institutions in its card: not usable here.
 - DAiSEE (engagement, boredom, confusion, frustration in e-learning video):
   research use only via a request form.
+All the open classroom sets are webcam close-ups, not faces 120-170 px wide
+in a room camera, so a model trained on them would run on face crops
+(upscaled), and its accuracy on the scenario videos must be checked.
 Faces in the scenario 4K videos are 120-170 px wide, enough for crops from
 the full frame (see the earlier face-size measurement). Record expressions
 as observed facial actions, not emotions or engagement, and keep face crops

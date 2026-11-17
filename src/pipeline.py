@@ -9,17 +9,18 @@ from pathlib import Path
 import tempfile
 from typing import Any, Sequence
 
-from src.analysis.aggregates import summarize_list_a
-from src.analysis.events import with_real_time, write_jsonl
+from src.analysis.aggregates import summarize_list_a, summarize_objects
+from src.analysis.events import make_event, with_real_time, write_jsonl
 from src.analysis.visual_indicators import (
     DuplicateFilter, FoundationAnalyzer, inside_any_target, restrict_joints, starts_below,
 )
+from src.inference.objects import ObjectDetector
 from src.inference.pose import YoloPoseTracker, joint_indices
 from src.preprocessing.camera_motion import CameraMotionEstimator
 from src.preprocessing.recording_time import read_recording_time
 from src.preprocessing.video import VideoInfo, frames
 from src.reporting.annotated_video import (
-    AnnotatedVideoWriter, LivePreview, ReviewOverlay, camera_notes,
+    AnnotatedVideoWriter, LivePreview, ObjectOverlay, ReviewOverlay, camera_notes,
 )
 from src.utils.config import load_indicator_flags, load_targets, load_zones, select_indicators
 from src.utils.paths import file_in_use, project_path
@@ -220,23 +221,121 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
                                started.isoformat(timespec="milliseconds") if started else None,
                                started_source,
                                frame_aspect=info.width / info.height if info.height else None)
-    summary_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = None
-    try:
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=summary_path.parent,
-                                         prefix=f".{summary_path.name}.", suffix=".tmp",
-                                         delete=False) as stream:
-            temporary = Path(stream.name)
-            json.dump(summary, stream, indent=2, sort_keys=True)
-            stream.write("\n")
-        os.replace(temporary, summary_path)
-    except Exception:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
-        raise
+    _publish_json(summary_path, summary)
     if duplicates is not None:
         LOGGER.info("video=%s removed %d duplicate detections of the same person",
                     video_id, duplicates.dropped)
     LOGGER.info("Wrote %s", ", ".join(str(path) for path in (events_path, summary_path, video_path)
                                         if path is not None))
+    return events_path, summary_path, video_path
+
+
+def _publish_json(path: Path, data: dict[str, Any]) -> None:
+    """Write JSON to a same-directory temporary file, then publish it with os.replace."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                         prefix=f".{path.name}.", suffix=".tmp",
+                                         delete=False) as stream:
+            temporary = Path(stream.name)
+            json.dump(data, stream, indent=2, sort_keys=True)
+            stream.write("\n")
+        os.replace(temporary, path)
+    except Exception:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        raise
+
+
+def detect_objects(video: Path, video_id: str, camera_id: str, config: dict[str, Any], *,
+                   weight: Path | None = None, output_dir: Path | None = None,
+                   device: str | None = None, overwrite: bool = False,
+                   save_video: bool | None = None, start: float = 0.0, end: float | None = None,
+                   labels: Sequence[str] | None = None,
+                   real_start: datetime | None = None) -> tuple[Path, Path, Path | None]:
+    """Detect classroom objects (no poses) on the sampled frames of one video.
+
+    Writes <id>.objects.jsonl (one `object` event per detection and one
+    `object_count` event per sample, zeros included), <id>.objects.json (per
+    class summary), and optionally <id>.objects.mp4 (boxes and counts).
+    Sampling, start/end, and real times work as in analyze_video().
+    """
+    if not video.is_file():
+        raise FileNotFoundError(f"Video not found: {video}")
+    if not video_id or not all(c.isalnum() or c in "-_" for c in video_id):
+        raise ValueError("video_id may contain only letters, digits, '-' and '_'")
+    if start < 0 or (end is not None and end <= start):
+        raise ValueError("Expected 0 <= start < end for the analyzed range")
+    settings = config.get("objects", {})
+    labels = list(dict.fromkeys(labels or settings.get("classes") or []))
+    if not labels:
+        raise ValueError("No object classes chosen (objects.classes in the config or --classes)")
+    review = config.get("review", {})
+    if save_video is None:
+        save_video = bool(review.get("save_video", False))
+    root = output_dir or project_path(config["paths"]["outputs"])
+    events_path = root / "events" / f"{video_id}.objects.jsonl"
+    summary_path = root / "reports" / f"{video_id}.objects.json"
+    video_path = root / "debug" / f"{video_id}.objects.mp4" if save_video else None
+    outputs = [path for path in (events_path, summary_path, video_path) if path is not None]
+    if not overwrite:
+        for path in outputs:
+            if path.exists():
+                raise FileExistsError(f"Output already exists: {path}; choose a new video ID or --overwrite")
+    else:
+        busy = [path for path in outputs if file_in_use(path)]
+        if busy:
+            raise PermissionError(f"Cannot replace {', '.join(str(path) for path in busy)}: it is open "
+                                  "in another program (for example a video player); close it and run again")
+    started, started_source = ((real_start, "given") if real_start is not None
+                               else recording_start(video))
+    detector = ObjectDetector(weight or project_path(settings.get("detector", "models/detection/yolo26n.pt")),
+                              labels, float(settings.get("confidence_threshold", 0.25)),
+                              float(settings.get("iou_threshold", 0.45)),
+                              settings.get("image_size"), device)
+    annotated = (AnnotatedVideoWriter(video_path, str(review.get("video_codec", "avc1")),
+                                      overwrite=overwrite) if video_path is not None else None)
+    state: dict[str, Any] = {"info": None, "last_time": 0.0, "overlay": None}
+
+    def evidence():
+        for info, timestamp, frame in frames(video, float(config["video"]["sample_every_seconds"]),
+                                             start, end):
+            if state["overlay"] is None:
+                LOGGER.info("video=%s camera=%s objects=%s sample_period=%.3fs range=%.3fs-%s",
+                            video_id, camera_id, ", ".join(labels), info.sample_period, start,
+                            f"{end:.3f}s" if end is not None else "end")
+                state["overlay"] = ObjectOverlay(
+                    f"{video_id} | {camera_id} | objects", labels, duration=info.duration or None,
+                    notes=("COCO detector, no poses: an object seen is not an object in use",))
+                if annotated is not None:
+                    annotated.open(1 / info.sample_period, info.width, info.height)
+            state["info"] = info
+            found = detector.detect(frame)
+            counts = {label: 0 for label in labels}
+            for item in found:
+                counts[item.label] += 1
+                yield with_real_time(make_event(
+                    video_id, "object", timestamp, timestamp,
+                    {"label": item.label, "box_xyxy": list(item.box)},
+                    role="classroom", confidence=item.confidence), started)
+            yield with_real_time(make_event(video_id, "object_count", timestamp, timestamp, counts,
+                                            role="classroom"), started)
+            if annotated is not None:
+                annotated.write(state["overlay"].draw(frame, found, timestamp))
+            state["last_time"] = timestamp
+        if state["info"] is None:
+            raise ValueError(f"No decodable frames found: {video}")
+
+    with ExitStack() as stack:
+        if annotated is not None:
+            stack.enter_context(annotated)
+        write_jsonl(events_path, evidence(), overwrite=overwrite)
+    info: VideoInfo = state["info"]
+    duration = info.duration if info.duration > 0 else state["last_time"] + info.sample_period
+    analyzed_end = min(end, duration) if end is not None else duration
+    _publish_json(summary_path, summarize_objects(
+        events_path, camera_id, video_id, duration, info.sample_period, labels, start, analyzed_end,
+        started.isoformat(timespec="milliseconds") if started else None, started_source))
+    LOGGER.info("Wrote %s", ", ".join(str(path) for path in outputs))
     return events_path, summary_path, video_path

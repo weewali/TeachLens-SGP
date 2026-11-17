@@ -180,6 +180,53 @@ def _text_block(cv2: Any, image: Any, lines: Sequence[str], rect: Rect, scale: f
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5 * scale, text_color, thickness, cv2.LINE_AA)
 
 
+# Distinct BGR colours for object classes (cycled by label).
+OBJECT_PALETTE = ((0, 140, 255), (255, 80, 80), (60, 200, 60), (200, 80, 255), (0, 220, 220),
+                  (255, 180, 0), (180, 120, 60), (120, 120, 255), (80, 255, 160), (255, 0, 160))
+
+
+class ObjectOverlay:
+    """Draw one sample's detected objects (no poses) with labels and a count panel."""
+
+    def __init__(self, title: str, labels: Sequence[str], *, duration: float | None = None,
+                 notes: Sequence[str] = ()):
+        self.title = title
+        self.labels = tuple(labels)
+        self.duration = duration
+        self.notes = tuple(notes)
+        self.colors = {label: OBJECT_PALETTE[i % len(OBJECT_PALETTE)] for i, label in enumerate(self.labels)}
+
+    def hud_lines(self, time: float, objects: Sequence[Any]) -> list[str]:
+        counts = {label: 0 for label in self.labels}
+        for item in objects:
+            counts[item.label] = counts.get(item.label, 0) + 1
+        seen = [f"{label} {n}" for label, n in counts.items() if n]
+        lines = [self.title, f"t {_clock(time)}" + (f" / {_clock(self.duration)}" if self.duration else ""),
+                 "objects: " + (", ".join(seen) if seen else "none detected")]
+        return lines + list(self.notes)
+
+    def draw(self, frame: Any, objects: Sequence[Any], time: float) -> Any:
+        """Return an annotated copy; the decoded frame itself is not changed."""
+        cv2 = _cv2()
+        image = frame.copy()
+        height, width = image.shape[:2]
+        scale = max(0.6, min(width, height) / 720)
+        thickness = max(2, round(2 * scale))
+        for item in objects:
+            color = self.colors.get(item.label, (255, 255, 255))
+            x1, y1, x2, y2 = (round(item.box[0] * width), round(item.box[1] * height),
+                              round(item.box[2] * width), round(item.box[3] * height))
+            cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
+            text = [f"{item.label} {item.confidence:.2f}"]
+            size = _text_size(cv2, text, 0.8 * scale)
+            _text_block(cv2, image, text, _clamp(image, x1, y1 - size[1], size), 0.8 * scale,
+                        color, (255, 255, 255))
+        hud = self.hud_lines(time, objects)
+        _text_block(cv2, image, hud, _clamp(image, 0, 0, _text_size(cv2, hud, scale)), scale,
+                    None, (255, 255, 255))
+        return image
+
+
 class ReviewOverlay:
     """Draw one analyzed sample: boxes, joints, assumed roles, rule states, HUD."""
 

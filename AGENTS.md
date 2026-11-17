@@ -52,7 +52,8 @@ Use current user instructions and actual code/configuration to resolve conflicts
 | `README.md` | Short project purpose and links. Its long-term product description is broader than the prototype. |
 | `docs/list_a_pose.md` | Current run guide, implemented indicators, camera assumptions, calibration, limitations. |
 | `docs/scenario_test_videos.md`, `data/manifests/sgp_scenario_videos.csv` | **The test set since 2026-11-16**: own A1-A6/B1 scenario recordings, real-time sync windows per camera, per-indicator test commands, first check results. |
-| `docs/list_b_teacher.md` | **List B (teacher behaviour), 2026-11-17**: which indicators are rules vs. derived summaries, events, rules, checks, and object/facial-expression dataset candidates (not trained). |
+| `docs/list_b_teacher.md` | **List B (teacher behaviour), 2026-11-17**: which indicators are rules vs. derived summaries, events, rules, checks, and object/facial-expression dataset candidates and their licence findings (nothing trained). |
+| `docs/object_detection.md` | **COCO object detection, 2026-11-17**: isolated YOLO26 detector run (no poses) on both views, commands, events, limits. |
 | `docs/project_structure.md` | Agreed architecture and file responsibilities. Some historical paths no longer exist; some files are planned. |
 | `configs/default.yaml` | Current runtime defaults. A key's presence alone does not prove code consumes it. |
 | `configs/indicators.yaml` | Current List A switches plus deferred feature plans. |
@@ -80,6 +81,7 @@ The event layer is the boundary: observations -> rules/events -> aggregates -> p
 | src/preprocessing/video.py | VideoInfo/frames(): metadata, sampling, timestamps, optional start/end segment (seek + full-run grid), capture cleanup. |
 | src/preprocessing/camera_motion.py | CameraMotionEstimator: ORB background matching (people masked), similarity fit, per-shot chaining, new shot on cut/zoom jump/few inliers; CameraMotion, Affine helpers (apply_affine/compose/invert, normalized coords). |
 | src/inference/pose.py | Keypoint/PosePerson, adapt_result(), YoloPoseTracker; local weights and Ultralytics/ByteTrack adapter. |
+| src/inference/objects.py | ObjectDetector/DetectedObject/adapt_detections: COCO YOLO26 detector keeping chosen classes; pipeline.detect_objects() runs it alone (no poses) and writes <id>.objects.jsonl/.json/.mp4. |
 | src/analysis/visual_indicators.py | Model-independent geometry, visibility, posture/motion, tracks/segments, FoundationAnalyzer; last_sample SampleSnapshot/TrackSnapshot per-sample rule state for overlays (None = not evaluated, "unknown" = evaluated without evidence). |
 | src/analysis/teacher_indicators.py | List B rules on the same keypoints for the teacher track: facing (from visible face keypoints), head-orientation target, board/screen interaction, writing on board, pointing + target, gestures/expansiveness, raised hand, torso lean/tilt, stationary episodes; TeacherBehavior holds per-track state and is called by FoundationAnalyzer on teacher cameras. |
 | src/analysis/events.py | Frozen validated Event, rounding, atomic JSONL; with_real_time() adds wall-clock start/end_real_time. |
@@ -89,7 +91,8 @@ The event layer is the boundary: observations -> rules/events -> aggregates -> p
 | scripts/extract_frames_ffmpeg.py | Dataset frame extraction. |
 | scripts/pose_action_demo.py | Separate YOLO11 Pose/ByteTrack hand-raise experiment with annotated MP4. |
 | scripts/run_scenarios.py | Batch runner: analyze_video() over data/manifests/sgp_scenario_videos.csv rows, limited to each row's real-time sync window unless --full, with the manifest's recording_start as real start (scenario/camera filters, --indicators to test some indicators only (IDs then end with their names), --tag ID suffix, --skip-existing, --data-root for worktrees without media). |
-| scripts/show_indicator.py | Prints one indicator from a saved JSONL as a table (filters: --track, --role, --value, --coverage, --from/--to; --list counts indicators). No video or model needed. |
+| scripts/show_indicator.py | Prints one indicator from a saved JSONL as a table (filters: --track, --role, --value, --coverage, --from/--to; --list counts indicators; also reads <id>.objects.jsonl). No video or model needed. |
+| scripts/detect_objects.py | Isolated COCO object detection on one video (--classes, --start/--end, --list-classes); run_scenarios.py --objects runs both views of a scenario. |
 | scripts/trim_video.py | Lossless ffmpeg cut (video + first audio, -c copy, starts at the keyframe at/before --start) that stamps the cut's real start (original start + offset) as Apple creationdate and creation_time; location/other metadata dropped. Editors (Windows re-export, FilmCraft) lose the recording time, so use this instead. |
 | src/preprocessing/recording_time.py, scripts/recording_time.py | Recording start/end in HH:MM:SS, duration, frame rate, and clock time at positions (`--at`) from container tags via external ffprobe; start differences for several videos. GPS tags are detected but never printed. |
 
@@ -124,7 +127,7 @@ If Conda is not on PATH:
 
 Discover paths on other machines. -s excludes user-site packages. Earlier missing PyYAML was installed inside TeachLens; another default Python may still fail. If installation is necessary, notify first, select TeachLens, use python -m pip install -r requirements.txt. Do not reinstall reflexively.
 
-Local models/pose/yolo26n-pose.pt exists and is ignored. Existence is checked before Ultralytics import/load; analysis must never silently download weights. --weight accepts another local pose checkpoint, but code does not fully validate family/task.
+Local models/pose/yolo26n-pose.pt exists and is ignored. Existence is checked before Ultralytics import/load; analysis must never silently download weights. --weight accepts another local pose checkpoint, but code does not fully validate family/task. models/detection/yolo26n.pt (COCO detector, 5.3 MB, Ultralytics v8.4.0 release asset, downloaded 2026-11-17 at the user's request) is also ignored and is only used by detect_objects; ObjectDetector refuses non-detect models and unknown class names.
 
 CLI: required --video, --video-id (letters/digits/hyphen/underscore), --camera (student_view/instructor_view). Optional --config (default configs/default.yaml), --local-config (explicit; no auto-discovery), --weight, --output-dir, --device (e.g. cpu/0), --overwrite, --start/--end (seconds or [HH:]MM:SS, end exclusive; parse_seconds in the script), --live/--no-live (default review.live_preview=false), --save-video/--no-save-video (default review.save_video=true), --path off/teacher/all (default review.path="off"; quoted in YAML because bare off parses as false), --debug. Debug logs counts; overlays come from the review outputs.
 
@@ -301,7 +304,7 @@ Split by source recording before extraction/augmentation; related frames/variant
 
 Shared pose/track outputs support many rules; no model per indicator. Test pretrained YOLO26 first, add detector only for measured recall/count failures. Box-only labels cannot train pose: need COCO-17 joints/visibility plus boxes, separate pose YAML (e.g. kpt_shape: [17,3]) and correct left/right flip mapping. Hand-raise event labels evaluate rules, keypoint labels train pose; action models need labeled sequences.
 
-Phones/books/laptops/markers require object detection and evidence-based person association; phone-on-desk does not prove use/distraction. Segmentation requires masks/polygons, cannot recover hidden joints, and is not default without measured benefit. MediaPipe/MMPose were discussed alternatives, not adopted dependencies.
+Phones/books/laptops/markers require object detection and evidence-based person association; phone-on-desk does not prove use/distraction. COCO classes are detected without training (docs/object_detection.md); pens/markers/notebooks need fine-tuning. Facial-expression training is blocked on data (2026-11-17): the Chinese classroom set (Mendeley 6dbdkb8g3d) needs an institution-signed DUA with ECNU, and every open alternative found has caveats (docs/list_b_teacher.md); never sign agreements, create accounts, or accept terms for the user. Segmentation requires masks/polygons, cannot recover hidden joints, and is not default without measured benefit. MediaPipe/MMPose were discussed alternatives, not adopted dependencies.
 
 Train only when requested: audit, check TeachLens/hardware, tiny smoke case, local weights or notify download, record exact dataset/model/settings/seeds/metrics under runs with reproducible doc summary.
 

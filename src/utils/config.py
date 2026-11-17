@@ -75,6 +75,16 @@ def validate_config(config: dict[str, Any]) -> None:
             raise ValueError(f"cameras.{name}.ignore_people_starting_below must be null or in (0, 1]")
     if float(video.get("sample_every_seconds", 0)) <= 0:
         raise ValueError("video.sample_every_seconds must be positive")
+    objects = config.get("objects") or {}
+    classes = objects.get("classes", [])
+    if not isinstance(classes, list) or not all(isinstance(c, str) and c for c in classes):
+        raise ValueError("objects.classes must be a list of detector class names")
+    for key in ("confidence_threshold", "iou_threshold"):
+        if not 0 <= float(objects.get(key, 0.25)) <= 1:
+            raise ValueError(f"objects.{key} must be in [0, 1]")
+    size = objects.get("image_size")
+    if size is not None and (not isinstance(size, int) or size % 32 or not 320 <= size <= 3840):
+        raise ValueError("objects.image_size must be null or a multiple of 32 from 320 to 3840")
     for key in ("confidence_threshold", "iou_threshold", "keypoint_confidence"):
         value = float(inference.get(key, -1))
         if not 0 <= value <= 1:

@@ -143,3 +143,61 @@ def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
             "accurate to about 1 s."] if recording_start else
            ["The video has no recording-time tag, so real times are null."]),
     }
+
+
+def summarize_objects(event_path: Path, camera_id: str, video_id: str, video_duration: float,
+                      sample_period: float, labels: list[str], analyzed_start: float = 0.0,
+                      analyzed_end: float | None = None, recording_start: str | None = None,
+                      recording_start_source: str | None = None) -> dict[str, Any]:
+    """Per-class presence from saved object detections (scripts/detect_objects.py).
+
+    Every analyzed sample has an object_count event, so a class that is never
+    seen has an explicit zero, not a missing value.
+    """
+    if analyzed_end is None:
+        analyzed_end = video_duration
+    samples = 0
+    seen = Counter()
+    most = Counter()
+    first: dict[str, float] = {}
+    last: dict[str, float] = {}
+    detections = Counter()
+    confidence = defaultdict(float)
+    with event_path.open("r", encoding="utf-8") as stream:
+        for line in stream:
+            event = json.loads(line)
+            if event["indicator_name"] == "object_count":
+                samples += 1
+                for label, count in event["value"].items():
+                    if count:
+                        seen[label] += 1
+                        most[label] = max(most[label], count)
+                        first.setdefault(label, event["start_time"])
+                        last[label] = event["start_time"]
+            elif event["indicator_name"] == "object":
+                detections[event["value"]["label"]] += 1
+                confidence[event["value"]["label"]] += event["confidence"] or 0.0
+    return {
+        "video_id": video_id,
+        "camera_id": camera_id,
+        "video_duration_seconds": round(video_duration, 3),
+        "analyzed_start_seconds": round(analyzed_start, 3),
+        "analyzed_end_seconds": round(analyzed_end, 3),
+        "recording_start_real_time": recording_start,
+        "recording_start_source": recording_start_source,
+        "sample_period_seconds": round(sample_period, 3),
+        "analyzed_samples": samples,
+        "objects": {label: {
+            "samples_seen": seen[label],
+            "fraction_of_samples": round(seen[label] / samples, 4) if samples else None,
+            "max_count_in_one_sample": most[label],
+            "first_seen_seconds": first.get(label),
+            "last_seen_seconds": last.get(label),
+            "mean_confidence": round(confidence[label] / detections[label], 3) if detections[label] else None,
+        } for label in labels},
+        "limitations": [
+            "COCO detector on sampled frames: small, partly hidden, or unusual items are missed.",
+            "A detected object is not use: a phone on a desk does not show anyone is using it.",
+            "Counts are per frame; the same item is counted again in every sample (no tracking).",
+        ],
+    }

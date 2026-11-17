@@ -130,6 +130,16 @@ analysis:
   # Metrics use valid visible time, not the full video duration by default.
   require_evidence_coverage: true
 
+# Classroom objects (scripts/detect_objects.py, run_scenarios.py --objects):
+# the COCO-trained YOLO26 detector, run on its own without the pose model.
+# COCO has no pen, notebook, calculator, or marker; those need fine-tuning.
+objects:
+  detector: models/detection/yolo26n.pt
+  confidence_threshold: 0.25
+  iou_threshold: 0.45
+  image_size: 1280                # like the pose model: small items in 4K frames need it
+  classes: [cell phone, laptop, book, bottle, cup, keyboard, mouse, remote, scissors, backpack, handbag]
+
 # List B (teacher behaviour) thresholds; unvalidated starting values, set
 # on the scenario videos (2026-11-17). Speeds are per second.
 teacher:
