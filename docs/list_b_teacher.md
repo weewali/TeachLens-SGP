@@ -183,6 +183,30 @@ fine-tuning:
   in educational institutions in its card: not usable here.
 - DAiSEE (engagement, boredom, confusion, frustration in e-learning video):
   research use only via a request form.
+**Decision 2026-11-17 (user): no expression classifier is trained.** Facial
+expressions will be rules over face landmarks from MediaPipe Face Landmarker
+(478 3D points, 52 ARKit-style blendshape scores such as `mouthSmileLeft`,
+`browDownLeft`, `eyeBlinkLeft`, `jawOpen`, and a head-pose matrix; package
+Apache 2.0). Faces are too small for its own short-range face detector in
+the 4K frames, so it runs on square crops around the pose model's head
+keypoints (nose and an eye visible), enlarged to 256 px. Feasibility test on
+A2 (3 frames per camera, scratch script, not in the repository):
+- Student view: 15 of 18 faces toward the camera got a mesh, about 20 ms
+  each on CPU. Smiles matched the frames (0.70 and 0.71 smiling, 0.00-0.08
+  neutral). No mesh, correctly: a cap brim with the head down, a hand over
+  the face. One wrong mesh: a three-quarter face resting on a hand, points
+  collapsed onto the ear, so a mesh needs a sanity check against the pose
+  keypoints (nose position, mesh width versus eye/ear span).
+- Instructor view: the teacher's face meshed in every frame (yaw about
+  +20 degrees while facing the class from the side); people in the slide
+  photo also meshed, which the screen filter already removes.
+- The camera looks down on everyone (pitch +10 to +26 degrees), and neutral
+  faces read `eyeSquint` 0.4-0.8, `eyeLookUp` up to 0.66, and blink up to
+  0.46 (glasses, lowered eyes). Rules therefore need a per-person baseline
+  (change from that track's own typical scores), sustained durations, and
+  `unknown` when no mesh is found; report observed facial actions (smile,
+  brows lowered/raised, eyes closed, yawn), not emotions.
+
 All the open classroom sets are webcam close-ups, not faces 120-170 px wide
 in a room camera, so a model trained on them would run on face crops
 (upscaled), and its accuracy on the scenario videos must be checked.

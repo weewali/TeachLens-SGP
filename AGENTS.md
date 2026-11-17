@@ -102,7 +102,7 @@ Create modules with real behavior/tests, not empty files to fill a tree. Keep an
 
 ## 5. Environment and commands
 
-Unpinned requirements: ultralytics, opencv-python, numpy, pandas, matplotlib, pyyaml, scipy, statsmodels, jinja2. Torch is installed but not explicitly listed. FFmpeg is available externally, not required by the OpenCV loop.
+Unpinned requirements: ultralytics, opencv-python, numpy, pandas, matplotlib, pyyaml, scipy, statsmodels, jinja2. Torch is installed but not explicitly listed. FFmpeg is available externally, not required by the OpenCV loop. mediapipe 1.2.2 was installed into TeachLens on 2026-11-17 (user-approved) with `pip install --no-deps mediapipe==1.2.2` plus absl-py, flatbuffers, sounddevice: its declared opencv-contrib-python dependency would sit beside opencv-python and can break cv2, so it was deliberately left out (pip check reports it; ultralytics' missing psutil predates this). Never reinstall mediapipe with dependencies. Its face model is models/face/face_landmarker.task (3.8 MB, Google float16 bundle, ignored); no repository code uses it yet.
 
 From repository root:
 
