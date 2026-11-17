@@ -11,6 +11,7 @@ from statistics import median
 from typing import Any
 
 from src.analysis.events import Event, make_event
+from src.analysis.facial_actions import SEGMENT_NAMES as FACE_SEGMENTS, StudentFaces
 from src.analysis.teacher_indicators import SEGMENT_NAMES as TEACHER_SEGMENTS, TeacherBehavior
 from src.inference.pose import (
     LEFT_ANKLE, LEFT_ELBOW, LEFT_EYE, LEFT_HIP, LEFT_KNEE, LEFT_SHOULDER,
@@ -406,6 +407,7 @@ class TrackSnapshot:
     possible_occlusion: bool | None = None
     box_truncated: bool | None = None
     teacher: dict[str, Any] | None = None  # List B labels for a teacher track (None = not evaluated)
+    face: dict[str, Any] | None = None  # facial-action labels for a student track (None = not evaluated)
 
 
 @dataclass(frozen=True)
@@ -520,7 +522,8 @@ class FoundationAnalyzer:
                  posture_method: str = "legs", joints: frozenset[int] | None = None,
                  keep_teacher_track: bool = False,
                  targets: dict[str, tuple[tuple[float, float], ...]] | None = None,
-                 teacher_settings: dict[str, Any] | None = None):
+                 teacher_settings: dict[str, Any] | None = None,
+                 face_settings: dict[str, Any] | None = None):
         """start_time is where analysis begins (a --start segment); people
         already visible then are not reported as entries.
 
@@ -571,6 +574,9 @@ class FoundationAnalyzer:
                                   float(settings["keypoint_confidence"]), sample_period,
                                   teacher_settings, self.segments.update)
         self.teacher = teacher if expected_role == "teacher" and teacher.active else None
+        # Facial actions run only for students on a student camera, never the teacher.
+        faces = StudentFaces(video_id, self.enabled, sample_period, face_settings, self.segments.update)
+        self.faces = faces if expected_role == "student" and faces.active else None
         # State behind the most recent process() call; read-only for overlays.
         self.last_sample: SampleSnapshot | None = None
 
@@ -586,7 +592,9 @@ class FoundationAnalyzer:
         events = []
         if self.teacher is not None:
             events.extend(self.teacher.close(track_id, state.role, recording_end))
-        for name in ("classroom_zone", "sitting_standing", "motion_level") + TEACHER_SEGMENTS:
+        if self.faces is not None:
+            self.faces.close(track_id)
+        for name in ("classroom_zone", "sitting_standing", "motion_level") + TEACHER_SEGMENTS + FACE_SEGMENTS:
             event = self.segments.close((name, track_id), recording_end)
             if event is not None:
                 events.append(event)
@@ -614,11 +622,14 @@ class FoundationAnalyzer:
         return events
 
     def process(self, time: float, people: tuple[PosePerson, ...],
-                camera: CameraMotion | None = None) -> list[Event]:
+                camera: CameraMotion | None = None,
+                faces: dict[int, Any] | None = None) -> list[Event]:
         """Analyze one sample; camera is the estimated motion of a moving camera.
 
         With camera=None, a fixed camera's image is its own shot (shot 0) and a
-        moving camera leaves motion and in-shot positions unknown.
+        moving camera leaves motion and in-shot positions unknown. faces maps
+        track IDs to FaceMesh results (student camera with facial switches on);
+        a student without one gets unknown facial actions.
         """
         events = []
         shot = camera.shot if camera is not None else 0 if self.camera_fixed else None
@@ -779,6 +790,10 @@ class FoundationAnalyzer:
             if self.teacher is not None and role == "teacher":
                 teacher_events, teacher_state = self.teacher.update(time, track_id, person, role)
                 events.extend(teacher_events)
+            face_state = None
+            if self.faces is not None and role == "student":
+                face_events, face_state = self.faces.update(time, track_id, (faces or {}).get(track_id), role)
+                events.extend(face_events)
             snapshots[track_id] = TrackSnapshot(
                 track_id, True, state.samples, role, posture=posture, posture_basis=basis,
                 posture_rise=rise, motion=motion, motion_score=round(smoothed, 4) if smoothed is not None else None,
@@ -786,7 +801,7 @@ class FoundationAnalyzer:
                 foot_point_in_shot=foot_in_shot, hip_center_in_shot=hip_in_shot,
                 possible_occlusion=visible["possible_occlusion"] if visible is not None else None,
                 box_truncated=visible["box_truncated"] if visible is not None else None,
-                teacher=teacher_state)
+                teacher=teacher_state, face=face_state)
         provisional = any(self.tracks[person.track_id].samples < self.min_samples
                           for person in unique.values())
         count = count_coverage = presence = None

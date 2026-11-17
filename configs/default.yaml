@@ -130,6 +130,32 @@ analysis:
   # Metrics use valid visible time, not the full video duration by default.
   require_evidence_coverage: true
 
+# Student facial actions (src/inference/face_mesh.py, src/analysis/facial_actions.py),
+# student camera only. Face crops come from the pose head keypoints; scores
+# are compared with each student's own usual face. Unvalidated starting
+# values, set on A2 (2026-11-17).
+faces:
+  model: models/face/face_landmarker.task
+  crop_size: 256                  # pixels fed to the landmarker
+  min_detection_confidence: 0.3
+  min_face_width_px: 60           # narrower faces in the source frame are not used
+  max_nose_offset: 0.15           # mesh nose vs pose nose, in crop sides (good faces 0.03-0.07)
+  min_mesh_width: 0.30            # share of the crop side (good faces 0.42-0.49)
+  baseline_seconds: 300           # history behind each student's usual face
+  baseline_min_samples: 10        # faces seen before any label
+  smile_min: 0.35                 # mean mouthSmile; smiling A2 faces 0.48-0.71, neutral 0.00-0.11
+  smile_rise: 0.20                # above the student's usual level
+  brow_min: 0.30
+  brow_rise: 0.25
+  eyes_closed_min: 0.60           # mean eyeBlink; open eyes read up to 0.46 from above
+  eyes_closed_rise: 0.30
+  eyes_closed_min_seconds: 2.0
+  yawn_min: 0.50                  # jawOpen
+  yawn_rise: 0.35
+  yawn_min_seconds: 2.0
+  head_turn_degrees: 25           # |yaw| from the camera axis -> turned left/right (image directions)
+  head_pitch_degrees: 15          # pitch change from the student's usual pitch -> down/up
+
 # Classroom objects (scripts/detect_objects.py, run_scenarios.py --objects):
 # the COCO-trained YOLO26 detector, run on its own without the pose model.
 # COCO has no pen, notebook, calculator, or marker; those need fine-tuning.

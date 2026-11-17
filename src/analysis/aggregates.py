@@ -7,6 +7,7 @@ from pathlib import Path
 from statistics import median
 from typing import Any
 
+from src.analysis.facial_actions import SEGMENT_NAMES as FACE_SEGMENTS
 from src.analysis.teacher_indicators import SEGMENT_NAMES as TEACHER_SEGMENTS
 
 
@@ -45,6 +46,9 @@ def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
     teacher_episodes = defaultdict(Counter)
     stationary = {"episodes": 0, "seconds": 0.0, "by_zone": defaultdict(float)}
     path_points: dict[int, list[tuple[float, int | None, tuple[float, float]]]] = defaultdict(list)
+    face_seconds = defaultdict(lambda: defaultdict(float))
+    face_episodes = defaultdict(Counter)
+    face_samples = 0
     with event_path.open("r", encoding="utf-8") as stream:
         for line in stream:
             event = json.loads(line)
@@ -71,6 +75,11 @@ def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
             elif name in TEACHER_SEGMENTS and event["role"] == "teacher":
                 teacher_seconds_by[name][value] += event["duration"]
                 teacher_episodes[name][value] += 1
+            elif name in FACE_SEGMENTS and event["role"] == "student":
+                face_seconds[name][value] += event["duration"]
+                face_episodes[name][value] += 1
+            elif name == "facial_scores" and event["role"] == "student":
+                face_samples += 1
             elif name == "stationary_episode" and event["role"] == "teacher":
                 stationary["episodes"] += 1
                 stationary["seconds"] += event["duration"]
@@ -128,6 +137,12 @@ def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
         "teacher_path": ({"length_frame_heights": round(path_length, 3), "steps": path_steps,
                           "basis": "hip centre, image plane" + ("" if frame_aspect else ", aspect unknown")}
                          if path_steps else None),
+        # Student facial actions (student camera): per-track seconds and episodes
+        # per label, summed over students; unknown = no usable face or still learning.
+        "student_face_seconds": {name: {k: round(v, 3) for k, v in values.items()}
+                                 for name, values in face_seconds.items()},
+        "student_face_episodes": {name: dict(values) for name, values in face_episodes.items()},
+        "student_face_samples_with_mesh": face_samples if face_seconds else None,
         # Present only for compensated moving cameras; unmeasured steps start new shots.
         "camera_motion": ({"sample_steps": dict(camera_steps), "shots": len(shots)}
                           if camera_steps else None),
@@ -137,7 +152,10 @@ def summarize_list_a(event_path: Path, camera_id: str, video_id: str,
             "Track IDs can fragment or switch; unique track count is not a unique-person count.",
             "Posture and motion unknown time is excluded from known-state claims.",
             "Zone durations are per-track seconds and may exceed recording length.",
-        ] + (["Only the analyzed range is summarized; tracks are cut at its boundaries."]
+        ] + (["Facial actions are face-landmark score changes against each student's own usual "
+              "face, not emotions or attention; faces not turned toward the camera are unknown."]
+             if face_seconds else [])
+        + (["Only the analyzed range is summarized; tracks are cut at its boundaries."]
              if analyzed_start > 0 or analyzed_end < video_duration else [])
         + (["Real times are the camera's whole-second recording-start tag plus video time; "
             "accurate to about 1 s."] if recording_start else

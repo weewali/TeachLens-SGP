@@ -28,7 +28,7 @@ of events List A already saves.
 | Visual coverage of student areas | Not done (user decision 2026-11-17: needs both cameras together) | - |
 | Proximity to students | Not done: needs the two cameras combined | - |
 | Teaching-material use | COCO objects (laptop, phone, book...) are detected on their own since 2026-11-17 (`docs/object_detection.md`); linking an object to the teacher, and pens/markers, are not done | `scripts/detect_objects.py` |
-| Observable facial actions | Needs face crops and an expression model (datasets below); not trained yet | - |
+| Observable facial actions | Not for the teacher (user decision 2026-11-17); students only, see `docs/facial_actions.md` | - |
 
 ## Running
 
@@ -183,8 +183,9 @@ fine-tuning:
   in educational institutions in its card: not usable here.
 - DAiSEE (engagement, boredom, confusion, frustration in e-learning video):
   research use only via a request form.
-**Decision 2026-11-17 (user): no expression classifier is trained.** Facial
-expressions will be rules over face landmarks from MediaPipe Face Landmarker
+**Decision 2026-11-17 (user): no expression classifier is trained, and
+facial actions are for students only, not the teacher.** Implemented in
+`docs/facial_actions.md`. Facial expressions are rules over face landmarks from MediaPipe Face Landmarker
 (478 3D points, 52 ARKit-style blendshape scores such as `mouthSmileLeft`,
 `browDownLeft`, `eyeBlinkLeft`, `jawOpen`, and a head-pose matrix; package
 Apache 2.0). Faces are too small for its own short-range face detector in

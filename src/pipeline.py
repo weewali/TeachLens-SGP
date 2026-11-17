@@ -14,6 +14,7 @@ from src.analysis.events import make_event, with_real_time, write_jsonl
 from src.analysis.visual_indicators import (
     DuplicateFilter, FoundationAnalyzer, inside_any_target, restrict_joints, starts_below,
 )
+from src.inference.face_mesh import FaceLandmarker
 from src.inference.objects import ObjectDetector
 from src.inference.pose import YoloPoseTracker, joint_indices
 from src.preprocessing.camera_motion import CameraMotionEstimator
@@ -22,7 +23,9 @@ from src.preprocessing.video import VideoInfo, frames
 from src.reporting.annotated_video import (
     AnnotatedVideoWriter, LivePreview, ObjectOverlay, ReviewOverlay, camera_notes,
 )
-from src.utils.config import load_indicator_flags, load_targets, load_zones, select_indicators
+from src.utils.config import (
+    FACE_INDICATORS, load_indicator_flags, load_targets, load_zones, select_indicators,
+)
 from src.utils.paths import file_in_use, project_path
 
 
@@ -128,6 +131,17 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
                               float(config["inference"]["iou_threshold"]),
                               tracker_settings(config["models"].get("tracker", "bytetrack.yaml")), device,
                               config["inference"].get("image_size"))
+    # Face landmarks: student camera only (user decision 2026-11-17), and only
+    # when a facial switch is on; points and crops never leave memory.
+    face_settings = config.get("faces") or {}
+    landmarker = None
+    if any(enabled.get(name) for name in FACE_INDICATORS):
+        if camera["expected_role"] == "student":
+            landmarker = FaceLandmarker(
+                project_path(face_settings.get("model", "models/face/face_landmarker.task")),
+                face_settings, float(config["inference"]["keypoint_confidence"]))
+        else:
+            LOGGER.warning("camera=%s: facial actions run only on student cameras; skipped", camera_id)
     info: VideoInfo | None = None
     last_time = 0.0
     analyzer: FoundationAnalyzer | None = None
@@ -164,7 +178,8 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
                                               posture_method=camera.get("posture_method", "legs"),
                                               joints=joints,
                                               keep_teacher_track=bool(camera.get("keep_teacher_track", False)),
-                                              targets=targets, teacher_settings=config.get("teacher"))
+                                              targets=targets, teacher_settings=config.get("teacher"),
+                                              face_settings=face_settings)
                 LOGGER.info("video=%s camera=%s fps=%.2f sample_period=%.3fs range=%.3fs-%s",
                             video_id, camera_id, info.fps, info.sample_period, start,
                             f"{end:.3f}s" if end is not None else "end")
@@ -191,11 +206,12 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
                 people = duplicates(people)
             camera_motion = (estimator.update(frame, [person.box for person in people])
                              if estimator is not None else None)
+            faces = landmarker.estimate(frame, people) if landmarker is not None else None
             LOGGER.debug("video=%s t=%.3f tracked_people=%d", video_id, timestamp, len(people))
-            for event in analyzer.process(timestamp, people, camera_motion):
+            for event in analyzer.process(timestamp, people, camera_motion, faces):
                 yield with_real_time(event, started)
             if overlay is not None:
-                image = overlay.draw(frame, people, analyzer.last_sample)
+                image = overlay.draw(frame, people, analyzer.last_sample, faces)
                 if annotated is not None:
                     annotated.write(image)
                 if preview is not None and not preview.show(image):
@@ -210,11 +226,16 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
 
     # The MP4 is published right after the JSONL; any failure or stop discards both.
     with ExitStack() as stack:
+        if landmarker is not None:
+            stack.callback(landmarker.close)
         for resource in (annotated, preview):
             if resource is not None:
                 stack.enter_context(resource)
         write_jsonl(events_path, evidence(), overwrite=overwrite)
     assert info is not None
+    if landmarker is not None:
+        LOGGER.info("video=%s faces: %s", video_id,
+                    ", ".join(f"{key} {value}" for key, value in landmarker.counts.items()))
     duration = info.duration if info.duration > 0 else last_time + info.sample_period
     summary = summarize_list_a(events_path, camera_id, video_id, duration, info.sample_period,
                                start, analyzed_end(),

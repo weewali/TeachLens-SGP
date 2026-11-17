@@ -75,6 +75,18 @@ def validate_config(config: dict[str, Any]) -> None:
             raise ValueError(f"cameras.{name}.ignore_people_starting_below must be null or in (0, 1]")
     if float(video.get("sample_every_seconds", 0)) <= 0:
         raise ValueError("video.sample_every_seconds must be positive")
+    faces = config.get("faces") or {}
+    for key in ("smile_min", "smile_rise", "brow_min", "brow_rise", "eyes_closed_min",
+                "eyes_closed_rise", "yawn_min", "yawn_rise", "min_detection_confidence",
+                "max_nose_offset", "min_mesh_width"):
+        if key in faces and not 0 <= float(faces[key]) <= 1:
+            raise ValueError(f"faces.{key} must be in [0, 1]")
+    for key in ("baseline_seconds", "eyes_closed_min_seconds", "yawn_min_seconds",
+                "head_turn_degrees", "head_pitch_degrees", "crop_size"):
+        if key in faces and float(faces[key]) <= 0:
+            raise ValueError(f"faces.{key} must be positive")
+    if int(faces.get("baseline_min_samples", 1)) < 1:
+        raise ValueError("faces.baseline_min_samples must be at least one")
     objects = config.get("objects") or {}
     classes = objects.get("classes", [])
     if not isinstance(classes, list) or not all(isinstance(c, str) and c for c in classes):
@@ -205,9 +217,12 @@ def load_indicator_flags(path: str | Path) -> dict[str, bool]:
     with project_path(path).open("r", encoding="utf-8") as stream:
         document = yaml.safe_load(stream) or {}
     visual, teacher = document.get("visual", {}), document.get("teacher", {})
+    faces = document.get("faces", {})
     flags = {name: bool(visual.get(name, {}).get("enabled", False)) for name in LIST_A_INDICATORS}
     flags.update({name: bool(teacher.get(name, {}).get("enabled", False))
                   for name in LIST_B_INDICATORS})
+    flags.update({name: bool(faces.get(name, {}).get("enabled", False))
+                  for name in FACE_INDICATORS})
     return flags
 
 
@@ -223,7 +238,10 @@ LIST_B_INDICATORS = (
     "stationary_episodes", "facing_direction", "head_orientation", "board_interaction",
     "writing_on_board", "pointing", "gestures", "raised_hand", "torso_lean",
 )
-INDICATORS = LIST_A_INDICATORS + LIST_B_INDICATORS
+# Student facial actions from face landmarks, student cameras only
+# (src/analysis/facial_actions.py; same names as its INDICATOR_NAMES).
+FACE_INDICATORS = ("smile", "brows", "eyes_closed", "yawn", "head_direction")
+INDICATORS = LIST_A_INDICATORS + LIST_B_INDICATORS + FACE_INDICATORS
 
 
 def select_indicators(enabled: dict[str, bool],

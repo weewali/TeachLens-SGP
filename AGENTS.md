@@ -53,6 +53,7 @@ Use current user instructions and actual code/configuration to resolve conflicts
 | `docs/list_a_pose.md` | Current run guide, implemented indicators, camera assumptions, calibration, limitations. |
 | `docs/scenario_test_videos.md`, `data/manifests/sgp_scenario_videos.csv` | **The test set since 2026-11-16**: own A1-A6/B1 scenario recordings, real-time sync windows per camera, per-indicator test commands, first check results. |
 | `docs/list_b_teacher.md` | **List B (teacher behaviour), 2026-11-17**: which indicators are rules vs. derived summaries, events, rules, checks, and object/facial-expression dataset candidates and their licence findings (nothing trained). |
+| `docs/facial_actions.md` | **Student facial actions, 2026-11-17**: MediaPipe face landmarks on pose-based face crops, rules against each student's own usual face (smile, brows, eyes closed, yawn, head direction), student camera only. |
 | `docs/object_detection.md` | **COCO object detection, 2026-11-17**: isolated YOLO26 detector run (no poses) on both views, commands, events, limits. |
 | `docs/project_structure.md` | Agreed architecture and file responsibilities. Some historical paths no longer exist; some files are planned. |
 | `configs/default.yaml` | Current runtime defaults. A key's presence alone does not prove code consumes it. |
@@ -81,6 +82,8 @@ The event layer is the boundary: observations -> rules/events -> aggregates -> p
 | src/preprocessing/video.py | VideoInfo/frames(): metadata, sampling, timestamps, optional start/end segment (seek + full-run grid), capture cleanup. |
 | src/preprocessing/camera_motion.py | CameraMotionEstimator: ORB background matching (people masked), similarity fit, per-shot chaining, new shot on cut/zoom jump/few inliers; CameraMotion, Affine helpers (apply_affine/compose/invert, normalized coords). |
 | src/inference/pose.py | Keypoint/PosePerson, adapt_result(), YoloPoseTracker; local weights and Ultralytics/ByteTrack adapter. |
+| src/inference/face_mesh.py | face_crop() from pose head keypoints, FaceLandmarker (MediaPipe on enlarged crops, sanity check vs the pose nose, min face width), FaceMesh (478 points, 52 blendshape scores, yaw/pitch/roll); points stay in memory. |
+| src/analysis/facial_actions.py | StudentFaces: per-track baseline (median of recent scores) and rules for smile, brows, eyes_closed, yawn, head_direction; facial_scores samples; called by FoundationAnalyzer for student tracks on student cameras only. |
 | src/inference/objects.py | ObjectDetector/DetectedObject/adapt_detections: COCO YOLO26 detector keeping chosen classes; pipeline.detect_objects() runs it alone (no poses) and writes <id>.objects.jsonl/.json/.mp4. |
 | src/analysis/visual_indicators.py | Model-independent geometry, visibility, posture/motion, tracks/segments, FoundationAnalyzer; last_sample SampleSnapshot/TrackSnapshot per-sample rule state for overlays (None = not evaluated, "unknown" = evaluated without evidence). |
 | src/analysis/teacher_indicators.py | List B rules on the same keypoints for the teacher track: facing (from visible face keypoints), head-orientation target, board/screen interaction, writing on board, pointing + target, gestures/expansiveness, raised hand, torso lean/tilt, stationary episodes; TeacherBehavior holds per-track state and is called by FoundationAnalyzer on teacher cameras. |
@@ -102,7 +105,7 @@ Create modules with real behavior/tests, not empty files to fill a tree. Keep an
 
 ## 5. Environment and commands
 
-Unpinned requirements: ultralytics, opencv-python, numpy, pandas, matplotlib, pyyaml, scipy, statsmodels, jinja2. Torch is installed but not explicitly listed. FFmpeg is available externally, not required by the OpenCV loop. mediapipe 1.2.2 was installed into TeachLens on 2026-11-17 (user-approved) with `pip install --no-deps mediapipe==1.2.2` plus absl-py, flatbuffers, sounddevice: its declared opencv-contrib-python dependency would sit beside opencv-python and can break cv2, so it was deliberately left out (pip check reports it; ultralytics' missing psutil predates this). Never reinstall mediapipe with dependencies. Its face model is models/face/face_landmarker.task (3.8 MB, Google float16 bundle, ignored); no repository code uses it yet.
+Unpinned requirements: ultralytics, opencv-python, numpy, pandas, matplotlib, pyyaml, scipy, statsmodels, jinja2. Torch is installed but not explicitly listed. FFmpeg is available externally, not required by the OpenCV loop. mediapipe 1.2.2 was installed into TeachLens on 2026-11-17 (user-approved) with `pip install --no-deps mediapipe==1.2.2` plus absl-py, flatbuffers, sounddevice: its declared opencv-contrib-python dependency would sit beside opencv-python and can break cv2, so it was deliberately left out (pip check reports it; ultralytics' missing psutil predates this). Never reinstall mediapipe with dependencies. Its face model is models/face/face_landmarker.task (3.8 MB, Google float16 bundle, ignored), used by src/inference/face_mesh.py when a `faces:` switch is on for a student camera (never the teacher, user decision 2026-11-17); FaceLandmarker refuses to run without the file.
 
 From repository root:
 

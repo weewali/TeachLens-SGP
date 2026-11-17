@@ -67,6 +67,13 @@ def compact(name: str, value: Any) -> str:
         return f"{value['shoulder_widths_above_seated_level']:+.2f} widths"
     if name == "persistent_anonymous_identity":
         return f"{value['samples']} samples"
+    if name == "facial_scores":
+        base = value.get("baseline")
+        return (f"smile {value['smile']:.2f} brow down {value['brow_down']:.2f} up {value['brow_up']:.2f} "
+                f"blink {value['eye_blink']:.2f} jaw {value['jaw_open']:.2f} "
+                f"yaw {value['yaw']:+.0f} pitch {value['pitch']:+.0f} {value['face_width_px']:.0f}px"
+                + (f" | usual smile {base['smile']:.2f} blink {base['eye_blink']:.2f} pitch {base['pitch']:+.0f}"
+                   if base else " | learning"))
     return ", ".join(f"{key}={item}" for key, item in value.items()
                      if not isinstance(item, (dict, list)))
 

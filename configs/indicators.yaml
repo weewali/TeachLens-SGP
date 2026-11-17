@@ -61,6 +61,22 @@ teacher:
   torso_lean:
     enabled: true
 
+# Student facial actions (src/analysis/facial_actions.py): rules over
+# MediaPipe face-landmark scores on face crops, on the student camera only
+# (never the teacher). Needs mediapipe and models/face/face_landmarker.task.
+# Observed facial actions, not emotions.
+faces:
+  smile:
+    enabled: true
+  brows:
+    enabled: true
+  eyes_closed:
+    enabled: true
+  yawn:
+    enabled: true
+  head_direction:
+    enabled: true
+
 interaction:
   hand_raise_participation_breadth:
     enabled: false

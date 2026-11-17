@@ -47,6 +47,15 @@ POINTING_COLOR = (0, 0, 255)
 TEACHER_SHORT = {"toward_class": "faces class", "away_from_class": "back to class",
                  "sideways_left": "side-on (left)", "sideways_right": "side-on (right)"}
 PATH_COLOR = (0, 255, 255)  # teacher path; "all" paths use role colours
+FACE_COLOR = (120, 255, 120)  # student face-mesh points (facial actions)
+# Overlay words for facial-action labels; values come from facial_actions.py.
+FACE_WORDS = {
+    "smile": {"smiling": "SMILING", "not_smiling": "no smile", "unknown": "smile ?"},
+    "brows": {"lowered": "BROWS LOWERED", "raised": "BROWS RAISED", "neutral": "brows neutral",
+              "unknown": "brows ?"},
+    "eyes_closed": {"closed": "EYES CLOSED", "open": "eyes open", "unknown": "eyes ?"},
+    "yawn": {"yawning": "YAWNING", "not_yawning": "no yawn", "unknown": "yawn ?"},
+}
 PATH_MODES = ("off", "teacher", "all")
 
 
@@ -94,7 +103,33 @@ def describe_track(person: PosePerson, track: TrackSnapshot | None) -> list[str]
     if flags:
         lines.append(" | ".join(flags))
     lines.extend(describe_teacher(track.teacher))
+    lines.extend(describe_face(track.face))
     return lines
+
+
+def describe_face(face: dict[str, Any] | None) -> list[str]:
+    """Facial-action label lines for a student track; only evaluated indicators appear."""
+    if not face:
+        return []
+    if not face.get("face"):
+        return ["face ? (none toward camera)"]
+    names = [name for name in (*FACE_WORDS, "head_direction") if name in face]
+    if names and all(face[name] == "unknown" for name in names):
+        return ["face: learning usual look"]
+    values = face.get("values") or {}
+    shown = {"smile": "smile", "brows": None, "eyes_closed": "eye_blink", "yawn": "jaw_open"}
+    parts = []
+    for name in names:
+        if name == "head_direction":
+            label = face[name]
+            parts.append("head ?" if label == "unknown" else
+                         f"head {label.replace('_', ' ')} (yaw {values.get('yaw', 0):+.0f})")
+            continue
+        text = FACE_WORDS[name].get(face[name], face[name])
+        if shown[name] and face[name] != "unknown" and shown[name] in values:
+            text += f" {values[shown[name]]:.2f}"
+        parts.append(text)
+    return [" | ".join(parts[i:i + 3]) for i in range(0, len(parts), 3)]
 
 
 def describe_teacher(teacher: dict[str, Any] | None) -> list[str]:
@@ -131,6 +166,9 @@ def camera_notes(camera: dict[str, Any], enabled: dict[str, bool], has_zones: bo
     unused = [group for group in JOINT_GROUPS if group not in camera.get("pose_joints", JOINT_GROUPS)]
     if unused:
         notes.append(f"joints not used: {', '.join(unused)}")
+    if any(enabled.get(name) for name in ("smile", "brows", "eyes_closed", "yawn", "head_direction")):
+        notes.append("faces: student points on face crops; no face = unknown"
+                     if camera.get("expected_role") == "student" else "faces: student camera only, skipped")
     if camera.get("ignore_people_inside_targets"):
         notes.append(f"ignored: people inside {', '.join(camera['ignore_people_inside_targets'])}")
     if camera.get("ignore_people_starting_below") is not None:
@@ -335,8 +373,11 @@ class ReviewOverlay:
                            color, -1, cv2.LINE_AA)
 
     def draw(self, frame: Any, people: Sequence[PosePerson],
-             sample: SampleSnapshot | None) -> Any:
-        """Return an annotated copy; the decoded frame itself is not changed."""
+             sample: SampleSnapshot | None, faces: dict[int, Any] | None = None) -> Any:
+        """Return an annotated copy; the decoded frame itself is not changed.
+
+        faces (track ID -> FaceMesh) adds the face-mesh points of students.
+        """
         cv2 = _cv2()
         image = frame.copy()
         height, width = image.shape[:2]
@@ -354,9 +395,17 @@ class ReviewOverlay:
         for person in reversed(ordered):
             self._draw_body(cv2, image, person, states.get(person.track_id), scale)
             self._draw_pointing(cv2, image, states.get(person.track_id), scale)
+        dot = max(1, round(0.6 * scale))  # face-mesh points on top of the head joints
+        for mesh in (faces or {}).values():
+            for x, y in mesh.points:
+                cv2.circle(image, (round(x * width), round(y * height)), dot, FACE_COLOR, -1)
         hud = self.hud_lines(sample)
         hud_rect = _clamp(image, 0, 0, _text_size(cv2, hud, scale))
-        placed = [hud_rect]
+        # Faces count as taken spots, so labels move off them when they can.
+        face_rects = [(round(min(x for x, _ in m.points) * width), round(min(y for _, y in m.points) * height),
+                       round(max(x for x, _ in m.points) * width), round(max(y for _, y in m.points) * height))
+                      for m in (faces or {}).values()]
+        placed = [hud_rect] + face_rects
         for person in ordered:
             placed.append(self._draw_label(cv2, image, person, states.get(person.track_id),
                                            0.8 * scale, placed))
