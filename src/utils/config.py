@@ -75,6 +75,10 @@ def validate_config(config: dict[str, Any]) -> None:
         value = float(inference.get(key, -1))
         if not 0 <= value <= 1:
             raise ValueError(f"inference.{key} must be in [0, 1]")
+    size = inference.get("image_size")
+    if size is not None and (isinstance(size, bool) or not isinstance(size, int)
+                             or not 320 <= size <= 3840 or size % 32):
+        raise ValueError("inference.image_size must be null or a multiple of 32 from 320 to 3840")
     for key in ("min_track_samples", "max_track_gap_seconds", "edge_margin",
                 "standing_angle_degrees", "sitting_angle_degrees",
                 "motion_low_max", "motion_medium_max", "motion_high_min"):

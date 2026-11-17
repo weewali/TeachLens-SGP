@@ -81,6 +81,15 @@ class ConfigurationTests(unittest.TestCase):
             broken["cameras"]["instructor_view"]["ignore_people_starting_below"] = value
             with self.assertRaises(ValueError):
                 validate_config(broken)
+        self.assertEqual(config["inference"]["image_size"], 1280)
+        for value in (1000, 100, "big", True):
+            broken = deepcopy(config)
+            broken["inference"]["image_size"] = value
+            with self.assertRaises(ValueError):
+                validate_config(broken)
+        default = deepcopy(config)
+        default["inference"]["image_size"] = None
+        validate_config(default)
         self.assertEqual(config["analysis"]["duplicate_max_keypoint_distance"], .25)
         for key, value in (("duplicate_max_keypoint_distance", 0),
                            ("duplicate_max_keypoint_distance", 3),

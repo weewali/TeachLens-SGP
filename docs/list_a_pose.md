@@ -126,6 +126,20 @@ keypoints and the overlay, and visibility parts that need them are `null`
 (not evaluated) rather than `false`. The HUD notes `joints not used: knees,
 ankles` for the student camera.
 
+**Model input size.** The model sees each frame shrunk to
+`inference.image_size` pixels wide (1280; the checkpoint default is 640). In
+the 4K student video, 640 lost back-row students, students with their head
+down on the desk, and a student leaning out of his seat; 1280 found them in
+every tested B1 frame for about 0.1 s more per analyzed frame on CPU.
+
+**Tracker settings.** ByteTrack only reports a new person once two analyzed
+frames line up. At one frame per second a student who stands up, leans, or
+walks can move more than their own width between frames, so the default
+matching (`match_thresh: 0.8`) lost them for a second or more.
+`models.tracker: configs/bytetrack_1fps.yaml` uses `match_thresh: 0.95`;
+on B1 it kept those students as well as tracking five frames per second did,
+at no extra cost.
+
 **One detection per person.** Desks split seated people: the model can
 return one box for the part above the desk and another tall box that also
 covers the legs under it, and the model's own overlap check keeps both. Two

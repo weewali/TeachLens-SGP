@@ -103,7 +103,12 @@ class YoloPoseTracker:
     """Own one model per video so ByteTrack IDs never leak across recordings."""
 
     def __init__(self, weight_path: Path, confidence: float, iou: float,
-                 tracker: str = "bytetrack.yaml", device: str | None = None):
+                 tracker: str = "bytetrack.yaml", device: str | None = None,
+                 image_size: int | None = None):
+        """image_size is the model's input width in pixels (None = the
+        checkpoint's default, 640). Frames are shrunk to it before detection,
+        so a larger size finds small people (back-row students in 4K video)
+        at some extra inference time."""
         if not weight_path.is_file():
             raise FileNotFoundError(
                 f"YOLO26 pose weights are missing: {weight_path}. "
@@ -121,6 +126,7 @@ class YoloPoseTracker:
         self.iou = iou
         self.tracker = tracker
         self.device = device
+        self.image_size = image_size
 
     def infer(self, frame: Any) -> tuple[PosePerson, ...]:
         height, width = frame.shape[:2]
@@ -129,5 +135,7 @@ class YoloPoseTracker:
                                       classes=[0], verbose=False)
         if self.device:
             kwargs["device"] = self.device
+        if self.image_size:
+            kwargs["imgsz"] = self.image_size
         results = self.model.track(frame, **kwargs)
         return adapt_result(results[0], width, height) if results else ()

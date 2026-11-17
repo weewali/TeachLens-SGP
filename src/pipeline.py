@@ -32,6 +32,16 @@ class AnalysisStopped(RuntimeError):
     """The user stopped the run from the live preview; nothing was published."""
 
 
+def tracker_settings(name: str) -> str:
+    """A repository tracker YAML as an absolute path; a bare built-in name as is.
+
+    Ultralytics resolves relative paths from the working directory, so a
+    repository file like configs/bytetrack_1fps.yaml must be made absolute.
+    """
+    path = project_path(name)
+    return str(path) if path.is_file() else name
+
+
 def recording_start(video: Path) -> tuple[datetime | None, str | None]:
     """Recording start time and the metadata tag it came from, or (None, None)."""
     try:
@@ -113,7 +123,8 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
         LOGGER.warning("camera=%s has no calibrated zones; classroom_zone will be unknown", camera_id)
     tracker = YoloPoseTracker(model_path, float(config["inference"]["confidence_threshold"]),
                               float(config["inference"]["iou_threshold"]),
-                              config["models"].get("tracker", "bytetrack.yaml"), device)
+                              tracker_settings(config["models"].get("tracker", "bytetrack.yaml")), device,
+                              config["inference"].get("image_size"))
     info: VideoInfo | None = None
     last_time = 0.0
     analyzer: FoundationAnalyzer | None = None

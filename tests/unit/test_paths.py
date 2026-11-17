@@ -5,9 +5,18 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from src.pipeline import analyze_video
+from src.pipeline import analyze_video, tracker_settings
 from src.utils.config import load_config
 from src.utils.paths import file_in_use, project_path
+
+
+class TrackerSettingsTests(unittest.TestCase):
+    def test_repository_tracker_file_becomes_absolute_and_builtin_names_stay(self):
+        config = load_config(project_path("configs/default.yaml"))
+        resolved = Path(tracker_settings(config["models"]["tracker"]))
+        self.assertTrue(resolved.is_absolute() and resolved.is_file())
+        self.assertIn("match_thresh: 0.95", resolved.read_text(encoding="utf-8"))
+        self.assertEqual(tracker_settings("bytetrack.yaml"), "bytetrack.yaml")
 
 
 class FileInUseTests(unittest.TestCase):

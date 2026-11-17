@@ -25,7 +25,9 @@ models:
   person_detector: yolo11n.pt
   # Explicit local file: analysis never triggers an implicit model download.
   pose_estimator: models/pose/yolo26n-pose.pt
-  tracker: bytetrack.yaml
+  # ByteTrack with looser matching for one frame per second (see the file);
+  # a bare name such as bytetrack.yaml uses Ultralytics' built-in settings.
+  tracker: configs/bytetrack_1fps.yaml
 
 # These are camera contexts, not per-person role predictions. A track whose
 # role is ambiguous within a view must remain unknown.
@@ -81,6 +83,12 @@ inference:
   confidence_threshold: 0.25
   iou_threshold: 0.45
   keypoint_confidence: 0.35
+  # Model input width in pixels; frames are shrunk to it before detection.
+  # At 640 (the checkpoint default) the 4K student camera lost small or
+  # unusual people: back-row students, heads down on the desk, a student
+  # leaning out of his seat. 1280 found them in every tested B1 frame
+  # (2026-11-17) for ~0.1 s more per analyzed frame on CPU. null = 640.
+  image_size: 1280
 
 analysis:
   minimum_event_duration_seconds: 0.5

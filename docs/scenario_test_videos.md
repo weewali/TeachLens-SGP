@@ -95,6 +95,17 @@ indicators can share one run (`--indicators position entry_exit`).
   `analysis.duplicate_max_keypoint_distance: 0.25` keeps one box per person.
   On 40 sampled frames the count was 6 in 39 (A1, was 7), 32 (A3, was 22),
   and 25 (B1, was 19); the remaining 5s are students the model misses.
+- **Missed students: small, asleep, or out of their seat.** At the
+  model's default 640-pixel input, B1 counted 6 in only 379 of 593 adequate
+  samples: back-row students, heads down on the desk (S-SLEEP), and a
+  student leaning out of his seat got no box at all. `inference.image_size:
+  1280` found all six in every tested low-count frame except 3:23, where the
+  back-right student had really left the view.
+- **Students lost while moving.** At one analyzed frame per second a student
+  walking to his seat, leaning, or shifting moved too far for ByteTrack to
+  link two frames, so he went uncounted for a second or more.
+  `configs/bytetrack_1fps.yaml` (match_thresh 0.95 instead of 0.8) fixed
+  B1 0:03-0:12 and 5:10-5:22 as well as tracking 5 frames per second did.
   Full A1 student run (only this indicator, 2026-11-17): 274 duplicates
   removed; adequate samples 6 in 259 of 264 (was 82 of 236) and never
   above 6; the five 5s are a student not detected at all.
