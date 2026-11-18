@@ -27,8 +27,9 @@ The later report stage (HTML strengths / areas to improve) should read
 
 ## Running it
 
-Run both cameras of a lesson first, with the indicators to fuse switched on
-(the default switches are all on). Then, from the repository root:
+`scripts/analyze_lesson.py` runs this step automatically after analyzing both
+cameras (docs/lesson_pipeline.md). To redo only the fusion on two saved runs
+(the default indicator switches are all on), from the repository root:
 
 ```powershell
 conda activate TeachLens
@@ -37,7 +38,8 @@ python scripts/fuse_lesson.py --student sgp_A1_student_full --instructor sgp_A1_
 ```
 
 `--scenario` reads the two run IDs from `data/manifests/sgp_scenario_videos.csv`
-(`<video_id>_<tag>`; `--take` for scenarios with several takes). Other options:
+(`<video_id>_<tag>`; the report is named `sgp_<scenario>_<tag>`, e.g.
+`sgp_A1_full`; `--take` for scenarios with several complete takes). Other options:
 `--window` (seconds), `--config`, `--output-dir`, `--no-plot`, `--overwrite`.
 A1 (55 windows) takes about 20 s on CPU, nearly all of it the shift tests.
 

@@ -51,6 +51,19 @@ seconds of that file). `scripts/run_scenarios.py` uses both.
 | A6 | 7.41-end | 0-368.61 | 20:02:27.4-20:08:28.6 |
 | B1 | 2.00-627.74 | whole file | 20:10:46.0-20:21:11.7 |
 
+## A whole lesson in one command
+
+`scripts/analyze_lesson.py` (2026-11-18, docs/lesson_pipeline.md) runs both
+cameras of a scenario on these windows with every indicator on, links the
+cameras, fuses them, and runs the lag analysis:
+
+```powershell
+python scripts/analyze_lesson.py --scenario A2 --tag lesson
+python scripts/analyze_lesson.py --all-scenarios --tag lesson --dry-run
+```
+
+A4 uses take 1 (take 2 has no student video).
+
 ## Testing one indicator at a time
 
 `--indicators` turns on only the named indicators, so the JSONL, the summary,

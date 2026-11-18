@@ -75,6 +75,8 @@ def validate_config(config: dict[str, Any]) -> None:
             raise ValueError(f"cameras.{name}.ignore_people_starting_below must be null or in (0, 1]")
     if float(video.get("sample_every_seconds", 0)) <= 0:
         raise ValueError("video.sample_every_seconds must be positive")
+    if not isinstance(video.get("hardware_decoding", True), bool):
+        raise ValueError("video.hardware_decoding must be true or false")
     faces = config.get("faces") or {}
     for key in ("smile_min", "smile_rise", "brow_min", "brow_rise", "eyes_closed_min",
                 "eyes_closed_rise", "yawn_min", "yawn_rise", "min_detection_confidence",

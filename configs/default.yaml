@@ -20,6 +20,11 @@ video:
   # samples, so tracker IDs fragment more than at 5/s; much sparser sampling
   # breaks tracking and motion.
   sample_every_seconds: 1.0
+  # GPU video decoding when OpenCV finds one (2026-11-18: 4K HEVC decoded
+  # ~20x faster than in software; frames differ by ~1 grey level on average,
+  # so results can differ slightly from software-decoded runs). Falls back
+  # to software decoding; false forces software.
+  hardware_decoding: true
 
 models:
   person_detector: yolo11n.pt

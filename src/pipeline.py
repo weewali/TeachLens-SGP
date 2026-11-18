@@ -198,7 +198,8 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
         nonlocal info, last_time, analyzer, overlay
         series: dict[int, list] = defaultdict(list)  # faces on frames between samples
         for info, timestamp, frame, is_sample in frames_with_subsamples(
-                video, float(config["video"]["sample_every_seconds"]), start, end, extra_faces):
+                video, float(config["video"]["sample_every_seconds"]), start, end, extra_faces,
+                bool(config["video"].get("hardware_decoding", True))):
             if not is_sample:
                 for track_id, mesh in landmarker.estimate_crops(frame).items():
                     series[track_id].append((timestamp, mesh))
@@ -369,7 +370,8 @@ def detect_objects(video: Path, video_id: str, camera_id: str, config: dict[str,
 
     def evidence():
         for info, timestamp, frame in frames(video, float(config["video"]["sample_every_seconds"]),
-                                             start, end):
+                                             start, end,
+                                             bool(config["video"].get("hardware_decoding", True))):
             if state["overlay"] is None:
                 LOGGER.info("video=%s camera=%s objects=%s sample_period=%.3fs range=%.3fs-%s",
                             video_id, camera_id, ", ".join(labels), info.sample_period, start,

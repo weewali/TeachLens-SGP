@@ -262,3 +262,44 @@ def onsets(events: Sequence[dict[str, Any]], indicator: str, role: str, labels: 
                 result.append(w)
             last = t
     return result
+
+
+# Teacher action onsets for peri-event averages: name -> (indicator, labels).
+TEACHER_EVENTS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "board_or_screen_start": ("board_interaction", ("board", "screen")),
+    "writing_start": ("writing_on_board", ("writing",)),
+    "pointing_start": ("pointing", ("board", "screen", "desk", "students", "side")),
+    "pointing_at_students_start": ("pointing", ("students",)),
+    "turn_to_class": ("facing_direction", ("toward_class",)),
+    "walking_start": ("gesture", ("walking",)),
+    "raised_hand_start": ("raised_hand", ("one", "both")),
+}
+LIMITATIONS = [
+    "Associations within one recording, not causes: a teacher behaviour that precedes a student change "
+    "may share a cause with it (the lesson plan, the topic, a script).",
+    "Cameras are lined up by whole-second recording tags: about +/-1 s, hence 5 s windows.",
+    "Student values are class averages of the known student time; unknown time is excluded, not zero.",
+    "Teacher features present in fewer than min_active_windows windows are not tested by correlation; "
+    "their onsets get peri-event averages when there are enough of them.",
+    "Short or scripted lessons have little variation and few windows; findings need full lectures or "
+    "several lessons before they say anything about teaching.",
+]
+
+
+def fuse_runs(student: Sequence[dict[str, Any]], teacher: Sequence[dict[str, Any]],
+              settings: dict[str, Any], window_seconds: float | None = None) -> tuple[Any, dict[str, Any]]:
+    """Window table and lag-analysis report for one lesson's two loaded runs (load_events).
+
+    settings is the config's fusion: section; window_seconds overrides its
+    window_seconds.
+    """
+    from src.analysis.lag_analysis import analyze
+    window = float(window_seconds or settings.get("window_seconds", 5.0))
+    table, metadata = build_windows(student, teacher, window_seconds=window,
+                                    min_known_fraction=float(settings.get("min_known_fraction", 0.5)))
+    start, _ = overlap_range(student, teacher)
+    teacher_onsets = {name: onsets(teacher, indicator, "teacher", labels, start, window, len(table),
+                                   float(settings.get("onset_min_gap_seconds", 10)))
+                      for name, (indicator, labels) in TEACHER_EVENTS.items()}
+    results = analyze(table, metadata, settings, teacher_onsets)
+    return table, {**metadata, "teacher_onsets": teacher_onsets, **results, "limitations": LIMITATIONS}

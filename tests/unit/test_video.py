@@ -42,6 +42,14 @@ class SegmentTests(unittest.TestCase):
     def test_start_after_video_end_yields_nothing(self):
         self.assertEqual(self.read(10.0), [])
 
+    def test_software_and_hardware_decoding_give_the_same_samples(self):
+        # Hardware decoding falls back to software when no decoder fits this clip.
+        software = [(round(time, 3), int(frame.mean())) for _, time, frame
+                    in frames(self.path, .2, 0.5, 3.0, hardware_decoding=False)]
+        self.assertEqual([t for t, _ in software], [t for t, _ in self.read(0.5, 3.0)])
+        for (_, a), (_, b) in zip(software, self.read(0.5, 3.0)):
+            self.assertAlmostEqual(a, b, delta=2)
+
 
 if __name__ == "__main__":
     unittest.main()

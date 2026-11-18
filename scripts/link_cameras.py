@@ -1,7 +1,8 @@
 """Link a lesson's student-view and instructor-view runs by real time.
 
 Reads two saved runs (outputs/events/<id>.list_a.jsonl; no video or model)
-and writes outputs/reports/<name>.cross_camera.json: students who left the
+and writes outputs/reports/<name>.cross_camera.json
+(scripts/analyze_lesson.py runs this step automatically): students who left the
 student view and appeared at the front (with time at the board), and the
 teacher walking into the student view. Run both cameras with position,
 entry_exit, and teacher_presence on (all three are List A defaults).
@@ -12,14 +13,13 @@ Examples (repository root, TeachLens environment):
 """
 
 import argparse
-import json
 from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.analysis.cross_camera import link_cameras, read_events  # noqa: E402
-from src.utils.config import load_config, load_targets  # noqa: E402
+from src.lesson import link_runs, write_json  # noqa: E402
+from src.utils.config import load_config  # noqa: E402
 from src.utils.paths import project_path  # noqa: E402
 
 
@@ -43,14 +43,10 @@ def main() -> int:
         print(f"Missing runs: {', '.join(missing)}", file=sys.stderr)
         return 1
     config = load_config(args.config, args.local_config)
-    board = load_targets(config["cameras"]["instructor_view"].get("zones"), "instructor_view").get("board")
-    report = link_cameras(read_events(paths["student"]), read_events(paths["instructor"]),
-                          window_seconds=args.window, board=board,
-                          sample_period=float(config["video"]["sample_every_seconds"]))
-    report.update({"student_run": args.student, "instructor_run": args.instructor})
+    report = {"lesson": args.name, "student_run": args.student, "instructor_run": args.instructor,
+              **link_runs(paths["student"], paths["instructor"], config, args.window)}
     out = args.output_dir / "reports" / f"{args.name}.cross_camera.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    write_json(out, report)
     for link in report["links"]:
         if link["link"] == "student_to_front":
             others = ", ".join(f"#{c['track_id']} +{c['seconds_after_leaving']}s board {c['at_board_seconds']}s"

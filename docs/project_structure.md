@@ -240,7 +240,7 @@ Create a Python file below only when its first behavior and tests are implemente
 | Planned file | Responsibility |
 | --- | --- |
 | `annotated_video.py` | Current. Draws each analyzed sample's boxes, confident joints, anonymous IDs, assumed roles, and rule states from `PosePerson` observations and the analyzer's `SampleSnapshot`. Optionally draws teacher/all path trails in camera-shot coordinates. Writes `outputs/debug/<id>.list_a.mp4` atomically and runs the optional live OpenCV window. No model or rule logic belongs here. |
-| `charts.py` | Build deterministic timelines, heatmaps, and summary charts from aggregate tables. Save plots under `outputs/visualizations/`. |
+| `charts.py` | Current (2026-11-18): `plot_fusion_timelines()` draws the teacher and class share timelines of a fused lesson under `outputs/visualizations/`. Later heatmaps and summary charts belong here too. |
 | `renderer.py` | Validate report inputs, render the Jinja2 template, attach evidence/limitations, and write HTML under `outputs/reports/`. PDF export may be added behind the same interface. |
 | `templates/report.html.j2` | Own the semantic HTML report layout and Jinja2 placeholders. It should display observation, denominator, confidence, and limitation together. |
 | `templates/report.css` | Own print-friendly report styling. No analysis logic or hard-coded metrics belongs here. |
@@ -266,6 +266,8 @@ Pose action rules should first be evaluated using the pretrained pose model. Add
 
 This module currently orchestrates one List A run: validate input, call preprocessing and pose tracking, save JSONL events, write the annotated review MP4 and optional live preview through `src/reporting/annotated_video.py`, and generate a JSON summary. HTML/PDF rendering remains planned. It coordinates modules rather than containing model or indicator logic.
 
+`src/lesson.py` (2026-11-18) orchestrates one lesson on top of it: line up the two recordings by real time, call `analyze_video()` for each camera (or reuse saved runs), link the cameras, fuse and run the lag analysis, and write `<lesson>.lesson.json`. It holds no model or rule logic either.
+
 ## 8. Scripts
 
 Scripts are thin developer-facing entry points. Reusable behavior belongs under `src/`; a script should parse arguments and call that behavior.
@@ -277,6 +279,7 @@ Scripts are thin developer-facing entry points. Reusable behavior belongs under 
 | `scripts/recording_time.py` | Python | Current thin CLI: prints each video's recording start/end (HH:MM:SS), duration, frame rate, and clock time at given positions from container metadata via `src/preprocessing/recording_time.py`; with several videos, start differences in whole seconds. Never prints GPS values. |
 | `scripts/train.py` | Python, future | Thin CLI that loads config and calls `src/training/train_detector.py`. |
 | `scripts/analyze.py` | Python, current | Thin CLI that analyzes one recording through `src/pipeline.py`; `--start/--end` select a segment, and `--live`, `--save-video/--no-save-video`, and `--path` control the review outputs. |
+| `scripts/analyze_lesson.py` | Python, current | One command per lesson over `src/lesson.py`: two videos (or manifest scenarios) in, both camera runs, camera links, fusion, and `<lesson>.lesson.json` out (docs/lesson_pipeline.md). |
 | `scripts/fuse_lesson.py` | Python, current | Thin CLI over `src/analysis/fusion.py` and `lag_analysis.py`: fuses a lesson's two saved runs and writes the fusion JSON, window/link CSVs, and a timeline PNG. |
 | `scripts/report.py` | Python, future | Re-renders a report from saved events/aggregates without rerunning expensive models. |
 
@@ -310,6 +313,7 @@ Model files and generated outputs are local artifacts and remain ignored by Git.
 | --- | --- |
 | `docs/project_structure.md` | This architecture map and the source of truth for file ownership. Update it when a boundary or major file changes. |
 | `docs/test_recording_scenarios.pdf` | Filming plan for short static-camera test lectures (4-6 students): camera setup, behaviour codes, scenarios with per-student roles, calibration clips, and a ground-truth log template. |
+| `docs/lesson_pipeline.md` | One command per lesson: steps, options, run time, scenario results. |
 | `docs/fusion_lag_analysis.md` | Lesson fusion and lag analysis: window features, tests, guardrails, outputs, A1 results, limits. |
 | `docs/video_indicator_catalog.md` | Full catalog of defensible visual, audio, transcript, interaction, and quality indicators plus claims TeachLens must avoid. |
 | `docs/annotation_guidelines.md` | Label names and bounding-box rules for the reviewed two-class annotation workflow. |
