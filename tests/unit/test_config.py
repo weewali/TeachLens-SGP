@@ -109,6 +109,17 @@ class ConfigurationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_config(broken)
 
+    def test_fusion_settings_are_validated(self):
+        config = load_config(project_path("configs/default.yaml"))
+        self.assertEqual(config["fusion"]["window_seconds"], 5.0)
+        self.assertEqual(config["fusion"]["model_lags"], [1, 2, 3])
+        for key, value in (("window_seconds", 0), ("alpha", 1.5), ("min_known_fraction", 0),
+                           ("model_lags", [0]), ("model_lags", 2), ("permutations", -1)):
+            broken = deepcopy(config)
+            broken["fusion"][key] = value
+            with self.assertRaises(ValueError, msg=key):
+                validate_config(broken)
+
     def test_select_indicators_keeps_only_chosen_switches(self):
         enabled = load_indicator_flags("configs/indicators.yaml")
         self.assertIs(select_indicators(enabled, None), enabled)

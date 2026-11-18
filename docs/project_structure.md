@@ -232,6 +232,8 @@ Create a Python file below only when its first behavior and tests are implemente
 | `interaction_indicators.py` | Link teacher prompts, student responses, hand raises, feedback, orientation, and proximity into cross-modal interaction events. |
 | `quality.py` | Measure blur, brightness, coverage, audio quality, ASR confidence, occlusion, and tracking reliability; provide the validity denominator for every metric. |
 | `aggregates.py` | Current List A JSON summary derived from saved events. Full report/chart aggregation remains planned. |
+| `fusion.py` | Current (2026-11-18): one lesson's two saved runs on a shared real-time line, cut into windows; one column per teacher/student feature (docs/fusion_lag_analysis.md). |
+| `lag_analysis.py` | Current (2026-11-18): lag correlation with circular-shift tests and q-values, lagged OLS with Newey-West errors, peri-event averages, findings labelled strength / weak point / observation. |
 
 ### `src/reporting/`
 
@@ -275,6 +277,7 @@ Scripts are thin developer-facing entry points. Reusable behavior belongs under 
 | `scripts/recording_time.py` | Python | Current thin CLI: prints each video's recording start/end (HH:MM:SS), duration, frame rate, and clock time at given positions from container metadata via `src/preprocessing/recording_time.py`; with several videos, start differences in whole seconds. Never prints GPS values. |
 | `scripts/train.py` | Python, future | Thin CLI that loads config and calls `src/training/train_detector.py`. |
 | `scripts/analyze.py` | Python, current | Thin CLI that analyzes one recording through `src/pipeline.py`; `--start/--end` select a segment, and `--live`, `--save-video/--no-save-video`, and `--path` control the review outputs. |
+| `scripts/fuse_lesson.py` | Python, current | Thin CLI over `src/analysis/fusion.py` and `lag_analysis.py`: fuses a lesson's two saved runs and writes the fusion JSON, window/link CSVs, and a timeline PNG. |
 | `scripts/report.py` | Python, future | Re-renders a report from saved events/aggregates without rerunning expensive models. |
 
 ## 9. Tests
@@ -307,6 +310,7 @@ Model files and generated outputs are local artifacts and remain ignored by Git.
 | --- | --- |
 | `docs/project_structure.md` | This architecture map and the source of truth for file ownership. Update it when a boundary or major file changes. |
 | `docs/test_recording_scenarios.pdf` | Filming plan for short static-camera test lectures (4-6 students): camera setup, behaviour codes, scenarios with per-student roles, calibration clips, and a ground-truth log template. |
+| `docs/fusion_lag_analysis.md` | Lesson fusion and lag analysis: window features, tests, guardrails, outputs, A1 results, limits. |
 | `docs/video_indicator_catalog.md` | Full catalog of defensible visual, audio, transcript, interaction, and quality indicators plus claims TeachLens must avoid. |
 | `docs/annotation_guidelines.md` | Label names and bounding-box rules for the reviewed two-class annotation workflow. |
 | `docs/annotation_review.md` | Review checklist and audit table for labeled batches. |

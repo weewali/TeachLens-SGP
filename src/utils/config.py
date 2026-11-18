@@ -101,6 +101,16 @@ def validate_config(config: dict[str, Any]) -> None:
                 "outcome_talk_seconds", "raise_low_min_seconds"):
         if key in students and float(students[key]) <= 0:
             raise ValueError(f"students.{key} must be positive")
+    fusion = config.get("fusion") or {}
+    for key in ("window_seconds", "min_active_windows", "permutations", "max_lag_windows", "min_events"):
+        if key in fusion and float(fusion[key]) <= 0:
+            raise ValueError(f"fusion.{key} must be positive")
+    for key in ("min_known_fraction", "alpha"):
+        if key in fusion and not 0 < float(fusion[key]) <= 1:
+            raise ValueError(f"fusion.{key} must be in (0, 1]")
+    lags = fusion.get("model_lags", [1])
+    if not isinstance(lags, list) or not all(isinstance(k, int) and k >= 1 for k in lags):
+        raise ValueError("fusion.model_lags must be a list of positive whole numbers of windows")
     objects = config.get("objects") or {}
     classes = objects.get("classes", [])
     if not isinstance(classes, list) or not all(isinstance(c, str) and c for c in classes):

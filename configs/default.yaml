@@ -253,6 +253,26 @@ teacher:
   lean_strong_min_degrees: 25
   writing_smoothing_samples: 3    # writing = majority of the last N samples
 
+# Lesson fusion and lag analysis (scripts/fuse_lesson.py; SGP1 proposal FR 6,
+# built 2026-11-18). Reads two saved runs of one lesson, lines them up by real
+# time (+/-1 s, hence windows of several seconds), and tests whether student
+# changes follow teacher actions. Associations, not causes; unvalidated.
+fusion:
+  window_seconds: 5.0         # analysis window on the shared real-time line
+  min_known_fraction: 0.5     # a share needs this fraction of a window of known evidence
+  max_lag_windows: 6          # lags tested: 1..6 windows (5-30 s) after the teacher action
+  min_active_windows: 5       # teacher features present in fewer windows are not correlated
+  permutations: 500           # circular shifts / random onsets per test
+  alpha: 0.05                 # q-value (Benjamini-Hochberg) for a finding
+  seed: 0                     # random generator seed; same seed, same p-values
+  model_lags: [1, 2, 3]       # lagged models Y_t ~ X_(t-k) + Y_(t-1) for these k
+  outcomes: [S_on_target, S_off_target, S_phone, S_talking, S_head_down]
+  model_predictors: [T_facing_class, T_board_or_screen, T_gesturing, T_walking, T_pointing, T_writing]
+  min_events: 3               # peri-event averages need at least this many teacher onsets
+  onset_min_gap_seconds: 10   # onsets closer than this to the previous one are one onset
+  peri_event_before_windows: 2
+  peri_event_after_windows: 4
+
 # Visual check of what List A saw in each analyzed (sampled) frame. The MP4
 # holds original classroom footage: it stays local under outputs/debug/
 # (ignored by Git) and must not be shared without the recording's permission.
