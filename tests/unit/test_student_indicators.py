@@ -175,7 +175,7 @@ class DeskActivityTests(unittest.TestCase):
         rec = self.run_rules(warm + [(person(self.DOWN, drop=(3, 4)), None)], [phone])
         self.assertEqual(rec.labels("device_use")[-1], "phone")
 
-    def test_laptop_hidden_phone_writing_reading(self):
+    def test_laptop_writing_reading(self):
         warm = [(person(), None)] * 5
         laptop = DetectedObject("laptop", .9, (.40, .46, .60, .64))  # open: box 180 x 200 px
         rec = self.run_rules(warm + [(person(self.DOWN, drop=(3, 4)), None)], [laptop])
@@ -183,22 +183,51 @@ class DeskActivityTests(unittest.TestCase):
         closed = DetectedObject("laptop", .9, (.40, .55, .60, .58))  # a flat slab
         rec = self.run_rules(warm + [(person(self.DOWN, drop=(3, 4)), None)], [closed])
         self.assertEqual(rec.labels("device_use")[-1], "none")
-        held = {**self.DOWN, 9: (.52, .50), 10: (.48, .50)}  # both hands together at the chest
-        rec = self.run_rules(warm + [(person(held, drop=(3, 4)), None)] * 3)
-        self.assertEqual(rec.labels("device_use")[-1], "phone_held_possible")
-        self.assertNotIn("writing", rec.labels("note_taking"))
-        low = {**self.DOWN, 9: (.52, .62), 10: (.48, .62)}  # hands together in the lap
-        rec = self.run_rules(warm + [(person(low, drop=(3, 4)), None)] * 3)
-        self.assertEqual(rec.labels("device_use")[-3:], ["none", "none", "phone_hidden_possible"])
-        writing = [(person({**self.DOWN, 10: (.44 + .01 * (i % 2), .50)}, drop=(3, 4)), None) for i in range(4)]
+        writing = [(person({**self.DOWN, 10: (.44 + .01 * (i % 2), .50)}, drop=(3, 4)), None) for i in range(6)]
         rec = self.run_rules(warm + writing)
         self.assertEqual(rec.labels("note_taking")[-1], "writing")
-        usual = mesh(eyeLookDownLeft=.3, eyeLookDownRight=.3)  # watching the front reads a little down
+        self.assertNotIn("phone_likely", rec.labels("device_use"))  # a writing hand is not a phone
+        book = DetectedObject("book", .8, (.42, .55, .58, .62))
         eyes_down = mesh(eyeLookDownLeft=.6, eyeLookDownRight=.6)
-        rec = self.run_rules([(person(), usual)] * 5 + [(person(), eyes_down)] * 3)
+        rec = self.run_rules([(person(), eyes_down)] * 8, [book])
         self.assertEqual(rec.labels("reading")[-1], "reading")
-        rec = self.run_rules([(person(), eyes_down)] * 8)  # always this low: the student's normal
-        self.assertNotIn("reading", rec.labels("reading"))
+
+    def test_phone_seen_moments_ago_stays_in_use_while_head_down(self):
+        warm = [(person(), None)] * 5
+        down = person(self.DOWN, drop=(3, 4))
+        phone = DetectedObject("cell phone", .8, (.43, .55, .46, .58))
+        rec = Recorder()
+        rules = StudentBehavior("v", self.ON, .35, 1.0, None, rec)
+        book = DetectedObject("book", .8, (.42, .55, .58, .62))  # a paper on the desk
+        for time, (p, _) in enumerate(warm + [(down, None)] * 4):
+            seen = [phone] if time == 5 else []  # the detector finds the phone once
+            rules.update(float(time), [StudentObservation(1, p, "student")], seen + [book])
+        self.assertEqual(rec.labels("device_use")[5:], ["phone"] * 4)
+        for time in (9.0, 10.0):  # head up for 2 s (one up second is tolerated as a flicker)
+            rules.update(time, [StudentObservation(1, person(), "student")], [book])
+        self.assertEqual(rec.labels("device_use")[-1], "none")
+
+    def test_sustained_head_down_is_a_phone_not_seen(self):
+        """User, 2026-11-18: phones under the desk or covered by the hands are not
+        detected, but the head stays pointed down at them."""
+        warm = [(person(), None)] * 5
+        held = {**self.DOWN, 9: (.52, .50), 10: (.48, .50)}  # both hands together at the chest
+        rec = self.run_rules(warm + [(person(held, drop=(3, 4)), None)] * 6)
+        self.assertEqual(rec.labels("device_use")[5:], ["none"] * 3 + ["phone_likely"] * 3)  # 4 of the last 5 s
+        flicker = [held, held, None, held, held]  # one frame with the head up
+        frames = warm + [(person(h, drop=(3, 4)) if h else person(), None) for h in flicker]
+        rec = self.run_rules(frames)
+        self.assertEqual(rec.labels("device_use")[-1], "phone_likely")
+        self.assertNotIn("writing", rec.labels("note_taking"))
+        lap = {**self.DOWN, 9: (.52, .66), 10: (.48, .66)}  # hands under the desk
+        rec = self.run_rules(warm + [(person(lap, drop=(3, 4)), None)] * 6)
+        self.assertEqual(rec.labels("device_use")[-1], "phone_likely")
+        always = mesh(eyeLookDownLeft=.6, eyeLookDownRight=.6)  # eyes down the whole time, no book
+        rec = self.run_rules([(person(), always)] * 8)
+        self.assertEqual(rec.labels("device_use")[-1], "phone_likely")
+        resting = {0: (.50, .40), 1: (.51, .395), 2: (.49, .395)}  # head on the arms, below the shoulders
+        rec = self.run_rules(warm + [(person(resting, drop=(3, 4)), None)] * 8)
+        self.assertNotIn("phone_likely", rec.labels("device_use"))  # sleep, not a phone
 
     def test_response_gesture(self):
         rec = Recorder()

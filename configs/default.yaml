@@ -194,13 +194,17 @@ students:
   held_phone_max_gap: 0.6         # wrists this close, still, in front of the body + looking down = phone held (not seen)
   writing_min_speed: 0.03         # wrist speed relative to the shoulders, widths per second
   writing_max_speed: 0.6
-  hidden_phone_min_seconds: 3.0
+  phone_head_down_seconds: 5.0    # head pointed down this long, phone not seen -> phone_likely (user, 2026-11-18)
+  phone_eyes_down: 0.55           # mean eyeLookDown counted as pointed down
+  phone_memory_seconds: 10        # a phone seen at the hands stays "phone" this long while the head stays down
   gesture_min_score: 0.6
   peer_row_widths: 1.5
   peer_max_widths: 6.0
   outcome_window_seconds: 12      # talking or standing up to this long after a raise = answered
   outcome_talk_seconds: 3.0       # talking while facing the front (talk to a neighbour is a chat)
   object_classes: [cell phone, laptop, book]
+  object_image_size: 1920         # phones in hands: 0.05-0.20 at 1280, 0.29-0.90 at 1920 (A4)
+  object_confidence: 0.2          # objects only count near a student's hands or in front of them
   gesture_model: models/hands/gesture_recognizer.task
 
 # Join tracker IDs of one walking person (src/inference/tracking.py): at one

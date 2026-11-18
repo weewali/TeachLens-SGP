@@ -13,7 +13,7 @@ and the COCO objects detected in the frame (src/inference/objects.py).
 | out_of_seat | in_seat, out_of_seat | shoulder midpoint far from the home seat (standing up in place stays in the seat) |
 | head_down | down, up | head height above the shoulders drops or nearly reaches them; face pitch drops; nose seen but both eyes hidden (head bowed, seen from above); no face and no head above the shoulders, or shoulders dropped (head on the desk) |
 | alertness | awake, tired, dozing, possible_sleep | yawn; eyes closed >= 2 s; head down and still for 20 s with the face hidden (head on the arms), or eyes closed for 10 s; head down with the face visible is awake (phone, notes) |
-| device_use | phone, phone_held_possible, phone_hidden_possible, laptop, none | looking down at a detected phone at a hand (or held up); looking down with both hands together in front of the body for 3 s (phone held, not seen); head down with hands low and together for 3 s (phone under the desk, not seen); looking down with hands or eyes on a laptop |
+| device_use | phone, phone_likely, laptop, none | phone: a detected phone at a hand while looking down at it or holding it up, or lying in front while looked at; phone_likely: the head pointed down (not turned to a neighbour, not resting on the arms) for 5 s while not writing, not reading something detected, and not facing an open laptop (phone under the desk or covered by the hands, not seen); laptop: hands on, or the head down at, an open laptop in front |
 | note_taking | writing, not_writing | looking down with a hand on the desk moving a little, no device |
 | reading | reading, not_reading | eyes looking down with hands still, no device (a book nearby makes it adequate) |
 | response_gesture | thumbs_up, thumbs_down, open_palm, pointing_up, victory, i_love_you, none | Gesture Recognizer on the wrist crops |
@@ -78,7 +78,9 @@ DEFAULTS: dict[str, float] = {
     "held_phone_max_gap": 0.6,        # wrists this close together in front of the body = holding something
     "writing_min_speed": 0.03,        # wrist speed relative to the shoulders, widths per second
     "writing_max_speed": 0.6,
-    "hidden_phone_min_seconds": 3.0,
+    "phone_head_down_seconds": 5.0,   # head pointed down in all but one of the last 5 s, phone not seen = phone_likely
+    "phone_memory_seconds": 10.0,     # a phone seen at the hands stays in use this long while the head stays down
+    "phone_eyes_down": 0.55,          # mean eyeLookDown this high counts as pointed down (A4 phone users 0.44-0.63)
     "activity_smoothing_samples": 3,
     "gesture_min_score": 0.6,
     "history_seconds": 300.0,
@@ -248,8 +250,8 @@ class _Student:
     away_since: float | None = None
     down_since: float | None = None
     eyes_closed_since: float | None = None
-    hidden_phone_since: float | None = None
-    held_phone_since: float | None = None
+    phone_down: deque = field(default_factory=lambda: deque(maxlen=30))  # head pointed down, per sample
+    phone_seen_at: float | None = None
     moved: deque = field(default_factory=lambda: deque(maxlen=3))
     low_raise_since: float | None = None
     raise_episode: dict[str, Any] | None = None
@@ -591,59 +593,61 @@ class StudentBehavior:
             on_laptop = any(self._hand_on(tuple(v * size[i % 2] for i, v in enumerate(item.box)), wrists,
                                           0.3 * width) for item, _ in laptops)
             visible = [p for p in wrists.values() if p is not None]
-            hands_low = frame is not None and (not visible or all(p[1] > frame[0][1] + 2.0 * width for p in visible))
-            together = len(visible) < 2 or math.dist(*visible) <= 1.2 * width
-            # Both hands together in front of the body, head down: a phone held
-            # in both hands that the detector does not see (A2 back row: it read
-            # as writing before 2026-11-18).
+            # Both hands together in front of the body: holding something (a
+            # phone), not writing (A2 back row read as writing before 2026-11-18).
             both_held = (frame is not None and len(visible) == 2
                          and math.dist(*visible) <= s["held_phone_max_gap"] * width
                          and all(frame[0][1] - 0.5 * width <= p[1] <= frame[0][1] + 3.0 * width for p in visible)
                          and abs((visible[0][0] + visible[1][0]) / 2 - frame[0][0]) <= 1.2 * width)
-            # Only a device in use rules out a hidden phone: on A2 a closed laptop
-            # lying in front of a student with his phone in his lap blocked it
-            # (user correction 2026-11-18).
             moving = [v for v in speeds if s["writing_min_speed"] <= v <= s["writing_max_speed"]]
             # Writing is stop-and-go: a hand that moved in any of the last 3 samples.
             state.moved.append(bool(moving))
             moved_recently = any(state.moved)
-            no_device = not any(d <= s["object_near_wrist"] for d in phone) and not on_laptop
-            state.hidden_phone_since, hidden = self._held(
-                state.hidden_phone_since, looking_down and hands_low and together and no_device
-                and not labels.get("head_resting"),
-                time, float(s["hidden_phone_min_seconds"]))
-            # Holding a phone means looking at the hands, not turned to a neighbour
-            # (B1: folded hands while turned toward a classmate read as a phone).
+            on_desk = frame is not None and any(
+                frame[0][1] + 0.3 * width <= p[1] <= frame[0][1] + 2.5 * width for p in visible)
+            # Looking down at the own hands or desk, not turned to a neighbour.
             direction = ((obs.face_labels or {}).get("head_direction") if obs.face is not None
                          else None)
             sideways = (direction in ("turned_left", "turned_right") if direction not in (None, "unknown")
                         else facing_direction(obs.person, self.min_conf) in ("sideways_left", "sideways_right"))
-            state.held_phone_since, held = self._held(
-                state.held_phone_since, looking_down and both_held and not hands_low and no_device and not sideways
-                and not labels.get("head_resting"),
-                time, float(s["hidden_phone_min_seconds"]))
-            on_desk = frame is not None and any(
-                frame[0][1] + 0.3 * width <= p[1] <= frame[0][1] + 2.5 * width for p in visible)
-            # A phone or laptop only counts while the student looks down at it
-            # (or holds a phone up): on A1 a closed laptop next to resting
-            # hands and a phone lying near a hand read as use with the head up.
+            eyes_far_down = (labels.get("eyes_down") or 0) >= s["phone_eyes_down"]
+            pointed_down = (looking_down or eyes_far_down) and not sideways
+            # Phone use without seeing the phone (user, 2026-11-18): a phone under
+            # the desk or covered by the hands is not detected, but the head stays
+            # pointed down at it. A head resting on the arms is sleep, not a phone.
+            # Most of the last phone_head_down_seconds, so one frame where the
+            # head angle flickers does not restart the count (A4 front right).
+            window = max(1, round(float(s["phone_head_down_seconds"]) / self.period))
+            state.phone_down.append(pointed_down and not labels.get("head_resting"))
+            recent_down = list(state.phone_down)[-window:]
+            sustained = len(recent_down) >= window and sum(recent_down) >= max(1, window - 1)
+            # A detected phone at a hand counts while the student looks down at it
+            # or holds it up (A1: a phone lying by a resting hand with the head up
+            # is not use); a phone lying in front counts while looked at.
             in_hand = any(d <= s["object_near_wrist"] for d in phone)
             held_up = frame is not None and any(
                 d <= s["object_near_wrist"] and (item.box[1] + item.box[3]) / 2 * obs.person.height < frame[0][1]
                 for item, d in owned if item.label == "cell phone")
-            if (in_hand and (looking_down or held_up)) or (phone and eyes_low):
+            seen_now = (in_hand and (pointed_down or held_up)) or (phone and pointed_down and (eyes_low or eyes_far_down))
+            if seen_now:
+                state.phone_seen_at = time
+            # The detector finds a held phone in only some frames (A4: about half);
+            # while the head stays down, a phone seen moments ago is still in use
+            # and outranks a paper on the desk (read as a book) or thumbs moving
+            # (read as writing).
+            recent_phone = (state.phone_seen_at is not None and pointed_down
+                            and time - state.phone_seen_at <= s["phone_memory_seconds"])
+            if seen_now or recent_phone:
                 activity = "phone"
-            elif laptops and looking_down and (on_laptop or eyes_low):
-                activity = "laptop"
-            elif hidden:
-                activity = "phone_hidden_possible"
-            elif held:
-                activity = "phone_held_possible"
+            elif laptops and not sideways and (on_laptop or pointed_down):
+                activity = "laptop"  # hands on, or the head down at, an open laptop in front
             elif looking_down and on_desk and moved_recently and not both_held:
                 activity = "writing"
-            elif obs.face is not None and eyes_low and not moved_recently \
+            elif books and pointed_down and not moved_recently \
                     and (obs.face_labels or {}).get("eyes_closed") != "closed":
-                activity = "reading"
+                activity = "reading"  # something to read in front, hands still
+            elif sustained:
+                activity = "phone_likely"
             elif looking_down:
                 activity = "looking_down"
             else:
@@ -659,11 +663,10 @@ class StudentBehavior:
         events: list[Event] = []
         known = activity != "unknown"
         if self.on["device_use"]:
-            device = (activity if activity in ("phone", "phone_hidden_possible", "phone_held_possible", "laptop")
+            device = (activity if activity in ("phone", "phone_likely", "laptop")
                       else ("none" if known else "unknown"))
             events += self.segment("device_use", obs.track_id, time, device, obs.role, None,
-                                   "limited" if device in ("unknown", "phone_hidden_possible", "phone_held_possible")
-                                   else "adequate")
+                                   "limited" if device in ("unknown", "phone_likely") else "adequate")
             labels["device_use"] = device
         if self.on["note_taking"]:
             note = "writing" if activity == "writing" else ("not_writing" if known else "unknown")

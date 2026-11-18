@@ -161,8 +161,9 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
         object_model = ObjectDetector(
             project_path(objects_settings.get("detector", "models/detection/yolo26n.pt")),
             list(student_settings.get("object_classes") or ["cell phone", "laptop", "book"]),
-            float(objects_settings.get("confidence_threshold", 0.25)),
-            float(objects_settings.get("iou_threshold", 0.45)), objects_settings.get("image_size"), device)
+            float(student_settings.get("object_confidence", objects_settings.get("confidence_threshold", 0.25))),
+            float(objects_settings.get("iou_threshold", 0.45)),
+            student_settings.get("object_image_size", objects_settings.get("image_size")), device)
     if is_student_camera and on & {"response_gesture", "hand_raise", "hand_raise_outcome"}:
         gestures_model = HandGestures(
             project_path(student_settings.get("gesture_model", "models/hands/gesture_recognizer.task")),

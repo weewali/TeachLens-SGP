@@ -18,7 +18,7 @@ resting; a phone may be course work; facing the front is not attention.
 | 6 | Visual-orientation proxy | `orientation_proxy` | on_target when facing the current focus: a classmate who is answering (talking after a raise, or standing), otherwise the front. Facing a chatting classmate is off_target; looking down (notes, phone, reading) is kept apart; the answering student is `speaking`. Summary: on-target share of known time. |
 | 7 | Note-taking/writing | `note_taking` | looking down, a wrist on the desk area moving a little (0.03-0.6 shoulder widths per second relative to the shoulders), no phone/laptop in use; majority of the last 3 samples (students look up every 10-20 s). |
 | 8 | Reading | `reading` | the face model sees the eyes looking down (eyeLookDown), hands still, eyes not closed, no phone/laptop in use; a COCO book in front makes it `adequate`. |
-| 9 | Device use, phone on the desk or under it, laptop | `device_use` | phone: looking down at a detected phone (COCO) at a hand, or holding it up. Phones are often too small or hidden to detect, so two inferred labels use head orientation and hands (user suggestion 2026-11-18): phone_held_possible = looking down at both hands held together in front of the body for 3 s, not turned to a neighbour; phone_hidden_possible = head down with both hands low (in the lap, under the desk) for 3 s. laptop: looking down with hands or eyes on an open laptop; a closed laptop (a flat box, height/width below 0.7; A2: closed 0.34-0.54, open about 1.07) is not in use and does not rule out a phone. |
+| 9 | Device use, phone on the desk or under it, laptop | `device_use` | User design 2026-11-18: a phone seen in hand, or the head pointed down for a sustained time. **phone**: the COCO detector (run at 1920 pixels on the student camera: phones in hands scored 0.05-0.20 at 1280, 0.29-0.90 at 1920) finds a phone at a hand while the student looks down at it or holds it up, or lying in front while looked at; it then stays "phone" for 10 s while the head stays down (the detector finds a held phone in about half the frames). **phone_likely**: the head pointed down (ears raised above the eyes, nose dropped, bowed head, or eyes looking down; not turned to a neighbour, not resting on the arms) in 4 of the last 5 seconds while not writing, not reading something detected, and not using an open laptop: a phone under the desk or covered by the hands, not seen. **laptop**: hands on, or the head down at, an open laptop (a closed laptop is a flat box, height/width below 0.7, and does not count). |
 | 10 | Learning material use | - | Skipped: no openly downloadable classroom-items dataset found. Roboflow "Study desk items" (CC BY 4.0: pen, lecture notes, calculator...) needs the user's own Roboflow account; the COCO `book` class is used as reading evidence only. |
 | 11 | Standing/sitting | `sitting_standing` (List A) | Already implemented (shoulder rise on the student camera). |
 | 12 | Out-of-seat movement; walkers lost at 1 frame/s | `out_of_seat` + track stitching | Out of seat: shoulders >= 1.5 widths sideways from the home seat (or beyond standing height) for 2 s; standing up in place stays in the seat. Stitching (`src/inference/tracking.py`, `tracking.stitch`): ByteTrack links boxes by overlap and cannot link a walker whose boxes a second apart do not touch; the stitcher gives a new tracker ID the ID of a person lost within 2.5 s who could have walked there (1.5 box heights/s) and has a similar size, only when exactly one fits. |
@@ -108,7 +108,7 @@ python scripts/link_cameras.py --student sgp_A1_student_base --instructor sgp_A1
 | `out_of_seat` | interval | in_seat, out_of_seat, unknown |
 | `head_down` | interval | down, up, unknown |
 | `alertness` | interval | awake, tired, dozing, possible_sleep, unknown |
-| `device_use` | interval | phone, phone_held_possible, phone_hidden_possible, laptop, none, unknown |
+| `device_use` | interval | phone, phone_likely, laptop, none, unknown |
 | `note_taking` | interval | writing, not_writing, unknown |
 | `reading` | interval | reading, not_reading, unknown |
 | `response_gesture` | interval | thumbs_up, thumbs_down, open_palm, pointing_up, victory, i_love_you, none, unknown |
@@ -134,7 +134,10 @@ without looking down), `seats` (seat and row tables with activity).
 - Hand-raise outcomes: only talking or standing within 12 s of the raise;
   without the teacher's speech a raise answered later, or a student who
   talks to a neighbour right after lowering a hand, is misread.
-- phone_hidden_possible is inferred from posture, never seen.
+- phone_likely is inferred from a sustained head-down posture; the phone is not
+  seen, and reading paper that is not detected, or staring at the desk, look
+  the same. A phone lying on the desk while a student looks down at notes can
+  read as phone for a few seconds (A1/B1: 7-19 s per student in 2 minutes).
 - All thresholds are starting values from A1/A2 frames, not validated.
 
 ## Checks so far (2026-11-17/18; not accuracy measurements)
@@ -160,23 +163,32 @@ minutes on CPU. Seats: 6 seats in 2 rows in all three, matching the class.
   six A3 outcomes were answered_likely in a chatty class; answers now need
   3 s of talking while facing the front (talking to a neighbour is a chat).
   Without the teacher's audio, who was really picked cannot be confirmed.
-- **Phone users (A2, user corrections 2026-11-18).** The back-right student
-  bent over his phone was labelled possible_sleep (head down and still);
-  sleep now needs the head resting at or below the shoulder line or a
-  hidden face. The front-middle student in a cap used his phone the whole
-  time but read `laptop` (a closed laptop in front of him) or nothing: his
-  bowed head is now seen from the ear and nose positions, closed laptops do
-  not count, and he reads phone_held_possible for 83 of 90 seconds
-  (A2 1:30-3:00). The back-right student: head down throughout,
-  phone_held_possible 9 s, no sleep. Phones themselves were detected for
-  only a few seconds: in hands they are too small or covered, and running
-  the detector on an enlarged crop of the hands found laptops on the desk,
-  not the phones. Clasped hands look like a phone held in both hands, so
-  the B1 camera (moved, steeper) at first gave 30-85 s of
-  phone_held_possible to several attentive students; with the ear/nose
-  thresholds set from B1's upright students (ears up to -0.52, nose up to
-  0.69 eye distances) and hands within 0.6 shoulder widths, B1 6:00-8:00
-  has 2 s left while the A2 phone users stay detected.
+- **Phone users (A2, A4; user corrections 2026-11-18).** The back-right A2
+  student bent over his phone was labelled possible_sleep; sleep now needs
+  the head resting at or below the shoulder line or a hidden face. Then the
+  user showed an A4 frame where most students used phones (one in his hands,
+  others under the desk) and device_use said nothing: phones in hands were
+  too small for the detector at 1280 pixels, and the posture-based guesses
+  compared each student with their own usual head angle, so a student on
+  the phone the whole time had no "up" to compare with. Reworked as the
+  user proposed: a phone seen in hand (detector at 1920 pixels, kept 10 s
+  while the head stays down), or the head pointed down for a sustained
+  time (absolute cues: ears above the eyes, measured upright -0.52..+0.44
+  and on phone users -0.48..-1.07 eye distances). Segment runs, seconds per
+  student:
+  - A4 0:07-1:05 (57 s): the student with the phone in his hands 55 s
+    phone (was 20); back right 48 s phone; back left 14 s phone_likely;
+    back middle 24 s; front middle 15 s (phone lying in front); the
+    sleeping student 0.
+  - A2 1:30-3:00 (89 s): the front-middle student in a cap (phone under
+    the desk, closed laptop in front) 81 s phone_likely; back right 46 s;
+    back middle 29 s phone, then 2 s laptop.
+  - B1 6:00-8:00 (119 s): the late phone user 47 s; other students 3-19 s
+    (phones lying on desks while looking down), laptop 16 s on one.
+  - A1 0:30-2:30 (120 s, mostly attentive): the scripted message-checker
+    19 s; others 2-14 s.
+  Running the detector on an enlarged crop of the hands found the laptops
+  on the desks rather than the phones, so it is not used.
 - **Sleeping (B1).** The back-left student sleeps with his head on his
   arm (about 4:45-10:00 with breaks). The pose model still guesses a nose
   and an eye on the hidden face (confidence 0.4-0.5), so "face hidden" alone

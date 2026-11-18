@@ -209,7 +209,7 @@ def _orientation(seconds: dict[str, float] | None) -> dict[str, Any] | None:
 SEAT_ACTIVITY = {
     "talking_seconds": ("talking", ("talking",)),
     "smiling_seconds": ("smile", ("smiling",)),
-    "phone_seconds": ("device_use", ("phone", "phone_hidden_possible")),
+    "phone_seconds": ("device_use", ("phone", "phone_likely")),
     "laptop_seconds": ("device_use", ("laptop",)),
     "writing_seconds": ("note_taking", ("writing",)),
     "reading_seconds": ("reading", ("reading",)),
