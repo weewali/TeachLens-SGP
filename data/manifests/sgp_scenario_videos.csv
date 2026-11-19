@@ -1,0 +1,17 @@
+video_id,scenario,take,camera,file,duration_seconds,recording_start,recording_start_source,sync_start_seconds,sync_end_seconds,notes
+sgp_A1_student,A1,1,student_view,data/raw_student_videos/sgp_A1_student.MOV,294.140,2026-11-03T19:15:53.000+04:00,com.apple.quicktime.creationdate,8.00,284.43,
+sgp_A1_instructor,A1,1,instructor_view,data/raw_instructor_videos/sgp_A1_instructor.MOV,276.430,2026-11-03T19:16:01.000+04:00,com.apple.quicktime.creationdate,0.00,,
+sgp_A2_student,A2,1,student_view,data/raw_student_videos/sgp_A2_student.MOV,369.110,2026-11-03T19:23:27.000+04:00,com.apple.quicktime.creationdate,16.07,342.76,
+sgp_A2_instructor,A2,1,instructor_view,data/raw_instructor_videos/sgp_A2_instructor.MOV,326.702,2026-11-03T19:23:43.067+04:00,com.apple.quicktime.creationdate + 14.067 s cut (tag keeps uncut start),0.00,,
+sgp_A3_student,A3,1,student_view,data/raw_student_videos/sgp_A3_student.MOV,278.607,2026-11-03T19:37:41.000+04:00,com.apple.quicktime.creationdate,29.14,271.79,
+sgp_A3_instructor,A3,1,instructor_view,data/raw_instructor_videos/sgp_A3_instructor.MOV,242.665,2026-11-03T19:38:10.133+04:00,com.apple.quicktime.creationdate + 21.134 s cut (tag keeps uncut start),0.00,,
+sgp_A4_t1_student,A4,1,student_view,data/raw_student_videos/sgp_A4_t1_student.MOV,89.635,2026-11-03T19:45:17.000+04:00,com.apple.quicktime.creationdate,6.94,64.61,Recording cut out early
+sgp_A4_t1_instructor,A4,1,instructor_view,data/raw_instructor_videos/sgp_A4_t1_instructor.MOV,57.683,2026-11-03T19:45:23.933+04:00,com.apple.quicktime.creationdate + 34.934 s cut (tag keeps uncut start),0.00,,
+sgp_A4_t2_instructor,A4,2,instructor_view,data/raw_instructor_videos/sgp_A4_t2_instructor.MOV,202.653,2026-11-03T19:47:30.000+04:00,com.apple.quicktime.creationdate,,,No student counterpart
+sgp_A5_student,A5,1,student_view,data/raw_student_videos/sgp_A5_student.MOV,277.273,2026-11-03T19:55:38.000+04:00,com.apple.quicktime.creationdate,1.00,272.95,
+sgp_A5_instructor,A5,1,instructor_view,data/raw_instructor_videos/sgp_A5_instructor.MOV,271.950,2026-11-03T19:55:39.000+04:00,com.apple.quicktime.creationdate,0.00,,
+sgp_A6_student,A6,1,student_view,data/raw_student_videos/sgp_A6_student.MOV,371.675,2026-11-03T20:02:20.000+04:00,com.apple.quicktime.creationdate,7.41,368.61,
+sgp_A6_instructor,A6,1,instructor_view,data/raw_instructor_videos/sgp_A6_instructor.MOV,361.218,2026-11-03T20:02:27.400+04:00,com.apple.quicktime.creationdate + 6.400 s cut (tag keeps uncut start),0.00,,
+sgp_B1_student,B1,1,student_view,data/raw_student_videos/sgp_B1_student.MOV,689.450,2026-11-03T20:10:44.000+04:00,com.apple.quicktime.creationdate,2.00,627.74,
+sgp_B1_instructor,B1,1,instructor_view,data/raw_instructor_videos/sgp_B1_instructor.MOV,625.742,2026-11-03T20:10:46.000+04:00,com.apple.quicktime.creationdate,0.00,,
+iOS_20261103_162859,unknown,,instructor_view,data/raw_instructor_videos/20261103_162859000_iOS.MOV,347.753,2026-11-03T20:29:52.667+04:00,com.apple.quicktime.creationdate + 53.668 s cut (tag keeps uncut start),,,Filmed after B1 (was IMG_0187); no student counterpart

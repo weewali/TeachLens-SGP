@@ -1,0 +1,13 @@
+positive points:
+
+- Between 03:00 and 03:30, while you were explaining to the class, the students in view had their heads up all of the time. This was the highest for any 30 seconds of the lecture.
+- Students raised their hands 11 times (for example at 00:46, 01:12 and 04:20), all while you were explaining to the class, which took up 94% of the lecture.
+- For about 94% of the lecture that could be measured, at least 60% of the students in view had their heads up.
+
+negative points:
+
+- A phone was seen 17 times (for example at 00:02 in seat 4, 00:06 in seat 4 and 00:10 in seat 4). 15 of the 17 began while you were explaining to the class, about what you would expect, since that took up 94% of the lecture. Phones can also be used for course work.
+- Students kept their heads down and stayed still for 30 seconds or more 6 times (for example at 00:04 in seat 4, 00:40 in seat 4 and 00:42 in seat 6). Only 5 of the 6 began while you were explaining to the class: fewer than you would expect from the 94% of the lecture spent on it. This looks like resting, but quiet reading or writing looks the same.
+- Between 00:00 and 00:30, while you were explaining to the class, the students in view had their heads up about 61% of the time, the lowest for any 30 seconds of the lecture. Watching this part of the video may show what changed.
+
+Note: "heads up" means a student was looking up rather than down. It is a posture, not a measure of attention or learning: taking notes also looks like heads down. "Head down and still" means a head kept down, with almost no movement, for 30 seconds or more; it can be resting, but also quiet reading or writing. "Students in view" are the students the camera could see clearly. Times are minutes:seconds from when both cameras were recording. These are automatic detections that no person has checked yet.

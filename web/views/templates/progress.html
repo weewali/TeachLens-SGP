@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Progress · {{ context.name or lecture.id }} · TeachLens{% endblock %}
+{% block content %}
+<h1>{{ context.name or lecture.id }}</h1>
+{% if context.topic %}<p class="lead">{{ context.topic }}</p>{% endif %}
+
+<section class="card" id="progress" data-status-url="{{ url_for('lectures.status', lecture_id=lecture.id) }}">
+  <h2>Analysis progress</h2>
+  <p id="state-message" class="state-message" aria-live="polite">
+    {% if not status %}This lecture's analysis has not been started from here.{% else %}Loading…{% endif %}
+  </p>
+  <ol class="stages" id="stages">
+    {% for number, name in stages %}
+    <li data-stage="{{ number }}" class="stage" {% if number == 8 and not (status and status.use_llm) %}hidden{% endif %}>
+      <span class="dot" aria-hidden="true"></span>
+      <span class="stage-name">{{ name }}</span>
+      <span class="stage-state"></span>
+    </li>
+    {% endfor %}
+  </ol>
+  {% if notice %}<p class="banner" role="alert">{{ notice }}</p>{% endif %}
+  <p><a id="report-link" class="button button-big" href="{{ url_for('lectures.report', lecture_id=lecture.id) }}" hidden>Open the report</a></p>
+  <form id="rerun" method="post" action="{{ url_for('lectures.rerun', lecture_id=lecture.id) }}"
+        {% if not status or status.state not in ("failed", "interrupted") %}hidden{% endif %}>
+    <button class="button button-big" type="submit">Run the analysis again</button>
+    <span class="hint">Uses the videos you already uploaded.</span>
+  </form>
+  <details class="log">
+    <summary>Technical log</summary>
+    <pre id="log">{% if status %}{{ status.log | join('\n') }}{% endif %}</pre>
+  </details>
+  <p class="hint">An hour of video can take an hour or more to analyse. You can close this page and come back later:
+    the analysis keeps running and its progress is saved.</p>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='progress.js') }}"></script>{% endblock %}

@@ -1,0 +1,297 @@
+{
+  "schema_version": 2,
+  "lecture": {
+    "cameras": [
+      "instructor",
+      "students"
+    ],
+    "duration": "10:26",
+    "frames_analysed": 313,
+    "sampling_seconds": 2,
+    "window_seconds": 10,
+    "windows": 63
+  },
+  "data_quality": {
+    "mode": "two cameras: pose + object cues",
+    "instructor_visible_pct": 100,
+    "instructor_ambiguous_frames_pct": 39,
+    "student_posture_readable_pct": 93,
+    "instructor_posture_readable_pct": 76,
+    "limitations": [
+      "Behaviour labels come from rule-based heuristics on pose and COCO object cues, not from trained behaviour models, and they have not been checked against human labels.",
+      "The two cameras were lined up by the recording-start time in each video's metadata, about +/-1 s (the student camera started 2.0 s before the instructor camera). A moment can be off by about one sample (2 s).",
+      "The instructor is the most confident person inside the instructor camera's teacher zone. If the instructor walks into the student camera's view, they are counted as a student there.",
+      "Facing the class means the instructor's face was visible to the instructor camera, which assumes that camera sits on the students' side of the room.",
+      "No board region was calibrated, so time at the board was not measured.",
+      "Seats are the places where a student sat in at least 10% of the samples, so a student who sat somewhere only briefly is left out, one who changes seats counts as two seats, and nobody is identified.",
+      "Writing cannot be told apart from looking down, so note-taking may count as off-task.",
+      "'Head down and still' (head down or face hidden, almost no movement, 30 s or more) often means resting or sleeping, but quiet reading or writing can look the same.",
+      "Phones are small objects that are easily missed or confused with other objects, and a phone may be used for course work.",
+      "Frames are sampled every 2 s, so short actions can be missed."
+    ]
+  },
+  "indicator_validation": {
+    "instructor_role": {
+      "checked_against_human_labels": false
+    },
+    "head_up_posture": {
+      "checked_against_human_labels": false
+    },
+    "head_down_still": {
+      "checked_against_human_labels": false
+    },
+    "hand_raise": {
+      "checked_against_human_labels": false
+    },
+    "phone_use": {
+      "checked_against_human_labels": false
+    },
+    "instructor_seated": {
+      "checked_against_human_labels": false
+    }
+  },
+  "glossary": {
+    "heads up": "Head up rather than looking down. A posture; it is not a measure of attention, understanding or learning.",
+    "students in view": "The students the student camera could see clearly enough to read their posture. Not every student in the room.",
+    "seat": "A place where a student sat for at least 10% of the lecture, numbered row by row from the top left of the student camera's view. Seats are anonymous: nobody is identified.",
+    "observable students": "The same as students in view: seats in the student camera where a student's head and shoulders were readable.",
+    "observable student time": "Seat-frames in which a student was seen; the denominator of every student percentage.",
+    "phone use": "A phone was detected inside a student's box in the student camera. It may have been used for course work.",
+    "head down and still": "Head down (or face hidden) with almost no movement for at least 30 s. A posture: it can mean resting or sleeping, but also quiet reading or writing.",
+    "window": "A 10-second slice of the lecture.",
+    "explaining to the class": "The instructor was visible to the instructor camera, facing the class, and not at the board facing it.",
+    "at the board facing it": "The instructor was inside the calibrated board region, turned toward the board (writing, pointing or reading it).",
+    "not facing the class": "The instructor was visible but turned away from the class, and not at the board.",
+    "mostly out of view": "The instructor camera did not see the instructor for most of a 10-second part of the lecture.",
+    "moving around": "The quarter of the lecture's 10-second parts in which the instructor moved furthest in the instructor camera's view.",
+    "seated": "The instructor's thighs looked short beside the torso (needs hips and knees in view).",
+    "evidence.strength": "weak = the gap could easily be chance, after allowing for the number of comparisons made; suggestive = unlikely to be pure chance even after that; descriptive = a single observation or a count, not a test."
+  },
+  "alternative_explanations": {
+    "E1": "Students may have looked down to write notes, which counts as head down.",
+    "E2": "Students may have been reading a slide or the board rather than watching the instructor.",
+    "E3": "The two cameras are lined up to about 1 second, so a moment can be off by one sample.",
+    "E4": "The comparison rests on a small number of 10-second windows.",
+    "E5": "The type of activity (lecture, seat-work, discussion) was not recorded, and it changes posture on its own.",
+    "E6": "A head kept down and still can be quiet reading or writing rather than resting.",
+    "E7": "A phone may have been used for course work, such as looking up material."
+  },
+  "facts": [
+    {
+      "id": "F1",
+      "direction": "unfavourable",
+      "kind": "behaviour_moments",
+      "student_behaviour": "phone use",
+      "count": 17,
+      "example_times": [
+        "00:02",
+        "00:06",
+        "00:10"
+      ],
+      "example_seats": [
+        "seat_04",
+        "seat_04",
+        "seat_04"
+      ],
+      "most_common_instructor_activity": "the instructor was explaining to the class",
+      "began_during_that_activity": 15,
+      "share_of_episodes_pct": 88,
+      "that_activity_share_of_lecture_pct": 94,
+      "evidence": {
+        "strength": "descriptive",
+        "notes": [
+          "A phone is a small object, and these detections have not been checked against human labels.",
+          "A phone may have been used for course work."
+        ]
+      },
+      "indicators": [
+        "phone_use",
+        "instructor_role"
+      ]
+    },
+    {
+      "id": "F2",
+      "direction": "unfavourable",
+      "kind": "behaviour_moments",
+      "student_behaviour": "head down and still",
+      "count": 6,
+      "example_times": [
+        "00:04",
+        "00:40",
+        "00:42"
+      ],
+      "example_seats": [
+        "seat_04",
+        "seat_04",
+        "seat_06"
+      ],
+      "most_common_instructor_activity": "the instructor was explaining to the class",
+      "began_during_that_activity": 5,
+      "share_of_episodes_pct": 83,
+      "that_activity_share_of_lecture_pct": 94,
+      "minimum_duration_seconds": 30,
+      "evidence": {
+        "strength": "descriptive",
+        "notes": [
+          "Quiet reading or writing can look the same as resting.",
+          "These detections have not been checked against human labels."
+        ]
+      },
+      "indicators": [
+        "head_down_still",
+        "instructor_role"
+      ]
+    },
+    {
+      "id": "F3",
+      "direction": "favourable",
+      "kind": "highest_focus_stretch",
+      "span": "03:00-03:30",
+      "stretch_seconds": 30,
+      "students_focused_pct": 100,
+      "instructor_activity": "the instructor was explaining to the class",
+      "evidence": {
+        "strength": "descriptive",
+        "notes": [
+          "A single 30-second stretch is noisy."
+        ]
+      },
+      "indicators": [
+        "head_up_posture",
+        "instructor_role"
+      ]
+    },
+    {
+      "id": "F4",
+      "direction": "unfavourable",
+      "kind": "lowest_focus_stretch",
+      "span": "00:00-00:30",
+      "stretch_seconds": 30,
+      "students_focused_pct": 61,
+      "instructor_activity": "the instructor was explaining to the class",
+      "evidence": {
+        "strength": "descriptive",
+        "notes": [
+          "A single 30-second stretch is noisy."
+        ]
+      },
+      "indicators": [
+        "head_up_posture",
+        "instructor_role"
+      ]
+    },
+    {
+      "id": "F5",
+      "direction": "favourable",
+      "kind": "hand_raises",
+      "count": 11,
+      "example_times": [
+        "00:46",
+        "01:12",
+        "04:20"
+      ],
+      "most_common_instructor_activity": "the instructor was explaining to the class",
+      "that_activity_share_of_all_windows_pct": 94,
+      "evidence": {
+        "strength": "descriptive",
+        "notes": [
+          "Detections have not been checked against human labels.",
+          "If the instructor walks into the student camera's view, their gestures can be counted as hand raises."
+        ]
+      },
+      "indicators": [
+        "hand_raise"
+      ]
+    },
+    {
+      "id": "F6",
+      "direction": "favourable",
+      "kind": "mostly_focused_windows",
+      "windows": 59,
+      "usable_windows": 63,
+      "seconds": 590,
+      "most_common_instructor_activity": "the instructor was explaining to the class",
+      "that_activity_share_of_usable_windows_pct": 94,
+      "evidence": {
+        "strength": "descriptive",
+        "notes": [
+          "Counts of windows above a fixed 60% line."
+        ]
+      },
+      "indicators": [
+        "head_up_posture",
+        "instructor_role"
+      ]
+    },
+    {
+      "id": "F7",
+      "direction": "unfavourable",
+      "kind": "no_participation_stretch",
+      "span": "02:10-03:40",
+      "windows": 9,
+      "missing": "interaction or hand raise",
+      "instructor_activity": "the instructor was explaining to the class",
+      "evidence": {
+        "strength": "descriptive",
+        "notes": [
+          "Hand raises that the detector missed would make this stretch look quieter than it was."
+        ]
+      },
+      "indicators": [
+        "hand_raise",
+        "instructor_role"
+      ]
+    },
+    {
+      "id": "F8",
+      "direction": "favourable",
+      "kind": "comparison",
+      "student_behaviour": "heads up",
+      "instructor_activity": "the instructor was moving around",
+      "windows": 16,
+      "seconds": 160,
+      "student_share_pct": 82,
+      "other_windows": 47,
+      "other_windows_share_pct": 76,
+      "gap_points": 6,
+      "comparisons_made": 3,
+      "evidence": {
+        "strength": "weak",
+        "test_p": "= 0.276",
+        "notes": [
+          "The test allows for neighbouring windows being alike and for the 3 comparisons made."
+        ]
+      },
+      "indicators": [
+        "instructor_role",
+        "head_up_posture"
+      ]
+    },
+    {
+      "id": "F9",
+      "direction": "favourable",
+      "kind": "comparison",
+      "student_behaviour": "head down and still",
+      "instructor_activity": "the instructor was moving around",
+      "windows": 16,
+      "seconds": 160,
+      "student_share_pct": 4,
+      "other_windows": 47,
+      "other_windows_share_pct": 9,
+      "gap_points": 5,
+      "comparisons_made": 3,
+      "evidence": {
+        "strength": "weak",
+        "test_p": "= 0.088",
+        "notes": [
+          "The test allows for neighbouring windows being alike and for the 3 comparisons made."
+        ]
+      },
+      "indicators": [
+        "instructor_role",
+        "head_down_still"
+      ]
+    }
+  ],
+  "report_note": "Note: \"heads up\" means a student was looking up rather than down. It is a posture, not a measure of attention or learning: taking notes also looks like heads down. \"Head down and still\" means a head kept down, with almost no movement, for 30 seconds or more; it can be resting, but also quiet reading or writing. \"Students in view\" are the students the camera could see clearly. Times are minutes:seconds from when both cameras were recording. These are automatic detections that no person has checked yet."
+}

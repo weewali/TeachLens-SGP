@@ -1,0 +1,79 @@
+Classroom Analytics: analysis details
+==================================================
+
+Lecture: Mixed_gender_classes
+Cameras: instructor = instructor.mov  |  students = students.mov
+Alignment: recording-start time in each video's metadata, about +/-1 s (the student camera started 2.0 s before the instructor camera)
+Shared lecture time: 10:26  |  Frames analysed: 313 per camera (one every 2 s)  |  Windows: 63 x 10 s
+
+1. Instructor indicators (instructor camera)
+- Instructor visible in 100% of analysed frames.
+- In 39% of frames more than one person was inside the teacher zone; the most confident one was taken as the instructor.
+- Explaining to the class (facing the class, not at the board facing it): 08:56 (86% of the lecture).
+- Interaction (facing the class with a raised hand): 1 event, 00:02 in total.
+- Time at the board was not measured: no board region is set in the instructor camera's calibration.
+- Movement: path length 10.47 frame-widths of the instructor camera.
+- Posture was readable in 76% of the frames where the instructor was visible; seated in 0% of those.
+- Gesture reach (wrist distance from the shoulder, in shoulder-widths): 1.60 on average.
+- The instructor barely moved between samples in 44% of the sample pairs.
+
+2. Student indicators (student camera)
+- Average students detected per frame: 5.9, in 5.9 of the 6 seats found.
+- 43 person detections in the student camera fitted no seat and were left out (for example a chair, bag or legs seen as a person, or someone walking past).
+- Heads up (and not off-task): 78% of observable student time on average.
+- Off-task (head down for 6 s or more without a book, a phone seen, or head down and still): 15% on average.
+- Phone use: 17 events; a phone was seen in 2.4% of observable student time.
+- Head down and still for 30 s or more: 6 events; 8.1% of observable student time.
+- Hand raises: 11 events. Reading (book detected): 1 event. Pose state was readable for 93% of seat-frames.
+- Hand-raise participation: 3 of the 6 seats seen in at least half of the frames had a hand raise.
+- Students read as standing: 0.01 per frame on average (legs are often hidden behind desks, so this undercounts).
+
+3. Teacher-student linkage (lag analysis and the comparisons behind the feedback)
+- Hypotheses fixed in advance (9 tests, so p must be below 0.0056):
+- explanation_ratio -> phone_rate after 10 s: r = -0.10 (p = 0.585 controlling for the previous window, does not survive correction for 9 tests; 62 windows). Correlation, not proof of causation.
+- explanation_ratio -> head_down_still_rate after 30 s: r = -0.06 (p = 0.490 controlling for the previous window, does not survive correction for 9 tests; 60 windows). Correlation, not proof of causation.
+- teacher_seated_ratio -> attention_level: not testable in this lecture (too few windows with readable data, or no variation).
+- Exploratory (69 tests; treat these as leads, not findings):
+- movement_amount -> strongest positive: attention_level after 20 s: r = +0.23 (p = 0.035 controlling for the previous window, does not survive correction for 69 tests; 61 windows). Correlation, not proof of causation.
+- interaction_count -> strongest negative: attention_level after 30 s: r = -0.18 (p = 0.282 controlling for the previous window, does not survive correction for 69 tests; 60 windows). Correlation, not proof of causation.
+- Comparison: heads up 82% while moving around the most (16 windows) vs 76% in the other 47 windows; p = 0.276, weak. The test allows for neighbouring windows being alike and for the 3 comparisons made.
+- Comparison: head down and still 4% while moving around the most (16 windows) vs 9% in the other 47 windows; p = 0.088, weak. The test allows for neighbouring windows being alike and for the 3 comparisons made.
+
+4. Suggestions
+- Review the video around 00:00-00:30 to see what happened.
+- Break long explanations with a question or short activity.
+
+5. Supporting evidence (timestamps are mm:ss from the start of the shared lecture time)
+- Phone use: seat_04, 00:02-00:04, while the instructor was not facing the class.
+- Phone use: seat_04, 00:06-00:08, while the instructor was not facing the class.
+- Phone use: seat_04, 00:10-00:18, while the instructor was explaining to the class.
+- Phone use: seat_04, 00:22-00:26, while the instructor was explaining to the class.
+- Phone use: seat_04, 00:32-00:34, while the instructor was explaining to the class.
+- Phone use: seat_04, 00:40-01:20, while the instructor was explaining to the class.
+- Phone use: seat_04, 01:24-01:26, while the instructor was explaining to the class.
+- Phone use: seat_04, 01:30-01:32, while the instructor was explaining to the class.
+- Head down and still: seat_04, 00:04-00:38, while the instructor was not facing the class.
+- Head down and still: seat_04, 00:40-01:54, while the instructor was explaining to the class.
+- Head down and still: seat_06, 00:42-01:56, while the instructor was explaining to the class.
+- Head down and still: seat_04, 01:56-02:38, while the instructor was explaining to the class.
+- Head down and still: seat_06, 01:58-02:42, while the instructor was explaining to the class.
+- Head down and still: seat_05, 04:16-04:48, while the instructor was explaining to the class.
+- Fewest heads up: 00:00-00:30 (61% of observable student time).
+- Hand raise: seat_03, 00:46-00:50.
+- Hand raise: seat_03, 01:12-01:28.
+- Hand raise: seat_01, 04:20-04:24.
+- Hand raise: seat_03, 05:02-05:06.
+- Hand raise: seat_02, 06:40-06:44.
+- Stretch with no interaction or hand raise: 02:10-03:40.
+
+6. Limitations
+- Behaviour labels come from rule-based heuristics on pose and COCO object cues, not from trained behaviour models, and they have not been checked against human labels.
+- The two cameras were lined up by the recording-start time in each video's metadata, about +/-1 s (the student camera started 2.0 s before the instructor camera). A moment can be off by about one sample (2 s).
+- The instructor is the most confident person inside the instructor camera's teacher zone. If the instructor walks into the student camera's view, they are counted as a student there.
+- Facing the class means the instructor's face was visible to the instructor camera, which assumes that camera sits on the students' side of the room.
+- No board region was calibrated, so time at the board was not measured.
+- Seats are the places where a student sat in at least 10% of the samples, so a student who sat somewhere only briefly is left out, one who changes seats counts as two seats, and nobody is identified.
+- Writing cannot be told apart from looking down, so note-taking may count as off-task.
+- 'Head down and still' (head down or face hidden, almost no movement, 30 s or more) often means resting or sleeping, but quiet reading or writing can look the same.
+- Phones are small objects that are easily missed or confused with other objects, and a phone may be used for course work.
+- Frames are sampled every 2 s, so short actions can be missed.

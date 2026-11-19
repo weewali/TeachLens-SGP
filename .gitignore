@@ -32,6 +32,15 @@ outputs/*
 !outputs/.gitkeep
 runs/
 
+# Two-camera lectures hold real classroom footage: keep videos, frames and review images local
+# (team rule: never commit extracted frames or sensitive evidence)
+classroom_project/videos/
+classroom_project/sessions/*/frames/
+classroom_project/sessions/*/standardized/
+classroom_project/sessions/*/yolo_outputs/
+classroom_project/validation/*/images/
+classroom_project/jobs/
+
 # IDE
 .vscode/
 .idea/

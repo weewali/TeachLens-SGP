@@ -1,0 +1,1384 @@
+{
+  "note": "EXAMPLE ONLY: a made-up window table with planted links, analysed by the team's real fusion code (tests/fixtures/make_fusion_example.py). Not a real lecture.",
+  "lesson": "example",
+  "student_run": "example_student",
+  "instructor_run": "example_instructor",
+  "window_seconds": 5.0,
+  "windows": 150,
+  "start_real_time": "2026-01-01T10:00:00.000+04:00",
+  "end_real_time": null,
+  "min_known_fraction": 0.5,
+  "features": {
+    "T_facing_class": {
+      "camera": "teacher",
+      "indicator": "facing_direction",
+      "labels": [
+        "toward_class"
+      ],
+      "kind": "share",
+      "desirable": 0,
+      "description": "teacher faces the class (explanation proxy, no audio)"
+    },
+    "T_board_or_screen": {
+      "camera": "teacher",
+      "indicator": "board_interaction",
+      "labels": [
+        "board",
+        "screen"
+      ],
+      "kind": "share",
+      "desirable": 0,
+      "description": "teacher works at the board or screen"
+    },
+    "T_gesturing": {
+      "camera": "teacher",
+      "indicator": "gesture",
+      "labels": [
+        "gesturing"
+      ],
+      "kind": "share",
+      "desirable": 0,
+      "description": "hand gestures"
+    },
+    "T_walking": {
+      "camera": "teacher",
+      "indicator": "gesture",
+      "labels": [
+        "walking"
+      ],
+      "kind": "share",
+      "desirable": 0,
+      "description": "teacher walks"
+    },
+    "T_stationary": {
+      "camera": "teacher",
+      "indicator": "stationary_episode",
+      "labels": [],
+      "kind": "episode",
+      "desirable": 0,
+      "description": "teacher stands still (stationary episode)"
+    },
+    "S_on_target": {
+      "camera": "students",
+      "indicator": "orientation_proxy",
+      "labels": [
+        "on_target"
+      ],
+      "kind": "share",
+      "desirable": 1,
+      "description": "students facing the current focus (attention proxy)"
+    },
+    "S_off_target": {
+      "camera": "students",
+      "indicator": "orientation_proxy",
+      "labels": [
+        "off_target"
+      ],
+      "kind": "share",
+      "desirable": -1,
+      "description": "students facing elsewhere"
+    },
+    "S_phone": {
+      "camera": "students",
+      "indicator": "device_use",
+      "labels": [
+        "phone",
+        "phone_likely"
+      ],
+      "kind": "share",
+      "desirable": -1,
+      "description": "phone seen in hand or head down for a sustained time"
+    },
+    "S_talking": {
+      "camera": "students",
+      "indicator": "talking",
+      "labels": [
+        "talking"
+      ],
+      "kind": "share",
+      "desirable": 0,
+      "description": "mouth movement (talking)"
+    },
+    "S_hand_raises": {
+      "camera": "students",
+      "indicator": "hand_raise_episode",
+      "labels": [],
+      "kind": "count",
+      "desirable": 1,
+      "description": "hand raises starting in the window"
+    }
+  },
+  "teacher_onsets": {
+    "board_or_screen_start": [
+      40
+    ],
+    "turn_to_class": [
+      8,
+      22,
+      37,
+      55,
+      71,
+      88,
+      104,
+      121,
+      137
+    ],
+    "walking_start": [
+      12,
+      47,
+      80,
+      115
+    ]
+  },
+  "feature_activity_windows": {
+    "T_facing_class": 150,
+    "T_board_or_screen": 1,
+    "T_gesturing": 55,
+    "T_walking": 23,
+    "T_stationary": 54,
+    "S_on_target": 150,
+    "S_off_target": 150,
+    "S_phone": 150,
+    "S_talking": 150,
+    "S_hand_raises": 20
+  },
+  "tested_teacher_features": [
+    "T_facing_class",
+    "T_gesturing",
+    "T_walking",
+    "T_stationary"
+  ],
+  "untested_teacher_features": {
+    "T_board_or_screen": 1
+  },
+  "outcome_features": [
+    "S_on_target",
+    "S_off_target",
+    "S_phone",
+    "S_talking",
+    "S_hand_raises"
+  ],
+  "links": [
+    {
+      "teacher_feature": "T_facing_class",
+      "student_feature": "S_talking",
+      "lag_seconds": 5.0,
+      "lag_windows": 1,
+      "r": 0.8637,
+      "r_lag0": 0.7194,
+      "r_reverse_max": 0.5862,
+      "p_shift": 0.0072,
+      "null_shifts": 137,
+      "q": 0.036
+    },
+    {
+      "teacher_feature": "T_gesturing",
+      "student_feature": "S_on_target",
+      "lag_seconds": 10.0,
+      "lag_windows": 2,
+      "r": 0.6579,
+      "r_lag0": -0.0072,
+      "r_reverse_max": 0.1286,
+      "p_shift": 0.0072,
+      "null_shifts": 137,
+      "q": 0.036
+    },
+    {
+      "teacher_feature": "T_gesturing",
+      "student_feature": "S_off_target",
+      "lag_seconds": 10.0,
+      "lag_windows": 2,
+      "r": -0.9072,
+      "r_lag0": 0.1107,
+      "r_reverse_max": -0.1122,
+      "p_shift": 0.0072,
+      "null_shifts": 137,
+      "q": 0.036
+    },
+    {
+      "teacher_feature": "T_stationary",
+      "student_feature": "S_phone",
+      "lag_seconds": 15.0,
+      "lag_windows": 3,
+      "r": 0.9154,
+      "r_lag0": -0.1684,
+      "r_reverse_max": 0.1072,
+      "p_shift": 0.0072,
+      "null_shifts": 137,
+      "q": 0.036
+    },
+    {
+      "teacher_feature": "T_gesturing",
+      "student_feature": "S_talking",
+      "lag_seconds": 30.0,
+      "lag_windows": 6,
+      "r": 0.1537,
+      "r_lag0": -0.0397,
+      "r_reverse_max": -0.1184,
+      "p_shift": 0.0507,
+      "null_shifts": 137,
+      "q": 0.2028
+    },
+    {
+      "teacher_feature": "T_stationary",
+      "student_feature": "S_hand_raises",
+      "lag_seconds": 15.0,
+      "lag_windows": 3,
+      "r": 0.2077,
+      "r_lag0": -0.0573,
+      "r_reverse_max": -0.1238,
+      "p_shift": 0.0652,
+      "null_shifts": 137,
+      "q": 0.2173
+    },
+    {
+      "teacher_feature": "T_walking",
+      "student_feature": "S_on_target",
+      "lag_seconds": 10.0,
+      "lag_windows": 2,
+      "r": 0.152,
+      "r_lag0": -0.0803,
+      "r_reverse_max": -0.1204,
+      "p_shift": 0.2754,
+      "null_shifts": 137,
+      "q": 0.7427
+    },
+    {
+      "teacher_feature": "T_facing_class",
+      "student_feature": "S_phone",
+      "lag_seconds": 5.0,
+      "lag_windows": 1,
+      "r": -0.1378,
+      "r_lag0": -0.0616,
+      "r_reverse_max": 0.1331,
+      "p_shift": 0.2971,
+      "null_shifts": 137,
+      "q": 0.7427
+    },
+    {
+      "teacher_feature": "T_walking",
+      "student_feature": "S_hand_raises",
+      "lag_seconds": 25.0,
+      "lag_windows": 5,
+      "r": -0.1486,
+      "r_lag0": -0.0735,
+      "r_reverse_max": 0.316,
+      "p_shift": 0.3696,
+      "null_shifts": 137,
+      "q": 0.8213
+    },
+    {
+      "teacher_feature": "T_walking",
+      "student_feature": "S_talking",
+      "lag_seconds": 20.0,
+      "lag_windows": 4,
+      "r": 0.1517,
+      "r_lag0": 0.1166,
+      "r_reverse_max": -0.0979,
+      "p_shift": 0.4275,
+      "null_shifts": 137,
+      "q": 0.855
+    },
+    {
+      "teacher_feature": "T_facing_class",
+      "student_feature": "S_hand_raises",
+      "lag_seconds": 5.0,
+      "lag_windows": 1,
+      "r": -0.068,
+      "r_lag0": -0.0662,
+      "r_reverse_max": -0.0833,
+      "p_shift": 0.6884,
+      "null_shifts": 137,
+      "q": 0.9928
+    },
+    {
+      "teacher_feature": "T_gesturing",
+      "student_feature": "S_phone",
+      "lag_seconds": 20.0,
+      "lag_windows": 4,
+      "r": 0.1118,
+      "r_lag0": 0.0224,
+      "r_reverse_max": 0.1855,
+      "p_shift": 0.6884,
+      "null_shifts": 137,
+      "q": 0.9928
+    },
+    {
+      "teacher_feature": "T_walking",
+      "student_feature": "S_off_target",
+      "lag_seconds": 10.0,
+      "lag_windows": 2,
+      "r": -0.1331,
+      "r_lag0": 0.0879,
+      "r_reverse_max": -0.1658,
+      "p_shift": 0.7029,
+      "null_shifts": 137,
+      "q": 0.9928
+    },
+    {
+      "teacher_feature": "T_facing_class",
+      "student_feature": "S_on_target",
+      "lag_seconds": 25.0,
+      "lag_windows": 5,
+      "r": -0.0581,
+      "r_lag0": 0.0491,
+      "r_reverse_max": 0.0678,
+      "p_shift": 0.7246,
+      "null_shifts": 137,
+      "q": 0.9928
+    },
+    {
+      "teacher_feature": "T_facing_class",
+      "student_feature": "S_off_target",
+      "lag_seconds": 10.0,
+      "lag_windows": 2,
+      "r": -0.0605,
+      "r_lag0": -0.1179,
+      "r_reverse_max": -0.1266,
+      "p_shift": 0.8333,
+      "null_shifts": 137,
+      "q": 0.9928
+    },
+    {
+      "teacher_feature": "T_walking",
+      "student_feature": "S_phone",
+      "lag_seconds": 15.0,
+      "lag_windows": 3,
+      "r": 0.1,
+      "r_lag0": 0.0191,
+      "r_reverse_max": 0.1505,
+      "p_shift": 0.9058,
+      "null_shifts": 137,
+      "q": 0.9928
+    },
+    {
+      "teacher_feature": "T_stationary",
+      "student_feature": "S_talking",
+      "lag_seconds": 10.0,
+      "lag_windows": 2,
+      "r": -0.0675,
+      "r_lag0": 0.0021,
+      "r_reverse_max": -0.1667,
+      "p_shift": 0.942,
+      "null_shifts": 137,
+      "q": 0.9928
+    },
+    {
+      "teacher_feature": "T_gesturing",
+      "student_feature": "S_hand_raises",
+      "lag_seconds": 25.0,
+      "lag_windows": 5,
+      "r": -0.0937,
+      "r_lag0": 0.2387,
+      "r_reverse_max": 0.2502,
+      "p_shift": 0.9493,
+      "null_shifts": 137,
+      "q": 0.9928
+    },
+    {
+      "teacher_feature": "T_stationary",
+      "student_feature": "S_off_target",
+      "lag_seconds": 20.0,
+      "lag_windows": 4,
+      "r": -0.0593,
+      "r_lag0": 0.0185,
+      "r_reverse_max": -0.108,
+      "p_shift": 0.971,
+      "null_shifts": 137,
+      "q": 0.9928
+    },
+    {
+      "teacher_feature": "T_stationary",
+      "student_feature": "S_on_target",
+      "lag_seconds": 5.0,
+      "lag_windows": 1,
+      "r": -0.0514,
+      "r_lag0": -0.049,
+      "r_reverse_max": 0.1368,
+      "p_shift": 0.9928,
+      "null_shifts": 137,
+      "q": 0.9928
+    }
+  ],
+  "lagged_models": [
+    {
+      "outcome": "S_on_target",
+      "lag_windows": 1,
+      "windows_used": 149,
+      "r_squared": 0.0132,
+      "hac_maxlags": 4,
+      "terms": {
+        "const": {
+          "coef": 0.6399,
+          "se": 0.0573,
+          "p": 0.0,
+          "ci95": [
+            0.5275,
+            0.7523
+          ]
+        },
+        "T_facing_class[t-1]": {
+          "coef": -0.0003,
+          "se": 0.0218,
+          "p": 0.9894,
+          "ci95": [
+            -0.043,
+            0.0424
+          ]
+        },
+        "T_gesturing[t-1]": {
+          "coef": -0.0043,
+          "se": 0.0178,
+          "p": 0.8087,
+          "ci95": [
+            -0.0392,
+            0.0306
+          ]
+        },
+        "T_walking[t-1]": {
+          "coef": 0.0034,
+          "se": 0.0265,
+          "p": 0.8975,
+          "ci95": [
+            -0.0486,
+            0.0554
+          ]
+        },
+        "S_on_target[t-1]": {
+          "coef": 0.1136,
+          "se": 0.0768,
+          "p": 0.1391,
+          "ci95": [
+            -0.0369,
+            0.264
+          ]
+        }
+      }
+    },
+    {
+      "outcome": "S_on_target",
+      "lag_windows": 2,
+      "windows_used": 148,
+      "r_squared": 0.4512,
+      "hac_maxlags": 4,
+      "terms": {
+        "const": {
+          "coef": 0.5895,
+          "se": 0.0449,
+          "p": 0.0,
+          "ci95": [
+            0.5016,
+            0.6774
+          ]
+        },
+        "T_facing_class[t-2]": {
+          "coef": 0.0073,
+          "se": 0.0158,
+          "p": 0.6432,
+          "ci95": [
+            -0.0236,
+            0.0382
+          ]
+        },
+        "T_gesturing[t-2]": {
+          "coef": 0.1363,
+          "se": 0.0122,
+          "p": 0.0,
+          "ci95": [
+            0.1125,
+            0.1601
+          ]
+        },
+        "T_walking[t-2]": {
+          "coef": 0.0108,
+          "se": 0.0135,
+          "p": 0.4247,
+          "ci95": [
+            -0.0157,
+            0.0372
+          ]
+        },
+        "S_on_target[t-1]": {
+          "coef": 0.1273,
+          "se": 0.0657,
+          "p": 0.0528,
+          "ci95": [
+            -0.0015,
+            0.2562
+          ]
+        }
+      }
+    },
+    {
+      "outcome": "S_on_target",
+      "lag_windows": 3,
+      "windows_used": 147,
+      "r_squared": 0.0201,
+      "hac_maxlags": 4,
+      "terms": {
+        "const": {
+          "coef": 0.637,
+          "se": 0.063,
+          "p": 0.0,
+          "ci95": [
+            0.5136,
+            0.7604
+          ]
+        },
+        "T_facing_class[t-3]": {
+          "coef": -0.0035,
+          "se": 0.0241,
+          "p": 0.886,
+          "ci95": [
+            -0.0507,
+            0.0438
+          ]
+        },
+        "T_gesturing[t-3]": {
+          "coef": -0.005,
+          "se": 0.025,
+          "p": 0.8413,
+          "ci95": [
+            -0.054,
+            0.0439
+          ]
+        },
+        "T_walking[t-3]": {
+          "coef": 0.0268,
+          "se": 0.0325,
+          "p": 0.4098,
+          "ci95": [
+            -0.0369,
+            0.0905
+          ]
+        },
+        "S_on_target[t-1]": {
+          "coef": 0.1176,
+          "se": 0.0922,
+          "p": 0.202,
+          "ci95": [
+            -0.0631,
+            0.2982
+          ]
+        }
+      }
+    },
+    {
+      "outcome": "S_off_target",
+      "lag_windows": 1,
+      "windows_used": 149,
+      "r_squared": 0.0041,
+      "hac_maxlags": 4,
+      "terms": {
+        "const": {
+          "coef": 0.1489,
+          "se": 0.0138,
+          "p": 0.0,
+          "ci95": [
+            0.1218,
+            0.176
+          ]
+        },
+        "T_facing_class[t-1]": {
+          "coef": -0.0061,
+          "se": 0.0124,
+          "p": 0.6212,
+          "ci95": [
+            -0.0304,
+            0.0182
+          ]
+        },
+        "T_gesturing[t-1]": {
+          "coef": -0.0002,
+          "se": 0.0105,
+          "p": 0.9832,
+          "ci95": [
+            -0.0208,
+            0.0204
+          ]
+        },
+        "T_walking[t-1]": {
+          "coef": -0.0085,
+          "se": 0.0202,
+          "p": 0.6724,
+          "ci95": [
+            -0.048,
+            0.031
+          ]
+        },
+        "S_off_target[t-1]": {
+          "coef": 0.0282,
+          "se": 0.0816,
+          "p": 0.7299,
+          "ci95": [
+            -0.1318,
+            0.1881
+          ]
+        }
+      }
+    },
+    {
+      "outcome": "S_off_target",
+      "lag_windows": 2,
+      "windows_used": 148,
+      "r_squared": 0.8259,
+      "hac_maxlags": 4,
+      "terms": {
+        "const": {
+          "coef": 0.1799,
+          "se": 0.0055,
+          "p": 0.0,
+          "ci95": [
+            0.1691,
+            0.1907
+          ]
+        },
+        "T_facing_class[t-2]": {
+          "coef": -0.0072,
+          "se": 0.0052,
+          "p": 0.1722,
+          "ci95": [
+            -0.0174,
+            0.0031
+          ]
+        },
+        "T_gesturing[t-2]": {
+          "coef": -0.1207,
+          "se": 0.0057,
+          "p": 0.0,
+          "ci95": [
+            -0.1318,
+            -0.1095
+          ]
+        },
+        "T_walking[t-2]": {
+          "coef": 0.0062,
+          "se": 0.0072,
+          "p": 0.3918,
+          "ci95": [
+            -0.0079,
+            0.0203
+          ]
+        },
+        "S_off_target[t-1]": {
+          "coef": 0.0207,
+          "se": 0.0299,
+          "p": 0.489,
+          "ci95": [
+            -0.0379,
+            0.0794
+          ]
+        }
+      }
+    },
+    {
+      "outcome": "S_off_target",
+      "lag_windows": 3,
+      "windows_used": 147,
+      "r_squared": 0.0048,
+      "hac_maxlags": 4,
+      "terms": {
+        "const": {
+          "coef": 0.1616,
+          "se": 0.0379,
+          "p": 0.0,
+          "ci95": [
+            0.0873,
+            0.2359
+          ]
+        },
+        "T_facing_class[t-3]": {
+          "coef": 0.005,
+          "se": 0.0132,
+          "p": 0.7031,
+          "ci95": [
+            -0.0209,
+            0.031
+          ]
+        },
+        "T_gesturing[t-3]": {
+          "coef": -0.016,
+          "se": 0.0286,
+          "p": 0.5754,
+          "ci95": [
+            -0.072,
+            0.04
+          ]
+        },
+        "T_walking[t-3]": {
+          "coef": 0.0063,
+          "se": 0.0181,
+          "p": 0.7253,
+          "ci95": [
+            -0.0291,
+            0.0418
+          ]
+        },
+        "S_off_target[t-1]": {
+          "coef": -0.083,
+          "se": 0.1996,
+          "p": 0.6774,
+          "ci95": [
+            -0.4742,
+            0.3081
+          ]
+        }
+      }
+    },
+    {
+      "outcome": "S_phone",
+      "lag_windows": 1,
+      "windows_used": 149,
+      "r_squared": 0.0228,
+      "hac_maxlags": 4,
+      "terms": {
+        "const": {
+          "coef": 0.0933,
+          "se": 0.0133,
+          "p": 0.0,
+          "ci95": [
+            0.0672,
+            0.1195
+          ]
+        },
+        "T_facing_class[t-1]": {
+          "coef": -0.0254,
+          "se": 0.0163,
+          "p": 0.1188,
+          "ci95": [
+            -0.0573,
+            0.0065
+          ]
+        },
+        "T_gesturing[t-1]": {
+          "coef": 0.0081,
+          "se": 0.0087,
+          "p": 0.3528,
+          "ci95": [
+            -0.009,
+            0.0252
+          ]
+        },
+        "T_walking[t-1]": {
+          "coef": 0.0002,
+          "se": 0.0174,
+          "p": 0.9916,
+          "ci95": [
+            -0.0339,
+            0.0343
+          ]
+        },
+        "S_phone[t-1]": {
+          "coef": 0.0214,
+          "se": 0.0843,
+          "p": 0.7997,
+          "ci95": [
+            -0.1438,
+            0.1866
+          ]
+        }
+      }
+    },
+    {
+      "outcome": "S_phone",
+      "lag_windows": 2,
+      "windows_used": 148,
+      "r_squared": 0.0091,
+      "hac_maxlags": 4,
+      "terms": {
+        "const": {
+          "coef": 0.09,
+          "se": 0.0125,
+          "p": 0.0,
+          "ci95": [
+            0.0654,
+            0.1146
+          ]
+        },
+        "T_facing_class[t-2]": {
+          "coef": -0.0157,
+          "se": 0.016,
+          "p": 0.3258,
+          "ci95": [
+            -0.0469,
+            0.0156
+          ]
+        },
+        "T_gesturing[t-2]": {
+          "coef": 0.0051,
+          "se": 0.0106,
+          "p": 0.6288,
+          "ci95": [
+            -0.0157,
+            0.0259
+          ]
+        },
+        "T_walking[t-2]": {
+          "coef": -0.0018,
+          "se": 0.0181,
+          "p": 0.921,
+          "ci95": [
+            -0.0373,
+            0.0337
+          ]
+        },
+        "S_phone[t-1]": {
+          "coef": 0.0139,
+          "se": 0.0861,
+          "p": 0.8719,
+          "ci95": [
+            -0.1549,
+            0.1826
+          ]
+        }
+      }
+    },
+    {
+      "outcome": "S_phone",
+      "lag_windows": 3,
+      "windows_used": 147,
+      "r_squared": 0.0201,
+      "hac_maxlags": 4,
+      "terms": {
+        "const": {
+          "coef": 0.0905,
+          "se": 0.013,
+          "p": 0.0,
+          "ci95": [
+            0.065,
+            0.116
+          ]
+        },
+        "T_facing_class[t-3]": {
+          "coef": -0.0176,
+          "se": 0.0148,
+          "p": 0.235,
+          "ci95": [
+            -0.0466,
+            0.0114
+          ]
+        },
+        "T_gesturing[t-3]": {
+          "coef": -0.0029,
+          "se": 0.0104,
+          "p": 0.7789,
+          "ci95": [
+            -0.0234,
+            0.0175
+          ]
+        },
+        "T_walking[t-3]": {
+          "coef": 0.0234,
+          "se": 0.0208,
+          "p": 0.2598,
+          "ci95": [
+            -0.0173,
+            0.0642
+          ]
+        },
+        "S_phone[t-1]": {
+          "coef": 0.0184,
+          "se": 0.0874,
+          "p": 0.8335,
+          "ci95": [
+            -0.1529,
+            0.1897
+          ]
+        }
+      }
+    },
+    {
+      "outcome": "S_talking",
+      "lag_windows": 1,
+      "windows_used": 149,
+      "r_squared": 0.7523,
+      "hac_maxlags": 4,
+      "terms": {
+        "const": {
+          "coef": 0.0912,
+          "se": 0.0076,
+          "p": 0.0,
+          "ci95": [
+            0.0763,
+            0.106
+          ]
+        },
+        "T_facing_class[t-1]": {
+          "coef": 0.216,
+          "se": 0.0133,
+          "p": 0.0,
+          "ci95": [
+            0.19,
+            0.242
+          ]
+        },
+        "T_gesturing[t-1]": {
+          "coef": -0.0093,
+          "se": 0.0069,
+          "p": 0.1767,
+          "ci95": [
+            -0.0228,
+            0.0042
+          ]
+        },
+        "T_walking[t-1]": {
+          "coef": -0.0043,
+          "se": 0.0114,
+          "p": 0.7057,
+          "ci95": [
+            -0.0266,
+            0.018
+          ]
+        },
+        "S_talking[t-1]": {
+          "coef": -0.0837,
+          "se": 0.0422,
+          "p": 0.0475,
+          "ci95": [
+            -0.1664,
+            -0.0009
+          ]
+        }
+      }
+    },
+    {
+      "outcome": "S_talking",
+      "lag_windows": 2,
+      "windows_used": 148,
+      "r_squared": 0.4744,
+      "hac_maxlags": 4,
+      "terms": {
+        "const": {
+          "coef": 0.1046,
+          "se": 0.0111,
+          "p": 0.0,
+          "ci95": [
+            0.0829,
+            0.1263
+          ]
+        },
+        "T_facing_class[t-2]": {
+          "coef": 0.1621,
+          "se": 0.0192,
+          "p": 0.0,
+          "ci95": [
+            0.1245,
+            0.1997
+          ]
+        },
+        "T_gesturing[t-2]": {
+          "coef": -0.0087,
+          "se": 0.0095,
+          "p": 0.3563,
+          "ci95": [
+            -0.0272,
+            0.0098
+          ]
+        },
+        "T_walking[t-2]": {
+          "coef": 0.0143,
+          "se": 0.0183,
+          "p": 0.4334,
+          "ci95": [
+            -0.0215,
+            0.0501
+          ]
+        },
+        "S_talking[t-1]": {
+          "coef": -0.0131,
+          "se": 0.087,
+          "p": 0.8807,
+          "ci95": [
+            -0.1836,
+            0.1575
+          ]
+        }
+      }
+    },
+    {
+      "outcome": "S_talking",
+      "lag_windows": 3,
+      "windows_used": 147,
+      "r_squared": 0.4253,
+      "hac_maxlags": 4,
+      "terms": {
+        "const": {
+          "coef": 0.0739,
+          "se": 0.0084,
+          "p": 0.0,
+          "ci95": [
+            0.0575,
+            0.0903
+          ]
+        },
+        "T_facing_class[t-3]": {
+          "coef": 0.0835,
+          "se": 0.0193,
+          "p": 0.0,
+          "ci95": [
+            0.0456,
+            0.1213
+          ]
+        },
+        "T_gesturing[t-3]": {
+          "coef": 0.0126,
+          "se": 0.0115,
+          "p": 0.2725,
+          "ci95": [
+            -0.0099,
+            0.0351
+          ]
+        },
+        "T_walking[t-3]": {
+          "coef": 0.0004,
+          "se": 0.0174,
+          "p": 0.9796,
+          "ci95": [
+            -0.0336,
+            0.0345
+          ]
+        },
+        "S_talking[t-1]": {
+          "coef": 0.3474,
+          "se": 0.0699,
+          "p": 0.0,
+          "ci95": [
+            0.2104,
+            0.4845
+          ]
+        }
+      }
+    }
+  ],
+  "peri_event": [
+    {
+      "teacher_event": "board_or_screen_start",
+      "events": 1,
+      "skipped": "too few onsets"
+    },
+    {
+      "teacher_event": "turn_to_class",
+      "student_feature": "S_on_target",
+      "events": 9,
+      "mean_change": 0.0852,
+      "p_random_onsets": 0.002,
+      "curve_relative_windows": [
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "curve": [
+        0.6963,
+        0.7,
+        0.705,
+        0.7876,
+        0.7657,
+        0.7945,
+        0.7856
+      ],
+      "q": 0.02
+    },
+    {
+      "teacher_event": "turn_to_class",
+      "student_feature": "S_off_target",
+      "events": 9,
+      "mean_change": 0.0064,
+      "p_random_onsets": 0.6228,
+      "curve_relative_windows": [
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "curve": [
+        0.1365,
+        0.1458,
+        0.1367,
+        0.1444,
+        0.1535,
+        0.1385,
+        0.1539
+      ],
+      "q": 0.9182
+    },
+    {
+      "teacher_event": "turn_to_class",
+      "student_feature": "S_phone",
+      "events": 9,
+      "mean_change": 0.0058,
+      "p_random_onsets": 0.7186,
+      "curve_relative_windows": [
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "curve": [
+        0.0582,
+        0.0912,
+        0.0862,
+        0.1239,
+        0.0712,
+        0.0836,
+        0.0434
+      ],
+      "q": 0.9182
+    },
+    {
+      "teacher_event": "turn_to_class",
+      "student_feature": "S_talking",
+      "events": 9,
+      "mean_change": -0.0029,
+      "p_random_onsets": 0.8603,
+      "curve_relative_windows": [
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "curve": [
+        0.187,
+        0.1887,
+        0.1793,
+        0.1678,
+        0.1804,
+        0.1807,
+        0.2109
+      ],
+      "q": 0.9182
+    },
+    {
+      "teacher_event": "turn_to_class",
+      "student_feature": "S_hand_raises",
+      "events": 9,
+      "mean_change": -0.0833,
+      "p_random_onsets": 0.5948,
+      "curve_relative_windows": [
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "curve": [
+        0.3333,
+        0.1111,
+        0.1111,
+        0.2222,
+        0.0,
+        0.3333,
+        0.0
+      ],
+      "q": 0.9182
+    },
+    {
+      "teacher_event": "walking_start",
+      "student_feature": "S_on_target",
+      "events": 4,
+      "mean_change": -0.0289,
+      "p_random_onsets": 0.4012,
+      "curve_relative_windows": [
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "curve": [
+        0.7603,
+        0.7262,
+        0.7295,
+        0.7375,
+        0.7045,
+        0.6888,
+        0.7266
+      ],
+      "q": 0.9182
+    },
+    {
+      "teacher_event": "walking_start",
+      "student_feature": "S_off_target",
+      "events": 4,
+      "mean_change": 0.0025,
+      "p_random_onsets": 0.9182,
+      "curve_relative_windows": [
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "curve": [
+        0.111,
+        0.1485,
+        0.1283,
+        0.1016,
+        0.1437,
+        0.1526,
+        0.1309
+      ],
+      "q": 0.9182
+    },
+    {
+      "teacher_event": "walking_start",
+      "student_feature": "S_phone",
+      "events": 4,
+      "mean_change": 0.0289,
+      "p_random_onsets": 0.1916,
+      "curve_relative_windows": [
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "curve": [
+        0.0872,
+        0.0475,
+        0.1209,
+        0.0944,
+        0.1065,
+        0.1124,
+        0.0715
+      ],
+      "q": 0.6387
+    },
+    {
+      "teacher_event": "walking_start",
+      "student_feature": "S_talking",
+      "events": 4,
+      "mean_change": 0.0402,
+      "p_random_onsets": 0.1198,
+      "curve_relative_windows": [
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "curve": [
+        0.211,
+        0.2006,
+        0.2676,
+        0.2331,
+        0.2289,
+        0.2509,
+        0.2713
+      ],
+      "q": 0.599
+    },
+    {
+      "teacher_event": "walking_start",
+      "student_feature": "S_hand_raises",
+      "events": 4,
+      "mean_change": 0.0625,
+      "p_random_onsets": 0.8463,
+      "curve_relative_windows": [
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "curve": [
+        0.0,
+        0.0,
+        0.25,
+        0.0,
+        0.25,
+        0.0,
+        0.0
+      ],
+      "q": 0.9182
+    }
+  ],
+  "findings": [
+    {
+      "kind": "strength",
+      "method": "peri_event",
+      "teacher_feature": "turn_to_class",
+      "student_feature": "S_on_target",
+      "window_seconds": [
+        -10.0,
+        20.0
+      ],
+      "effect": 0.0852,
+      "q": 0.02
+    },
+    {
+      "kind": "weak_point",
+      "method": "lag_correlation",
+      "teacher_feature": "T_stationary",
+      "student_feature": "S_phone",
+      "lag_seconds": 15.0,
+      "effect": 0.9154,
+      "q": 0.036
+    },
+    {
+      "kind": "strength",
+      "method": "lag_correlation",
+      "teacher_feature": "T_gesturing",
+      "student_feature": "S_off_target",
+      "lag_seconds": 10.0,
+      "effect": -0.9072,
+      "q": 0.036
+    },
+    {
+      "kind": "observation",
+      "method": "lag_correlation",
+      "teacher_feature": "T_facing_class",
+      "student_feature": "S_talking",
+      "lag_seconds": 5.0,
+      "effect": 0.8637,
+      "q": 0.036
+    },
+    {
+      "kind": "strength",
+      "method": "lag_correlation",
+      "teacher_feature": "T_gesturing",
+      "student_feature": "S_on_target",
+      "lag_seconds": 10.0,
+      "effect": 0.6579,
+      "q": 0.036
+    }
+  ],
+  "settings": {
+    "max_lag_windows": 6,
+    "min_active_windows": 5,
+    "permutations": 500,
+    "alpha": 0.05,
+    "seed": 0
+  },
+  "limitations": [
+    "Associations within one recording, not causes: a teacher behaviour that precedes a student change may share a cause with it (the lesson plan, the topic, a script).",
+    "Cameras are lined up by whole-second recording tags: about +/-1 s, hence 5 s windows.",
+    "Student values are class averages of the known student time; unknown time is excluded, not zero.",
+    "Teacher features present in fewer than min_active_windows windows are not tested by correlation; their onsets get peri-event averages when there are enough of them.",
+    "Short or scripted lessons have little variation and few windows; findings need full lectures or several lessons before they say anything about teaching."
+  ]
+}

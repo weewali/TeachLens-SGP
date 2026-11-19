@@ -1,0 +1,297 @@
+# Default values for a local TeachLens analysis run.
+# Environment-specific overrides should live in a separate, uncommitted YAML file.
+
+project:
+  random_seed: 42
+
+paths:
+  raw_videos: data/raw_videos
+  raw_frames: data/raw_frames
+  indicators: configs/indicators.yaml
+  dataset: data/person_detection
+  calibration: data/calibration
+  models: models
+  outputs: outputs
+  runs: runs
+
+video:
+  # 1 analyzed frame/second (user decision 2026-10-26; 5/s was too costly).
+  # Fast walking can move a person farther than their own width between
+  # samples, so tracker IDs fragment more than at 5/s; much sparser sampling
+  # breaks tracking and motion.
+  sample_every_seconds: 1.0
+
+models:
+  person_detector: yolo11n.pt
+  # Explicit local file: analysis never triggers an implicit model download.
+  pose_estimator: models/pose/yolo26n-pose.pt
+  # ByteTrack with looser matching for one frame per second (see the file);
+  # a bare name such as bytetrack.yaml uses Ultralytics' built-in settings.
+  tracker: configs/bytetrack_1fps.yaml
+
+# These are camera contexts, not per-person role predictions. A track whose
+# role is ambiguous within a view must remain unknown.
+#
+# TeachLens recordings use static cameras on tripods: no panning, zooming, or
+# cuts, so image coordinates are scene coordinates for the whole run. The
+# downloaded web samples are operated cameras; analyze those with
+# --local-config configs/web_sample_cameras.yaml.
+#
+# pose_joints lists the COCO-17 groups rules may use (head, arms, hips, knees,
+# ankles); other joints are dropped before any rule sees them, as are joints
+# placed outside the image. posture_method is legs (hip/knee angles, with the
+# shoulder-hip-knee fallback when ankles are missing) or shoulder_rise
+# (shoulder height against the track's own seated level; fixed cameras only).
+cameras:
+  student_view:
+    expected_role: student
+    # Use all_tracks only if this camera is truly restricted to students.
+    role_policy: all_tracks
+    fixed_camera: true
+    compensate_camera_motion: false
+    # Desks hide students' knees and ankles, and the model still guesses
+    # positions for hidden joints, so student rules never use legs.
+    pose_joints: [head, arms, hips]
+    posture_method: shoulder_rise
+    zones: null
+  instructor_view:
+    expected_role: teacher
+    # The teacher role goes to a confirmed person who is alone in view.
+    role_policy: single_visible
+    # Keep that role on the same tracker ID while other people appear (they
+    # are unknown); false makes everyone unknown whenever two are in view.
+    keep_teacher_track: true
+    fixed_camera: true
+    compensate_camera_motion: false
+    # Legs are used when visible; near the camera the feet or knees leave the
+    # frame, and posture then falls back to shoulder-hip-knee or unknown.
+    pose_joints: [head, arms, hips, knees, ankles]
+    posture_method: legs
+    # Ignore detections whose box starts in the lowest quarter of the image:
+    # heads of students sitting in front of this camera (measured 2026-11-16
+    # at 0.80-0.89; the seated instructor's box starts near 0.58). null = off.
+    ignore_people_starting_below: 0.75
+    # Ignore people whose box lies inside these calibrated targets: photos or
+    # video of people on the screen. Needs a zone file with targets.
+    ignore_people_inside_targets: [screen]
+    zones: null
+
+# Background feature matching for cameras with fixed_camera: false and
+# compensate_camera_motion: true (only the web-sample override sets these).
+camera_motion:
+  min_inliers: 40  # fewer agreeing background features = unmeasured step (new shot)
+  max_scale_step: 0.1  # >10% zoom between samples is treated as a cut
+
+inference:
+  confidence_threshold: 0.25
+  iou_threshold: 0.45
+  keypoint_confidence: 0.35
+  # Model input width in pixels; frames are shrunk to it before detection.
+  # At 640 (the checkpoint default) the 4K student camera lost small or
+  # unusual people: back-row students, heads down on the desk, a student
+  # leaning out of his seat. 1280 found them in every tested B1 frame
+  # (2026-11-17) for ~0.1 s more per analyzed frame on CPU. null = 640.
+  image_size: 1280
+
+analysis:
+  minimum_event_duration_seconds: 0.5
+  merge_gap_seconds: 0.25
+  min_track_samples: 2  # confirmed after being seen in 2 samples (1 s at 1 sample/s)
+  max_track_gap_seconds: 2.5  # tolerates one missed sample at 1 sample/s; must be >= sampling
+  edge_margin: 0.05
+  # One detection per body: desks split seated people into an above-desk box
+  # and a full-body box that both survive the model's overlap check. Two
+  # detections are the same person when their shared head/shoulder points lie
+  # within this many shoulder widths (measured 0.01-0.03 for duplicates, >=
+  # 0.35 for two people); without such points, when the smaller box lies at
+  # least duplicate_min_box_inside inside the other. null turns this off.
+  duplicate_max_keypoint_distance: 0.25
+  duplicate_min_box_inside: 0.9
+  sitting_angle_degrees: 135
+  standing_angle_degrees: 160
+  # Without visible ankles (feet cut off or hidden), judge posture from
+  # shoulder-hip-knee: standing = straight hip + thigh near vertical, sitting =
+  # bent hip + thigh near horizontal. Reported as limited coverage.
+  upper_leg_posture: true
+  thigh_axis_tolerance_degrees: 30
+  thigh_torso_min_ratio: 0.5  # shorter thighs are foreshortened; direction not trusted
+  # shoulder_rise posture, in shoulder widths above the track's seated level
+  # (the low end of its own shoulder heights). Assumes students sit most of
+  # the time and stand up in place; unvalidated starting values.
+  shoulder_rise_standing_min: 0.7
+  shoulder_rise_sitting_max: 0.35
+  shoulder_rise_history_seconds: 3.0  # shoulder history needed before any label
+  shoulder_rise_max_seat_shift: 1.0  # widths away from the seat -> unknown (left the seat)
+  # Median apparent joint displacement in body-heights/second.
+  motion_low_max: 0.08
+  motion_medium_max: 0.35
+  motion_high_min: 0.8
+  motion_smoothing_samples: 3
+  # Metrics use valid visible time, not the full video duration by default.
+  require_evidence_coverage: true
+
+# Student facial actions (src/inference/face_mesh.py, src/analysis/facial_actions.py),
+# student camera only. Face crops come from the pose head keypoints; scores
+# are compared with each student's own usual face. Unvalidated starting
+# values, set on A2 (2026-11-17).
+faces:
+  model: models/face/face_landmarker.task
+  crop_size: 256                  # pixels fed to the landmarker
+  min_detection_confidence: 0.3
+  min_face_width_px: 60           # narrower faces in the source frame are not used
+  max_nose_offset: 0.15           # mesh nose vs pose nose, in crop sides (good faces 0.03-0.07)
+  min_mesh_width: 0.30            # share of the crop side (good faces 0.42-0.49)
+  baseline_seconds: 300           # history behind each student's usual face
+  baseline_min_samples: 10        # faces seen before any label
+  smile_min: 0.35                 # mean mouthSmile; smiling A2 faces 0.48-0.71, neutral 0.00-0.11
+  smile_rise: 0.20                # above the student's usual level
+  brow_min: 0.30
+  brow_rise: 0.25
+  eyes_closed_min: 0.60           # mean eyeBlink; open eyes read up to 0.46 from above
+  eyes_closed_rise: 0.30
+  eyes_closed_min_seconds: 2.0
+  yawn_min: 0.50                  # jawOpen
+  yawn_rise: 0.35
+  yawn_min_seconds: 2.0
+  head_turn_degrees: 25           # |yaw| from the camera axis -> turned left/right (image directions)
+  head_pitch_degrees: 15          # pitch change from the student's usual pitch -> down/up
+  frames_per_second: 5            # faces per second for talking and nods (extra frames between samples; 1 = samples only)
+  talk_min_range: 0.03            # inner-lip gap swing within a second (A2: silent <= 0.02, talking 0.03-0.12)
+  talk_min_seconds: 2             # of the last 3 seconds
+  nod_min_degrees: 5
+  nod_window_seconds: 1.2
+  shake_min_degrees: 8
+  shake_window_seconds: 2.0
+
+# List C (students), student camera only. Unvalidated starting values,
+# distances in shoulder widths. See docs/list_c_students.md.
+students:
+  raise_face_dx: 0.55             # face box around the nose (sideways, above, below): a wrist in it
+  raise_face_above: 0.8           # counts as a raise only with an open palm from the gesture model
+  raise_face_below: 0.9           # (A1: a raise beside the face and a cheek rest look alike)
+  raise_high_above_nose: 0.5      # high: wrist this far above the nose; medium: above the nose
+  raise_max_tilt_degrees: 35      # forearm within this of vertical
+  raise_low_min_lift: 0.6         # low raise: wrist above the elbow by this share of the forearm
+  raise_low_min_seconds: 2.0      # low raises without an open palm must last this long
+  seat_min_samples: 5             # steady seated samples before a home seat is set
+  seat_match_widths: 0.8
+  out_of_seat_widths: 1.5
+  out_of_seat_min_seconds: 2.0
+  head_down_drop: 0.35
+  head_down_min_height: 0.1
+  head_hidden_shoulder_drop: 0.3  # face hidden and shoulders this far below the seated level
+  head_on_desk_room: 0.9          # face hidden and box top this close above the shoulders = head on the desk (B1 sleeper)
+  bowed_ear_rise: 0.45            # ears this many eye distances above the eyes = head bowed (upright A1 -0.17..0.08, B1 up to -0.52)
+  bowed_nose_drop: 0.75           # nose this many eye distances below the eyes = looking down (upright up to 0.69)
+  head_rest_height: 0.0           # head at or below the shoulder line = resting on the desk (sleep needs this or a hidden face)
+  laptop_open_ratio: 0.7          # laptop box height/width; A2: closed 0.34-0.54 (not in use), open ~1.07
+  head_down_pitch_degrees: 15
+  eyes_down_min: 0.45             # mean eyeLookDown...
+  eyes_down_rise: 0.15            # ...and this much above the student's usual level (camera above the teacher)
+  sleep_min_seconds: 20           # head down and still this long -> possible_sleep
+  long_eyes_closed_seconds: 10
+  object_near_wrist: 0.5          # phone centre this close to a wrist = in hand
+  held_phone_max_gap: 0.6         # wrists this close, still, in front of the body + looking down = phone held (not seen)
+  writing_min_speed: 0.03         # wrist speed relative to the shoulders, widths per second
+  writing_max_speed: 0.6
+  phone_head_down_seconds: 5.0    # head pointed down this long, phone not seen -> phone_likely (user, 2026-11-18)
+  phone_eyes_down: 0.55           # mean eyeLookDown counted as pointed down
+  phone_memory_seconds: 10        # a phone seen at the hands stays "phone" this long while the head stays down
+  gesture_min_score: 0.6
+  peer_row_widths: 1.5
+  peer_max_widths: 6.0
+  outcome_window_seconds: 12      # talking or standing up to this long after a raise = answered
+  outcome_talk_seconds: 3.0       # talking while facing the front (talk to a neighbour is a chat)
+  object_classes: [cell phone, laptop, book]
+  object_image_size: 1920         # phones in hands: 0.05-0.20 at 1280, 0.29-0.90 at 1920 (A4)
+  object_confidence: 0.2          # objects only count near a student's hands or in front of them
+  gesture_model: models/hands/gesture_recognizer.task
+
+# Join tracker IDs of one walking person (src/inference/tracking.py): at one
+# frame per second ByteTrack cannot link boxes that do not overlap.
+tracking:
+  stitch: true
+  stitch_max_speed: 1.5           # box heights per second
+  stitch_margin: 0.5              # box heights added to the walking distance
+
+# Classroom objects (scripts/detect_objects.py, run_scenarios.py --objects):
+# the COCO-trained YOLO26 detector, run on its own without the pose model.
+# COCO has no pen, notebook, calculator, or marker; those need fine-tuning.
+objects:
+  detector: models/detection/yolo26n.pt
+  confidence_threshold: 0.25
+  iou_threshold: 0.45
+  image_size: 1280                # like the pose model: small items in 4K frames need it
+  classes: [cell phone, laptop, book, bottle, cup, keyboard, mouse, remote, scissors, backpack, handbag]
+
+# List B (teacher behaviour) thresholds; unvalidated starting values, set
+# on the scenario videos (2026-11-17). Speeds are per second.
+teacher:
+  head_down_ratio: 1.0            # nose this many eye-gaps below the eyes -> looking down (notes)
+  pointing_min_elbow_degrees: 150 # straight arm
+  pointing_min_reach: 0.6         # shoulder-to-wrist distance / torso length
+  pointing_min_raise_degrees: 40  # arm lifted at least this far from hanging down
+  raised_max_from_vertical_degrees: 35  # a straight arm this close to vertical is a raised hand
+  target_margin: 0.03             # normalized x margin around board/screen targets
+  # Gestures (2026-11-18, lowered from 0.3 at the user's request: real hand
+  # movements in A2 measured 0.12-0.16 between 1-s samples): a hand moving at
+  # least gesture_min_speed, or a hand raised to chest height or above
+  # (wrist no more than gesture_raised_max_drop torso lengths below the
+  # shoulders) moving at least gesture_raised_min_speed. Wrists below
+  # gesture_wrist_confidence are ignored (hidden hands jump around), and so
+  # are hands at the face (within gesture_face_distance shoulder widths of the
+  # nose: chin or cheek rests) or on the desk target (typing, turning pages).
+  gesture_min_speed: 0.15         # wrist speed relative to the torso, torso lengths/s
+  gesture_raised_min_speed: 0.08
+  gesture_raised_max_drop: 0.6
+  gesture_wrist_confidence: 0.5
+  gesture_face_distance: 0.6
+  locomotion_min_speed: 0.25      # hip speed (body heights/s) counted as walking
+  stationary_max_speed: 0.08      # hip speed (body heights/s) counted as standing still
+  stationary_min_seconds: 5.0     # shortest stationary episode reported
+  lean_upright_max_degrees: 10    # sideways torso tilt still counted as upright
+  lean_strong_min_degrees: 25
+  writing_smoothing_samples: 3    # writing = majority of the last N samples
+
+# Lesson fusion and lag analysis (scripts/fuse_lesson.py; SGP1 proposal FR 6,
+# built 2026-11-18). Reads two saved runs of one lesson, lines them up by real
+# time (+/-1 s, hence windows of several seconds), and tests whether student
+# changes follow teacher actions. Associations, not causes; unvalidated.
+fusion:
+  window_seconds: 5.0         # analysis window on the shared real-time line
+  min_known_fraction: 0.5     # a share needs this fraction of a window of known evidence
+  max_lag_windows: 6          # lags tested: 1..6 windows (5-30 s) after the teacher action
+  min_active_windows: 5       # teacher features present in fewer windows are not correlated
+  permutations: 500           # circular shifts / random onsets per test
+  alpha: 0.05                 # q-value (Benjamini-Hochberg) for a finding
+  seed: 0                     # random generator seed; same seed, same p-values
+  model_lags: [1, 2, 3]       # lagged models Y_t ~ X_(t-k) + Y_(t-1) for these k
+  outcomes: [S_on_target, S_off_target, S_phone, S_talking, S_head_down]
+  model_predictors: [T_facing_class, T_board_or_screen, T_gesturing, T_walking, T_pointing, T_writing]
+  min_events: 3               # peri-event averages need at least this many teacher onsets
+  onset_min_gap_seconds: 10   # onsets closer than this to the previous one are one onset
+  peri_event_before_windows: 2
+  peri_event_after_windows: 4
+
+# Visual check of what List A saw in each analyzed (sampled) frame. The MP4
+# holds original classroom footage: it stays local under outputs/debug/
+# (ignored by Git) and must not be shared without the recording's permission.
+review:
+  save_video: true  # outputs/debug/<video_id>.list_a.mp4; --no-save-video skips it
+  video_codec: avc1  # H.264; falls back to mp4v when OpenCV cannot encode it
+  live_preview: false  # or --live; needs a desktop session
+  show_rejected_keypoints: false  # grey rings for joints below keypoint_confidence
+  # Trail of hip-centre points in camera-shot coordinates: "off", "teacher"
+  # (camera-assumed teacher), or "all" (every confirmed track); or --path.
+  # Quoted because YAML reads a bare off as false.
+  path: "off"
+  path_seconds: null  # null keeps the whole analyzed range; e.g. 30 for a recent trail
+  path_max_gap_seconds: 1.0  # longer gaps between points are not joined by a line
+
+reporting:
+  format: html
+  include_evidence_coverage: true
+
+privacy:
+  anonymous_track_ids: true
+  save_face_crops: false

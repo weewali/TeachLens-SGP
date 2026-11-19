@@ -1,0 +1,699 @@
+"""List A review video: frame overlays, atomic MP4 output, and a live window.
+
+Overlays are drawn from the same pose observations and rule state that produced
+this run's JSONL evidence; nothing here runs a model or adds a rule. Only the
+analyzed (sampled) frames are drawn, so every video frame is one the rules saw.
+The MP4 contains the original classroom footage: keep it local (outputs/ is
+ignored by Git) and do not share it without the recording's permission.
+"""
+
+from bisect import bisect_left
+from collections.abc import Sequence
+import logging
+import os
+from pathlib import Path
+import tempfile
+from typing import Any
+
+from src.analysis.visual_indicators import SampleSnapshot, TrackSnapshot
+from src.inference.pose import (
+    JOINT_GROUPS, LEFT_ANKLE, LEFT_EAR, LEFT_ELBOW, LEFT_EYE, LEFT_HIP, LEFT_KNEE,
+    LEFT_SHOULDER, LEFT_WRIST, NOSE, RIGHT_ANKLE, RIGHT_EAR, RIGHT_ELBOW,
+    RIGHT_EYE, RIGHT_HIP, RIGHT_KNEE, RIGHT_SHOULDER, RIGHT_WRIST, PosePerson,
+)
+from src.preprocessing.camera_motion import IDENTITY, invert
+
+
+LOGGER = logging.getLogger(__name__)
+
+# COCO-17 limbs, drawn only when both joints pass keypoint_confidence.
+SKELETON = (
+    (NOSE, LEFT_EYE), (NOSE, RIGHT_EYE), (LEFT_EYE, LEFT_EAR), (RIGHT_EYE, RIGHT_EAR),
+    (LEFT_SHOULDER, RIGHT_SHOULDER), (LEFT_SHOULDER, LEFT_ELBOW), (LEFT_ELBOW, LEFT_WRIST),
+    (RIGHT_SHOULDER, RIGHT_ELBOW), (RIGHT_ELBOW, RIGHT_WRIST),
+    (LEFT_SHOULDER, LEFT_HIP), (RIGHT_SHOULDER, RIGHT_HIP), (LEFT_HIP, RIGHT_HIP),
+    (LEFT_HIP, LEFT_KNEE), (LEFT_KNEE, LEFT_ANKLE), (RIGHT_HIP, RIGHT_KNEE),
+    (RIGHT_KNEE, RIGHT_ANKLE),
+)
+
+# BGR colours by camera-assumed role. Provisional tracks are not yet counted
+# by any rule; magenta marks confirmed people whose role stayed unknown.
+ROLE_COLORS = {"teacher": (0, 140, 255), "student": (255, 160, 0), "unknown": (255, 0, 255)}
+PROVISIONAL_COLOR = (170, 170, 170)
+ZONE_COLOR = (80, 220, 80)
+TARGET_COLOR = (0, 200, 255)  # board/screen/desk targets (List B)
+POINTING_COLOR = (0, 0, 255)
+# Short overlay words for List B labels; anything else is shown as is.
+TEACHER_SHORT = {"toward_class": "faces class", "away_from_class": "back to class",
+                 "sideways_left": "side-on (left)", "sideways_right": "side-on (right)"}
+PATH_COLOR = (0, 255, 255)  # teacher path; "all" paths use role colours
+FACE_COLOR = (120, 255, 120)  # student face-mesh points (facial actions)
+# Overlay words for facial-action labels; values come from facial_actions.py.
+FACE_WORDS = {
+    "smile": {"smiling": "SMILING", "not_smiling": "no smile", "unknown": "smile ?"},
+    "brows": {"lowered": "BROWS LOWERED", "raised": "BROWS RAISED", "neutral": "brows neutral",
+              "unknown": "brows ?"},
+    "eyes_closed": {"closed": "EYES CLOSED", "open": "eyes open", "unknown": "eyes ?"},
+    "yawn": {"yawning": "YAWNING", "not_yawning": "no yawn", "unknown": "yawn ?"},
+    "talking": {"talking": "TALKING", "silent": "silent", "unknown": "talk ?"},
+    "head_gesture": {"nod": "NOD", "shake": "SHAKE", "none": "no nod", "unknown": "nod ?"},
+}
+# Overlay words for List C labels (student_indicators.py, interaction_indicators.py).
+STUDENT_WORDS = {
+    "hand_raise": {"high": "HAND UP high", "medium": "HAND UP", "low": "HAND UP low", "none": "hand down",
+                   "unknown": "hand ?"},
+    "out_of_seat": {"out_of_seat": "OUT OF SEAT", "in_seat": "in seat", "unknown": "seat ?"},
+    "head_down": {"down": "HEAD DOWN", "up": "head up", "unknown": "head ?"},
+    "alertness": {"awake": "awake", "tired": "TIRED", "dozing": "DOZING", "possible_sleep": "SLEEP?",
+                  "unknown": "alert ?"},
+    "device_use": {"phone": "PHONE", "phone_likely": "PHONE (likely, head down)", "laptop": "LAPTOP",
+                   "none": "no device", "unknown": "device ?"},
+    "note_taking": {"writing": "WRITING", "not_writing": "not writing", "unknown": "notes ?"},
+    "reading": {"reading": "READING", "not_reading": "not reading", "unknown": "reading ?"},
+    "orientation_proxy": {"on_target": "on target", "off_target": "OFF TARGET", "looking_down": "looking down",
+                          "speaking": "SPEAKING", "unknown": "orient ?"},
+}
+OBJECT_COLOR = (0, 215, 255)  # phones, laptops, books used by List C
+PATH_MODES = ("off", "teacher", "all")
+
+
+def _cv2() -> Any:
+    try:
+        import cv2
+    except ImportError as exc:
+        raise RuntimeError("opencv-python is required in the TeachLens environment") from exc
+    return cv2
+
+
+def _clock(seconds: float) -> str:
+    minutes, rest = divmod(max(seconds, 0.0), 60)
+    hours, minutes = divmod(int(minutes), 60)
+    return f"{hours}:{minutes:02d}:{rest:04.1f}" if hours else f"{minutes:02d}:{rest:04.1f}"
+
+
+def describe_track(person: PosePerson, track: TrackSnapshot | None) -> list[str]:
+    """Label lines for one person; '?' marks evaluated-but-unknown states."""
+    if track is None or not track.confirmed:
+        return [f"#{person.track_id} provisional {person.confidence:.2f}"]
+    lines = [f"#{person.track_id} {track.role} {person.confidence:.2f}"]
+    states = []
+    if track.posture is not None:
+        posture = ("posture ?" if track.posture == "unknown" else
+                   f"{track.posture} (partial)" if track.posture_basis == "upper_legs"
+                   else track.posture)
+        if track.posture_rise is not None:
+            posture += f" rise {track.posture_rise:.2f}"
+        states.append(posture)
+    if track.motion is not None:
+        motion = "motion ?" if track.motion == "unknown" else track.motion
+        if track.motion_score is not None:
+            motion += f" {track.motion_score:.2f} bh/s"
+        states.append(motion)
+    if states:
+        lines.append(" | ".join(states))
+    flags = []
+    if track.zone is not None:
+        flags.append(f"zone {track.zone}")
+    if track.possible_occlusion:
+        flags.append("occluded?")
+    if track.box_truncated:
+        flags.append("cut off")
+    if flags:
+        lines.append(" | ".join(flags))
+    lines.extend(describe_teacher(track.teacher))
+    lines.extend(describe_face(track.face))
+    lines.extend(describe_student(track.student))
+    return lines
+
+
+def describe_student(student: dict[str, Any] | None) -> list[str]:
+    """List C label lines for a student track; only evaluated indicators appear."""
+    if not student:
+        return []
+    parts = []
+    if "seat" in student:
+        parts.append(student["seat"] if student["seat"] not in ("away", "unknown") else
+                     "AWAY from seat" if student["seat"] == "away" else "seat ?")
+    for name, words in STUDENT_WORDS.items():
+        if name in student:
+            text = words.get(student[name], student[name])
+            if name == "out_of_seat" and student.get("seat_distance") is not None and student[name] == "out_of_seat":
+                text += f" {student['seat_distance']:.1f}w"
+            parts.append(text)
+    if "response_gesture" in student:
+        gesture = student["response_gesture"]
+        parts.append("gesture ?" if gesture == "unknown" else "no gesture" if gesture == "none"
+                     else gesture.replace("_", " ").upper())
+    if "head_target" in student:
+        target, peer = student["head_target"], student.get("head_target_peer")
+        parts.append("faces ?" if target == "unknown" else
+                     f"faces {target.replace('_', ' ')}" + (f" #{peer}" if peer is not None else ""))
+    return [" | ".join(parts[i:i + 3]) for i in range(0, len(parts), 3)]
+
+
+def describe_face(face: dict[str, Any] | None) -> list[str]:
+    """Facial-action label lines for a student track; only evaluated indicators appear."""
+    if not face:
+        return []
+    if not face.get("face"):
+        return ["face ? (none toward camera)"]
+    names = [name for name in (*FACE_WORDS, "head_direction") if name in face]
+    if names and all(face[name] == "unknown" for name in names if name not in ("talking", "head_gesture")) \
+            and any(face.get(name) not in (None, "unknown") for name in ("talking", "head_gesture")):
+        names = [name for name in names if name in ("talking", "head_gesture")]
+    if names and all(face[name] == "unknown" for name in names):
+        return ["face: learning usual look"]
+    values = face.get("values") or {}
+    shown = {"smile": "smile", "brows": None, "eyes_closed": "eye_blink", "yawn": "jaw_open",
+             "talking": "mouth_range", "head_gesture": None}
+    parts = []
+    for name in names:
+        if name == "head_direction":
+            label = face[name]
+            parts.append("head ?" if label == "unknown" else
+                         f"head {label.replace('_', ' ')} (yaw {values.get('yaw', 0):+.0f})")
+            continue
+        text = FACE_WORDS[name].get(face[name], face[name])
+        if shown[name] and face[name] != "unknown" and values.get(shown[name]) is not None:
+            text += f" {values[shown[name]]:.2f}"
+        parts.append(text)
+    return [" | ".join(parts[i:i + 3]) for i in range(0, len(parts), 3)]
+
+
+def describe_teacher(teacher: dict[str, Any] | None) -> list[str]:
+    """List B label lines for a teacher track; only evaluated indicators appear."""
+    if not teacher:
+        return []
+    parts = []
+    if teacher.get("facing"):
+        parts.append(TEACHER_SHORT.get(teacher["facing"], teacher["facing"]))
+    if teacher.get("head"):
+        parts.append(f"head: {teacher['head']}")
+    if teacher.get("board") not in (None, "none"):
+        parts.append(f"at {teacher['board']}")
+    if teacher.get("writing") == "writing":
+        parts.append("WRITING")
+    if teacher.get("pointing") not in (None, "none"):
+        parts.append(f"points: {teacher['pointing']}")
+    if teacher.get("gesture") == "gesturing":
+        parts.append("gesturing")
+    if teacher.get("raised") in ("one", "both"):
+        parts.append(f"hand up ({teacher['raised']})")
+    if teacher.get("lean") not in (None, "upright", "unknown"):
+        parts.append(teacher["lean"].replace("_", " "))
+    if teacher.get("stationary") == "stationary":
+        parts.append("stationary")
+    return [" | ".join(parts[i:i + 3]) for i in range(0, len(parts), 3)]
+
+
+def camera_notes(camera: dict[str, Any], enabled: dict[str, bool], has_zones: bool) -> tuple[str, ...]:
+    """Fixed reminders about why some states are unknown for this camera."""
+    notes = [f"roles: camera context ({camera['role_policy']}), not verified"]
+    if enabled and not all(enabled.values()):
+        notes.append(f"showing: {', '.join(name for name, on in enabled.items() if on) or 'none'}")
+    unused = [group for group in JOINT_GROUPS if group not in camera.get("pose_joints", JOINT_GROUPS)]
+    if unused:
+        notes.append(f"joints not used: {', '.join(unused)}")
+    if any(enabled.get(name) for name in ("smile", "brows", "eyes_closed", "yawn", "head_direction",
+                                          "talking", "head_gesture")):
+        notes.append("faces: student points on face crops; no face = unknown"
+                     if camera.get("expected_role") == "student" else "faces: student camera only, skipped")
+    if camera.get("expected_role") != "student" and any(enabled.get(name) for name in (
+            "seat_occupancy", "hand_raise", "out_of_seat", "head_down", "alertness", "device_use",
+            "note_taking", "reading", "response_gesture", "head_target", "orientation_proxy",
+            "hand_raise_outcome")):
+        notes.append("List C: student camera only, skipped")
+    if enabled.get("device_use") or enabled.get("note_taking") or enabled.get("reading"):
+        notes.append("objects: COCO phone/laptop/book boxes (yellow)")
+    if camera.get("ignore_people_inside_targets"):
+        notes.append(f"ignored: people inside {', '.join(camera['ignore_people_inside_targets'])}")
+    if camera.get("ignore_people_starting_below") is not None:
+        notes.append(f"ignored: boxes starting below {camera['ignore_people_starting_below']:.0%} of height")
+    if (enabled.get("motion_level") and not camera.get("fixed_camera", True)
+            and not camera.get("compensate_camera_motion", False)):
+        notes.append("motion: unknown, camera not fixed")
+    if enabled.get("classroom_zone") and not has_zones:
+        notes.append("zones: not calibrated")
+    return tuple(notes)
+
+
+Rect = tuple[int, int, int, int]  # pixel x1, y1, x2, y2
+
+
+def _text_size(cv2: Any, lines: Sequence[str], scale: float) -> tuple[int, int]:
+    thickness, pad = max(1, round(scale)), max(2, round(4 * scale))
+    sizes = [cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX, 0.5 * scale, thickness)[0]
+             for line in lines]
+    return max(w for w, _ in sizes) + pad * 2, (max(h for _, h in sizes) + pad * 2) * len(lines)
+
+
+def _clamp(image: Any, x: int, y: int, size: tuple[int, int]) -> Rect:
+    """Keep a text block inside the frame."""
+    height, width = image.shape[:2]
+    x = max(0, min(x, width - size[0]))
+    y = max(0, min(y, height - size[1]))
+    return x, y, x + size[0], y + size[1]
+
+
+def _overlaps(first: Rect, second: Rect) -> bool:
+    return first[0] < second[2] and second[0] < first[2] and first[1] < second[3] and second[1] < first[3]
+
+
+def _text_block(cv2: Any, image: Any, lines: Sequence[str], rect: Rect, scale: float,
+                background: tuple[int, int, int] | None, text_color: tuple[int, int, int]) -> None:
+    """Draw stacked lines on a filled (or translucent dark) background."""
+    thickness, pad = max(1, round(scale)), max(2, round(4 * scale))
+    x1, y1, x2, y2 = rect
+    if background is None:  # darken in place so the scene stays faintly visible
+        image[y1:y2, x1:x2] = cv2.convertScaleAbs(image[y1:y2, x1:x2], alpha=0.35)
+    else:
+        image[y1:y2, x1:x2] = background
+    line_height = (y2 - y1) // len(lines)
+    for index, line in enumerate(lines):
+        cv2.putText(image, line, (x1 + pad, y1 + line_height * (index + 1) - pad),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5 * scale, text_color, thickness, cv2.LINE_AA)
+
+
+# Distinct BGR colours for object classes (cycled by label).
+OBJECT_PALETTE = ((0, 140, 255), (255, 80, 80), (60, 200, 60), (200, 80, 255), (0, 220, 220),
+                  (255, 180, 0), (180, 120, 60), (120, 120, 255), (80, 255, 160), (255, 0, 160))
+
+
+class ObjectOverlay:
+    """Draw one sample's detected objects (no poses) with labels and a count panel."""
+
+    def __init__(self, title: str, labels: Sequence[str], *, duration: float | None = None,
+                 notes: Sequence[str] = ()):
+        self.title = title
+        self.labels = tuple(labels)
+        self.duration = duration
+        self.notes = tuple(notes)
+        self.colors = {label: OBJECT_PALETTE[i % len(OBJECT_PALETTE)] for i, label in enumerate(self.labels)}
+
+    def hud_lines(self, time: float, objects: Sequence[Any]) -> list[str]:
+        counts = {label: 0 for label in self.labels}
+        for item in objects:
+            counts[item.label] = counts.get(item.label, 0) + 1
+        seen = [f"{label} {n}" for label, n in counts.items() if n]
+        lines = [self.title, f"t {_clock(time)}" + (f" / {_clock(self.duration)}" if self.duration else ""),
+                 "objects: " + (", ".join(seen) if seen else "none detected")]
+        return lines + list(self.notes)
+
+    def draw(self, frame: Any, objects: Sequence[Any], time: float) -> Any:
+        """Return an annotated copy; the decoded frame itself is not changed."""
+        cv2 = _cv2()
+        image = frame.copy()
+        height, width = image.shape[:2]
+        scale = max(0.6, min(width, height) / 720)
+        thickness = max(2, round(2 * scale))
+        for item in objects:
+            color = self.colors.get(item.label, (255, 255, 255))
+            x1, y1, x2, y2 = (round(item.box[0] * width), round(item.box[1] * height),
+                              round(item.box[2] * width), round(item.box[3] * height))
+            cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
+            text = [f"{item.label} {item.confidence:.2f}"]
+            size = _text_size(cv2, text, 0.8 * scale)
+            _text_block(cv2, image, text, _clamp(image, x1, y1 - size[1], size), 0.8 * scale,
+                        color, (255, 255, 255))
+        hud = self.hud_lines(time, objects)
+        _text_block(cv2, image, hud, _clamp(image, 0, 0, _text_size(cv2, hud, scale)), scale,
+                    None, (255, 255, 255))
+        return image
+
+
+class ReviewOverlay:
+    """Draw one analyzed sample: boxes, joints, assumed roles, rule states, HUD."""
+
+    def __init__(self, title: str, keypoint_confidence: float, *,
+                 duration: float | None = None,
+                 zones: dict[str, tuple[tuple[float, float], ...]] | None = None,
+                 targets: dict[str, tuple[tuple[float, float], ...]] | None = None,
+                 notes: Sequence[str] = (), show_rejected_keypoints: bool = False,
+                 time_range: tuple[float, float | None] | None = None,
+                 path: str = "off", path_seconds: float | None = None,
+                 path_max_gap_seconds: float = 1.0):
+        if path not in PATH_MODES:
+            raise ValueError(f"path must be one of {PATH_MODES}")
+        self.title = title
+        self.min_conf = keypoint_confidence
+        self.duration = duration
+        self.zones = zones or {}
+        self.targets = targets or {}
+        self.notes = tuple(notes)
+        self.show_rejected = show_rejected_keypoints
+        self.time_range = time_range  # (start, end or None) of a --start/--end segment
+        # Path trails: hip-centre points in the current camera shot's
+        # coordinates, keyed by "teacher" or track ID; cleared at a new shot.
+        self.path = path
+        self.path_seconds = path_seconds
+        self.path_max_gap = path_max_gap_seconds
+        self._paths: dict[Any, list[tuple[float, float, float, str]]] = {}
+        self._path_shot: int | None = None
+
+    def hud_lines(self, sample: SampleSnapshot | None) -> list[str]:
+        lines = [self.title]
+        if sample is None:
+            return lines + list(self.notes)
+        clock = _clock(sample.time)
+        if self.duration:
+            clock += f" / {_clock(self.duration)}"
+        if self.time_range is not None:
+            start, end = self.time_range
+            clock += f" | range {_clock(start)}-{_clock(end) if end is not None else 'end'}"
+        confirmed = sum(track.confirmed for track in sample.tracks)
+        lines += [f"t {clock}",
+                  f"tracked {len(sample.tracks)}: {confirmed} confirmed, "
+                  f"{len(sample.tracks) - confirmed} provisional"]
+        if sample.visible_student_count is not None:
+            lines.append(f"visible students {sample.visible_student_count} "
+                         f"({sample.student_count_coverage})")
+        if sample.teacher_presence is not None:
+            lines.append(f"teacher presence {sample.teacher_presence}")
+        camera = sample.camera
+        if camera is not None:
+            if camera.step_reliable is False:
+                lines.append(f"camera: cut or unmeasured -> shot {camera.shot}, motion unknown")
+            elif camera.step_reliable:
+                lines.append(f"camera: shot {camera.shot}, pan {100 * camera.step_shift:.1f}% "
+                             f"zoom x{camera.step_scale:.3f} (compensated)")
+            else:
+                lines.append(f"camera: shot {camera.shot} start (compensated)")
+        if self.path != "off":
+            lines.append(f"path: {self.path}, hip centre"
+                         + (f", last {self.path_seconds:g}s" if self.path_seconds else "")
+                         + (", resets at camera cuts" if camera is not None else "")
+                         if sample.shot is not None else
+                         f"path: {self.path} unavailable (moving camera, not compensated)")
+        return lines + list(self.notes)
+
+    def _update_paths(self, sample: SampleSnapshot) -> None:
+        if self.path == "off" or sample.shot is None:
+            return
+        if sample.shot != self._path_shot:  # another shot's coordinates are unrelated
+            self._paths.clear()
+            self._path_shot = sample.shot
+        for track in sample.tracks:
+            if (not track.confirmed or track.hip_center_in_shot is None
+                    or (self.path == "teacher" and track.role != "teacher")):
+                continue
+            key = "teacher" if self.path == "teacher" else track.track_id
+            self._paths.setdefault(key, []).append((sample.time, *track.hip_center_in_shot, track.role))
+        if self.path_seconds:
+            cutoff = sample.time - self.path_seconds
+            for key, points in list(self._paths.items()):
+                del points[:bisect_left(points, (cutoff,))]
+                if not points:
+                    del self._paths[key]
+
+    def _draw_paths(self, cv2: Any, image: Any, sample: SampleSnapshot, scale: float) -> None:
+        if not self._paths:
+            return
+        import numpy as np
+        height, width = image.shape[:2]
+        to_image = np.array(invert(sample.camera.to_shot_reference) if sample.camera is not None
+                            else IDENTITY).reshape(2, 3)
+        thickness = max(1, round(2 * scale))
+        for key, points in self._paths.items():
+            color = PATH_COLOR if key == "teacher" else ROLE_COLORS.get(points[-1][3], ROLE_COLORS["unknown"])
+            data = np.array([point[:3] for point in points])
+            pixels = data[:, 1:3] @ to_image[:, :2].T + to_image[:, 2]
+            pixels = np.rint(pixels * (width, height)).astype(np.int32)
+            breaks = np.flatnonzero(np.diff(data[:, 0]) > self.path_max_gap) + 1
+            for run in np.split(pixels, breaks):
+                if len(run) > 1:
+                    cv2.polylines(image, [run], False, color, thickness, cv2.LINE_AA)
+                else:
+                    cv2.circle(image, tuple(int(v) for v in run[0]), thickness, color, -1, cv2.LINE_AA)
+            if points[-1][0] == sample.time:  # current position
+                cv2.circle(image, tuple(int(v) for v in pixels[-1]), max(3, round(5 * scale)),
+                           color, -1, cv2.LINE_AA)
+
+    def draw(self, frame: Any, people: Sequence[PosePerson],
+             sample: SampleSnapshot | None, faces: dict[int, Any] | None = None,
+             objects: Sequence[Any] = ()) -> Any:
+        """Return an annotated copy; the decoded frame itself is not changed.
+
+        faces (track ID -> FaceMesh) adds the face-mesh points of students;
+        objects (DetectedObject) adds the phones, laptops, and books List C uses.
+        """
+        cv2 = _cv2()
+        image = frame.copy()
+        height, width = image.shape[:2]
+        scale = max(0.6, min(width, height) / 720)
+        self._draw_zones(cv2, image, scale)
+        if sample is not None:
+            self._update_paths(sample)
+            self._draw_paths(cv2, image, sample, scale)
+        states = {track.track_id: track for track in sample.tracks} if sample else {}
+        # Confirmed and larger (usually nearer) people first, so their labels
+        # get the preferred spot and their skeletons are drawn on top.
+        ordered = sorted(people, key=lambda p: (
+            not (states.get(p.track_id) is not None and states[p.track_id].confirmed),
+            -(p.box[2] - p.box[0]) * (p.box[3] - p.box[1])))
+        for person in reversed(ordered):
+            self._draw_body(cv2, image, person, states.get(person.track_id), scale)
+            self._draw_pointing(cv2, image, states.get(person.track_id), scale)
+        for item in objects:
+            x1, y1, x2, y2 = (round(item.box[0] * width), round(item.box[1] * height),
+                              round(item.box[2] * width), round(item.box[3] * height))
+            cv2.rectangle(image, (x1, y1), (x2, y2), OBJECT_COLOR, max(1, round(scale)), cv2.LINE_AA)
+            cv2.putText(image, f"{item.label} {item.confidence:.2f}", (x1, max(12, y1 - 4)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45 * scale, OBJECT_COLOR, max(1, round(scale)), cv2.LINE_AA)
+        dot = max(1, round(0.6 * scale))  # face-mesh points on top of the head joints
+        for mesh in (faces or {}).values():
+            for x, y in mesh.points:
+                cv2.circle(image, (round(x * width), round(y * height)), dot, FACE_COLOR, -1)
+        hud = self.hud_lines(sample)
+        hud_rect = _clamp(image, 0, 0, _text_size(cv2, hud, scale))
+        # Faces count as taken spots, so labels move off them when they can.
+        face_rects = [(round(min(x for x, _ in m.points) * width), round(min(y for _, y in m.points) * height),
+                       round(max(x for x, _ in m.points) * width), round(max(y for _, y in m.points) * height))
+                      for m in (faces or {}).values()]
+        placed = [hud_rect] + face_rects
+        for person in ordered:
+            placed.append(self._draw_label(cv2, image, person, states.get(person.track_id),
+                                           0.8 * scale, placed))
+        _text_block(cv2, image, hud, hud_rect, scale, None, (255, 255, 255))
+        return image
+
+    def _draw_zones(self, cv2: Any, image: Any, scale: float) -> None:
+        if not self.zones and not self.targets:
+            return
+        import numpy as np
+        height, width = image.shape[:2]
+        for name, polygon in self.zones.items():
+            points = np.array([(round(x * width), round(y * height)) for x, y in polygon], np.int32)
+            cv2.polylines(image, [points], True, ZONE_COLOR, max(1, round(scale)), cv2.LINE_AA)
+            cv2.putText(image, name, tuple(int(v) for v in points[0]), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5 * scale, ZONE_COLOR, max(1, round(scale)), cv2.LINE_AA)
+        for name, polygon in self.targets.items():
+            points = np.array([(round(x * width), round(y * height)) for x, y in polygon], np.int32)
+            cv2.polylines(image, [points], True, TARGET_COLOR, max(1, round(scale)), cv2.LINE_AA)
+            cv2.putText(image, name, tuple(int(v) for v in points[0]), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5 * scale, TARGET_COLOR, max(1, round(scale)), cv2.LINE_AA)
+
+    @staticmethod
+    def _draw_pointing(cv2: Any, image: Any, track: TrackSnapshot | None, scale: float) -> None:
+        """Arrow along a pointing arm (List B), from the wrist outward."""
+        ray = (track.teacher or {}).get("pointing_ray") if track is not None else None
+        if not ray:
+            return
+        height, width = image.shape[:2]
+        (x0, y0), (x1, y1) = ray
+        cv2.arrowedLine(image, (round(x0 * width), round(y0 * height)),
+                        (round(x1 * width), round(y1 * height)), POINTING_COLOR,
+                        max(2, round(2 * scale)), cv2.LINE_AA, tipLength=0.2)
+
+    @staticmethod
+    def _color(track: TrackSnapshot | None) -> tuple[int, int, int]:
+        if track is None or not track.confirmed:
+            return PROVISIONAL_COLOR
+        return ROLE_COLORS.get(track.role, ROLE_COLORS["unknown"])
+
+    @staticmethod
+    def _pixel_box(image: Any, person: PosePerson) -> Rect:
+        height, width = image.shape[:2]
+        return (round(person.box[0] * width), round(person.box[1] * height),
+                round(person.box[2] * width), round(person.box[3] * height))
+
+    def _draw_body(self, cv2: Any, image: Any, person: PosePerson,
+                   track: TrackSnapshot | None, scale: float) -> None:
+        height, width = image.shape[:2]
+        confirmed = track is not None and track.confirmed
+        color = self._color(track)
+        line = max(1, round(2 * scale))
+        radius = max(2, round(3 * scale))
+        x1, y1, x2, y2 = self._pixel_box(image, person)
+        cv2.rectangle(image, (x1, y1), (x2, y2), color, line if confirmed else max(1, line // 2))
+        joints = {}
+        for index, point in enumerate(person.keypoints):
+            xy = (round(point.x * width), round(point.y * height))
+            if point.confidence >= self.min_conf:
+                joints[index] = xy
+            elif self.show_rejected and point.confidence > 0:
+                cv2.circle(image, xy, radius, PROVISIONAL_COLOR, 1, cv2.LINE_AA)
+        for first, second in SKELETON:
+            if first in joints and second in joints:
+                cv2.line(image, joints[first], joints[second], color, line, cv2.LINE_AA)
+        for xy in joints.values():
+            cv2.circle(image, xy, radius, (255, 255, 255), -1, cv2.LINE_AA)
+            cv2.circle(image, xy, radius, (0, 0, 0), 1, cv2.LINE_AA)
+        if confirmed and track.zone is not None and track.foot_point is not None:
+            foot = (round(track.foot_point[0] * width), round(track.foot_point[1] * height))
+            marker = (cv2.MARKER_CROSS if track.foot_point_source == "ankles"
+                      else cv2.MARKER_TILTED_CROSS)
+            cv2.drawMarker(image, foot, ZONE_COLOR, marker, round(14 * scale), line)
+
+    def _draw_label(self, cv2: Any, image: Any, person: PosePerson,
+                    track: TrackSnapshot | None, scale: float, placed: list[Rect]) -> Rect:
+        """Place the label above, inside, or below the box, avoiding earlier labels."""
+        lines = describe_track(person, track)
+        size = _text_size(cv2, lines, scale)
+        x1, y1, _, y2 = self._pixel_box(image, person)
+        candidates = [_clamp(image, x1, y, size)
+                      for y in (y1 - size[1], y1, y2, y2 - size[1])]
+        rect = next((c for c in candidates if not any(_overlaps(c, other) for other in placed)),
+                    candidates[0])
+        color = self._color(track)
+        text = (0, 0, 0) if sum(color) > 380 else (255, 255, 255)
+        _text_block(cv2, image, lines, rect, scale, color, text)
+        return rect
+
+
+class AnnotatedVideoWriter:
+    """Stream review frames to a hidden temporary MP4; publish only a full run.
+
+    Use as a context manager and call open() once the frame size is known. Any
+    exception, including Ctrl+C or a stop from the live preview, discards the
+    temporary file rather than publishing a partial video.
+    """
+
+    def __init__(self, path: Path, codec: str = "avc1", *, overwrite: bool = False):
+        self.path = path
+        self.codec = codec
+        self.overwrite = overwrite
+        self.frames_written = 0
+        self._writer: Any = None
+        self._temporary: Path | None = None
+
+    def __enter__(self) -> "AnnotatedVideoWriter":
+        if self.path.exists() and not self.overwrite:
+            raise FileExistsError(f"Output already exists: {self.path}; choose a new video ID or --overwrite")
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        return self
+
+    def open(self, fps: float, width: int, height: int) -> None:
+        """Start writing at the analysis rate so playback keeps source timing."""
+        cv2 = _cv2()
+        descriptor, name = tempfile.mkstemp(dir=self.path.parent, prefix=f".{self.path.name}.",
+                                            suffix=f".tmp{self.path.suffix}")
+        os.close(descriptor)
+        self._temporary = Path(name)
+        attempts = [(self.codec, cv2.CAP_ANY), ("mp4v", cv2.CAP_ANY)]
+        if os.name == "nt" and self.codec.lower() in {"avc1", "h264"}:
+            # Windows pip OpenCV encodes H.264 via Media Foundation; its FFmpeg
+            # lacks OpenH264 and logs errors before falling back on its own.
+            attempts.insert(0, (self.codec, cv2.CAP_MSMF))
+        # mp4v is the portable fallback when a machine's OpenCV lacks H.264.
+        for codec, backend in dict.fromkeys(attempts):
+            writer = cv2.VideoWriter(str(self._temporary), backend, cv2.VideoWriter_fourcc(*codec),
+                                     fps, (width, height))
+            if writer.isOpened():
+                if codec != self.codec:
+                    LOGGER.warning("Video codec %s is unavailable; writing %s instead", self.codec, codec)
+                    self.codec = codec
+                LOGGER.info("Annotated video codec=%s backend=%s fps=%.3f",
+                            codec, writer.getBackendName(), fps)
+                self._writer = writer
+                return
+            writer.release()
+        raise RuntimeError(f"OpenCV could not open an MP4 writer for {self.path}")
+
+    def write(self, frame: Any) -> None:
+        if self._writer is None:
+            raise RuntimeError("AnnotatedVideoWriter.open() must be called before write()")
+        self._writer.write(frame)
+        self.frames_written += 1
+
+    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
+        if self._writer is not None:
+            self._writer.release()
+        if self._temporary is None:
+            return
+        try:
+            if exc_type is None and self.frames_written:
+                os.replace(self._temporary, self.path)
+        finally:
+            self._temporary.unlink(missing_ok=True)
+
+
+class LivePreview:
+    """Show annotated samples in an OpenCV window while the analysis runs.
+
+    Keys: space pauses or resumes, n steps one sample while paused, q or Esc
+    asks the caller to stop. Closing the window hides the preview and the
+    analysis continues. Frames appear as fast as they are analyzed, so the
+    pace depends on hardware rather than matching real time.
+    """
+
+    WINDOW = "TeachLens live review"
+    MAX_SIZE = (1280, 720)
+
+    def __init__(self) -> None:
+        self._opened = False
+        self._closed = False
+        self._paused = False
+
+    def __enter__(self) -> "LivePreview":
+        return self
+
+    def show(self, image: Any) -> bool:
+        """Display one frame; return False when the user asks to stop."""
+        if self._closed:
+            return True
+        cv2 = _cv2()
+        if not self._opened:
+            try:
+                cv2.namedWindow(self.WINDOW, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
+            except cv2.error as exc:
+                raise RuntimeError("Live preview needs a desktop session and opencv-python with "
+                                   "GUI support; run again with --no-live") from exc
+            height, width = image.shape[:2]
+            fit = min(1.0, self.MAX_SIZE[0] / width, self.MAX_SIZE[1] / height)
+            cv2.resizeWindow(self.WINDOW, round(width * fit), round(height * fit))
+            self._opened = True
+        cv2.imshow(self.WINDOW, self._with_status(cv2, image))
+        while True:
+            key = cv2.waitKey(50 if self._paused else 1) & 0xFF
+            if cv2.getWindowProperty(self.WINDOW, cv2.WND_PROP_VISIBLE) < 1:
+                LOGGER.info("Live preview closed; the analysis continues without it")
+                self._closed = True
+                return True
+            if key in (ord("q"), ord("Q"), 27):
+                return False
+            if key == ord(" "):
+                self._paused = not self._paused
+                cv2.imshow(self.WINDOW, self._with_status(cv2, image))
+            elif key in (ord("n"), ord("N")) and self._paused:
+                return True
+            if not self._paused:
+                return True
+
+    def _with_status(self, cv2: Any, image: Any) -> Any:
+        status = ("PAUSED | space resume | n next sample | q stop (no outputs saved)"
+                  if self._paused else "LIVE | space pause | q stop (no outputs saved)")
+        shown = image.copy()
+        scale = max(0.6, min(image.shape[:2]) / 720)
+        size = _text_size(cv2, [status], scale)
+        _text_block(cv2, shown, [status], _clamp(shown, 0, shown.shape[0] - size[1], size),
+                    scale, None, (0, 255, 255) if self._paused else (255, 255, 255))
+        return shown
+
+    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
+        if self._opened and not self._closed:
+            cv2 = _cv2()
+            try:
+                cv2.destroyWindow(self.WINDOW)
+                cv2.waitKey(1)
+            except cv2.error:
+                pass  # the user closed the window during the last frame

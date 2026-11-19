@@ -1,0 +1,93 @@
+TeachLens SGP2 report - corrected text for sections 3.1.4 to 3.3.7
+Checked against the code on the scripting-frame-extraction branch (src/ pipeline), 2026-11-12.
+Only the passages that change are listed. Everything else in these sections can stay as it is.
+
+
+=====================================================================
+3.1.4 Event Storage and Summary Module  -  REPLACE THE FIRST PARAGRAPH
+=====================================================================
+
+After the physical indicators are extracted, the system saves the observations in JSONL files, with one event per line. Each event records the video identifier, an anonymous track ID, the role assumed from the camera view (teacher, student or unknown), the indicator name, start time, end time, duration, value, confidence, and an evidence-coverage label (adequate, limited or unknown). When the recording's metadata provides a start time, each event also stores its real (wall-clock) start and end time. The saved events are then processed by a summary module that produces a JSON file containing the main results of the analyzed recording. These summaries include instructor visibility time, visible student counts, posture durations, movement levels and, where zones are configured, time spent in each zone. Time that could not be measured is reported as unknown rather than as zero.
+
+
+=====================================================================
+3.1.5 Hardware and Software Setup  -  REPLACE THE BULLET LIST
+=====================================================================
+
+- Python: Used to develop and connect the different system modules.
+- OpenCV: Used for reading videos, extracting frames, and handling image data.
+- FFmpeg (ffprobe): Used to read the recording start time from the video's metadata.
+- Ultralytics YOLO26 Pose [5]: Used for person detection and body keypoint estimation (nano model, yolo26n-pose).
+- ByteTrack [4]: Used for temporary anonymous tracking across video frames.
+- PyTorch: Runs the deep learning model through Ultralytics.
+- NumPy: Supports numerical operations such as camera-motion estimation.
+- YAML: Used to manage system settings, camera configurations, and indicator options.
+- JSON and JSONL: Used to store the generated summaries and timestamped observations.
+- unittest: Used to test individual modules.
+- GitHub: Used for source code management and collaboration between team members.
+
+
+=====================================================================
+3.1.6 System Integration and Scalability  -  REPLACE THE PARAGRAPH
+STARTING "However, the current prototype..."
+=====================================================================
+
+However, the current prototype processes each camera's recording separately and does not yet combine the instructor and student views into one synchronized analysis. As a first step, each event can carry a real (wall-clock) time read from the recording's metadata. In tests with phone cameras filming a synchronized clock, the recorded start time was about 0.7 to 0.95 seconds after the first frame, so these real times are accurate to about one second. This is enough for coarse alignment of the two cameras, but not for frame-level synchronization. The scalability of the system across many classrooms and long recordings has also not been formally evaluated.
+
+
+=====================================================================
+3.2.1 Programming Languages and Frameworks  -  REPLACE THE SECOND PARAGRAPH
+=====================================================================
+
+The project uses Ultralytics, which runs on PyTorch, to execute the deep learning model. NumPy is used for numerical calculations, for example in camera-motion estimation and in drawing the annotated review video.
+
+
+=====================================================================
+3.2.2 Computer Vision and Video Processing Tools  -  TWO CHANGES
+=====================================================================
+
+(a) Add at the end of the first paragraph:
+
+FFprobe, part of FFmpeg, is used to read the recording start time from the video's metadata, because OpenCV cannot access these tags.
+
+(b) Add the citations:
+- "we use Ultralytics YOLO26 Pose."  ->  "we use Ultralytics YOLO26 Pose [5]."
+- "ByteTrack is used to assign"      ->  "ByteTrack [4] is used to assign"
+
+
+=====================================================================
+3.2.4 Professional Standards and Guidelines  -  OPTIONAL EXTRA BULLET
+(it was in SGP1)
+=====================================================================
+
+- UAE Personal Data Protection Law (Federal Decree-Law No. 45 of 2021): Classroom recordings may contain personal data, so the system limits access, keeps processing local, and uses anonymous identifiers in its outputs.
+
+
+=====================================================================
+3.3.1 Dataset Availability and Quality  -  REPLACE THE SECOND PARAGRAPH
+=====================================================================
+
+To address this, we organized the dataset structure and prepared annotation guidelines to improve consistency. We also simplified the detection task by using a single person class instead of separate instructor and student classes, with roles taken from the camera view (Section 3.3.2). The current analysis pipeline uses the pre-trained YOLO26 pose model and does not yet use this dataset. The dataset still requires further review to ensure that the training and testing data are properly separated and reliable.
+
+
+=====================================================================
+3.3.3 Camera Movement and Visibility  -  REPLACE THE LAST PARAGRAPH
+=====================================================================
+
+TeachLens recordings are designed to use static cameras on tripods, so image positions correspond to fixed classroom positions and zone calibration can be applied. For the operated web videos used during development, which pan, zoom and cut between shots, we implemented an experimental camera-motion compensation step. It matches background features between sampled frames, with people masked out, and estimates the camera's shift and zoom so that movement is measured relative to the scene. A cut, a sudden zoom, or too few matching features starts a new shot instead of guessing. This compensation has not yet been validated, and zone calibration is intended for fixed camera views.
+
+
+=====================================================================
+REFERENCES  -  ADD
+=====================================================================
+
+[4] Y. Zhang, P. Sun, Y. Jiang, D. Yu, F. Weng, Z. Yuan, P. Luo, W. Liu, and X. Wang. ByteTrack: Multi-object tracking by associating every detection box. In European Conference on Computer Vision (ECCV), 2022.
+
+[5] Ultralytics. Ultralytics YOLO (YOLO26). https://github.com/ultralytics/ultralytics. [Add the version used and the access date.]
+
+
+=====================================================================
+NOTE FOR THE TEAM (not report text)
+=====================================================================
+
+If the report later describes the lag analysis and the LLM report (pipeline_creation branch), add Pandas back to the tools, together with SciPy, statsmodels, Matplotlib and the Anthropic SDK.

@@ -1,0 +1,8 @@
+- Pooled analysis: 2 lectures, 91 windows.
+- Hypotheses fixed in advance (9 tests, so p must be below 0.0056):
+- explanation_ratio -> phone_rate after 10 s: r = -0.07 (p = 0.505 controlling for the previous window, does not survive correction for 9 tests; 89 windows). Correlation, not proof of causation.
+- explanation_ratio -> head_down_still_rate after 10 s: r = +0.01 (p = 0.515 controlling for the previous window, does not survive correction for 9 tests; 89 windows). Correlation, not proof of causation.
+- teacher_seated_ratio -> attention_level: not testable in this lecture (too few windows with readable data, or no variation).
+- Exploratory (69 tests; treat these as leads, not findings):
+- movement_amount -> strongest positive: hand_raise_count after 10 s: r = +0.22 (p = 0.049 controlling for the previous window, does not survive correction for 69 tests; 89 windows). Correlation, not proof of causation.
+- interaction_count -> strongest negative: attention_level after 30 s: r = -0.18 (p = 0.215 controlling for the previous window, does not survive correction for 69 tests; 85 windows). Correlation, not proof of causation.

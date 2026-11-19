@@ -1,0 +1,14 @@
+# Override for the downloaded web sample videos in data/raw_videos/, which
+# were filmed by operated cameras that pan, zoom, and cut between shots.
+# TeachLens recordings use static cameras and do not need this file.
+#
+#   python scripts/analyze.py --video data/raw_videos/HowToSpeak.mp4 --video-id <id> --camera instructor_view --local-config configs/web_sample_cameras.yaml
+#
+# Measured 2026-10-26 on HowToSpeak.mp4 (ORB + RANSAC, 0.2 s steps): the
+# background moves 10-25 px (at 960 px width) in most minutes, with zoom and
+# cut jumps. Motion and paths are therefore measured relative to the scene,
+# and each cut or unmeasurable step starts a new shot.
+cameras:
+  instructor_view:
+    fixed_camera: false
+    compensate_camera_motion: true

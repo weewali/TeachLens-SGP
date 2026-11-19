@@ -1,0 +1,18 @@
+# ByteTrack settings for TeachLens's sparse sampling (one analyzed frame per
+# second). Same as Ultralytics' bytetrack.yaml except match_thresh.
+#
+# At one frame per second a person who stands up, leans, or walks can move
+# more than their own width between frames, so the default match_thresh (0.8,
+# i.e. boxes must overlap by roughly 20%) fails and the tracker starts a new,
+# unreported track; the person disappears from counts until two frames line
+# up again. 0.95 (roughly 5% overlap) kept every student of B1 0:03-0:12 and
+# 5:10-5:22 (2026-11-17), as well as tracking 5 frames per second did, at no
+# extra cost.
+
+tracker_type: bytetrack
+track_high_thresh: 0.25 # first-stage match threshold
+track_low_thresh: 0.1 # second-stage threshold for low-score matches
+new_track_thresh: 0.25 # start a new track if no match at or above this score
+track_buffer: 30 # frames to keep lost tracks (30 s at one frame per second)
+match_thresh: 0.95 # association cost limit (1 - overlap, fused with score); default 0.8
+fuse_score: True # fuse detection score with overlap for matching

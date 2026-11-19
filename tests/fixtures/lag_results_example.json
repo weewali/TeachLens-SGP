@@ -1,0 +1,22 @@
+{
+  "note": "EXAMPLE ONLY: made-up numbers in the provisional input format, to test the report step. Not a real lecture.",
+  "lecture": {"duration_seconds": 3000, "window_seconds": 10, "windows": 300},
+  "data_quality": {"limitations": ["Example data: no video was analysed."]},
+  "results": [
+    {"instructor_action": "explanation_ratio", "student_behaviour": "phone_rate", "lag_seconds": 10, "effect": 0.12, "p_value": 0.20, "n_windows": 298, "prespecified": true},
+    {"instructor_action": "explanation_ratio", "student_behaviour": "phone_rate", "lag_seconds": 20, "effect": 0.31, "p_value": 0.002, "n_windows": 297, "prespecified": true},
+    {"instructor_action": "explanation_ratio", "student_behaviour": "phone_rate", "lag_seconds": 30, "effect": 0.18, "p_value": 0.09, "n_windows": 296, "prespecified": true},
+    {"instructor_action": "explanation_ratio", "student_behaviour": "head_down_still_rate", "lag_seconds": 10, "effect": 0.05, "p_value": 0.6, "n_windows": 298, "prespecified": true},
+    {"instructor_action": "explanation_ratio", "student_behaviour": "head_down_still_rate", "lag_seconds": 20, "effect": 0.09, "p_value": 0.4, "n_windows": 297, "prespecified": true},
+    {"instructor_action": "explanation_ratio", "student_behaviour": "head_down_still_rate", "lag_seconds": 30, "effect": 0.21, "p_value": 0.03, "n_windows": 296, "prespecified": true},
+    {"instructor_action": "teacher_seated_ratio", "student_behaviour": "attention_level", "lag_seconds": 10, "effect": -0.04, "p_value": 0.7, "n_windows": 120, "prespecified": true},
+    {"instructor_action": "teacher_seated_ratio", "student_behaviour": "attention_level", "lag_seconds": 20, "effect": -0.10, "p_value": 0.35, "n_windows": 119, "prespecified": true},
+    {"instructor_action": "teacher_seated_ratio", "student_behaviour": "attention_level", "lag_seconds": 30, "effect": -0.02, "p_value": 0.9, "n_windows": 118, "prespecified": true},
+    {"instructor_action": "movement_amount", "student_behaviour": "attention_level", "lag_seconds": 10, "effect": 0.36, "p_value": 0.0004, "n_windows": 280},
+    {"instructor_action": "movement_amount", "student_behaviour": "phone_rate", "lag_seconds": 10, "effect": -0.27, "p_value": 0.006, "n_windows": 280},
+    {"instructor_action": "interaction_count", "student_behaviour": "hand_raise_count", "lag_seconds": 10, "effect": 0.28, "p_value": 0.02, "n_windows": 298},
+    {"instructor_action": "board_work_ratio", "student_behaviour": "phone_rate", "lag_seconds": 20, "effect": 0.22, "p_value": 0.04, "n_windows": 297},
+    {"instructor_action": "teacher_stationary_ratio", "student_behaviour": "attention_level", "lag_seconds": 20, "effect": -0.25, "p_value": 0.01, "n_windows": 279},
+    {"instructor_action": "teacher_voice_volume", "student_behaviour": "attention_level", "lag_seconds": 10, "effect": 0.40, "p_value": 0.001, "n_windows": 298}
+  ]
+}

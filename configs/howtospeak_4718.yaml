@@ -1,0 +1,5 @@
+# Board outline for HowToSpeak.mp4 47:18-47:41 only (static shot); use with
+# --start/--end inside that range.
+cameras:
+  instructor_view:
+    zones: data/calibration/howtospeak_4718_instructor_view.yaml

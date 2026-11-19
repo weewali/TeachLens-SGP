@@ -1,0 +1,132 @@
+# Catalog-aligned feature plan. The List A switches below are read by the
+# pose-only pipeline. Other sections remain future work.
+# Role-specific indicators use the configured camera context and must leave
+# ambiguous people as unknown rather than forcing a role assignment.
+# Zone-specific indicators also require a camera-specific calibration file.
+
+visual:
+  teacher_presence:
+    enabled: true
+  visible_student_count:
+    enabled: true
+  anonymous_tracking:
+    enabled: true
+  role_classification:
+    enabled: true
+  position:
+    enabled: true
+  classroom_zone:
+    enabled: true  # emits nothing until a camera-specific zone file is set
+  entry_exit:
+    enabled: true  # only apparent transitions at a frame edge
+  visibility_occlusion:
+    enabled: true
+  # Student hand raises moved to students.hand_raise (List C, 2026-11-17).
+  sitting_standing:
+    enabled: true
+  motion_level:
+    enabled: true
+  student_movement:
+    enabled: false
+  student_out_of_seat:
+    enabled: false
+
+# List B: teacher visual behaviour, computed from the same pose keypoints on
+# the instructor camera (src/analysis/teacher_indicators.py). Position
+# heatmap, movement path and distance, and classroom coverage need no extra
+# detection: they are built from saved position and classroom_zone events in
+# the summary/report. Board, screen, and desk targets come from the camera's
+# zone file (configs/sgp_room.yaml for the scenario room).
+teacher:
+  stationary_episodes:
+    enabled: true
+  facing_direction:
+    enabled: true
+  head_orientation:
+    enabled: true
+  board_interaction:
+    enabled: true
+  writing_on_board:
+    enabled: true
+  pointing:
+    enabled: true
+  gestures:
+    enabled: true
+  raised_hand:
+    enabled: true
+  torso_lean:
+    enabled: true
+
+# Student facial actions (src/analysis/facial_actions.py): rules over
+# MediaPipe face-landmark scores on face crops, on the student camera only
+# (never the teacher). Needs mediapipe and models/face/face_landmarker.task.
+# Observed facial actions, not emotions.
+faces:
+  smile:
+    enabled: true
+  brows:
+    enabled: true
+  eyes_closed:
+    enabled: true
+  yawn:
+    enabled: true
+  head_direction:
+    enabled: true
+  talking:
+    enabled: true  # mouth movement on extra face frames (faces.frames_per_second)
+  head_gesture:
+    enabled: true  # nod / shake, same extra face frames
+
+# List C: student behaviour on the student camera (src/analysis/student_indicators.py,
+# interaction_indicators.py). Some use the face model (configs/default.yaml
+# faces:), the COCO object detector (device_use, note_taking, reading), and the
+# gesture model (response_gesture; hand_raise uses it to confirm low raises).
+students:
+  seat_occupancy:
+    enabled: true
+  hand_raise:
+    enabled: true
+  hand_raise_outcome:
+    enabled: true
+  out_of_seat:
+    enabled: true
+  head_down:
+    enabled: true
+  alertness:
+    enabled: true
+  device_use:
+    enabled: true
+  note_taking:
+    enabled: true
+  reading:
+    enabled: true
+  response_gesture:
+    enabled: true
+  head_target:
+    enabled: true
+  orientation_proxy:
+    enabled: true
+
+interaction:
+  hand_raise_participation_breadth:
+    enabled: false
+  teacher_student_proximity:
+    enabled: false
+  group_formation:
+    enabled: false
+
+# Audio, transcript, and speech-linked interaction work is deferred.
+audio:
+  speaker_turns:
+    enabled: false
+  teacher_student_talk_ratio:
+    enabled: false
+  questions_and_wait_time:
+    enabled: false
+
+quality:
+  # Visibility/keypoint coverage is needed for every reported visual rate.
+  evidence_coverage:
+    enabled: true
+  recording_quality:
+    enabled: false

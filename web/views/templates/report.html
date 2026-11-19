@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}Report · {{ context.name or lecture.id }} · TeachLens{% endblock %}
+{% block content %}
+<header class="report-head">
+  <div>
+    <h1>{{ context.name or lecture.id }}</h1>
+    {% if context.topic %}<p class="lead">{{ context.topic }}</p>{% endif %}
+    <p class="muted small">Analysed {{ analysed_at }}{% if length %} · {{ length }} of lecture{% endif %}{% if source.label %} · <span class="badge badge-{{ source.kind }}">{{ source.label }}</span>{% endif %}</p>
+  </div>
+</header>
+
+{# Tabs: report.js shows one section at a time. Without scripts these are plain links and every section shows. #}
+<nav class="tabs" aria-label="Report sections">
+  <a href="#feedback" class="is-active">Feedback</a>
+  <a href="#links">Links over time</a>
+  <a href="#charts">Charts</a>
+  <a href="#moments">Moments{% if moments %}<span class="tab-count">{{ moments | length }}</span>{% endif %}</a>
+  <a href="#terms">Key terms</a>
+</nav>
+
+<section id="feedback" class="tab-panel is-active">
+  <h2 class="panel-title">Feedback</h2>
+  {% if feedback.overview %}<p class="lead">{{ feedback.overview }}</p>{% endif %}
+  <div class="two">
+    <div class="card points points-good">
+      <h3><span aria-hidden="true">✓</span> Positive points</h3>
+      {% if feedback.positive %}
+      <ul>{% for point in feedback.positive %}<li>{{ point }}</li>{% endfor %}</ul>
+      {% else %}<p class="muted">No clear positive point was found in this analysis.</p>{% endif %}
+    </div>
+    <div class="card points points-bad">
+      <h3><span aria-hidden="true">✗</span> Negative points</h3>
+      {% if feedback.negative %}
+      <ul>{% for point in feedback.negative %}<li>{{ point }}</li>{% endfor %}</ul>
+      {% else %}<p class="muted">No clear negative point was found in this analysis.</p>{% endif %}
+    </div>
+  </div>
+  {% if feedback.note %}<p class="note">{{ feedback.note }}</p>{% endif %}
+
+  {% if context.topic or context.notes or context.slides %}
+  <div class="card context">
+    <h3>Context you gave</h3>
+    <dl>
+      {% if context.topic %}<dt>Topic</dt><dd>{{ context.topic }}</dd>{% endif %}
+      {% if context.notes %}<dt>Notes</dt><dd>{{ context.notes }}</dd>{% endif %}
+      {% if context.slides %}<dt>Slides</dt><dd>{{ context.slides }} (kept on this computer)</dd>{% endif %}
+    </dl>
+    <p class="hint">Kept with this report for your reference.</p>
+  </div>
+  {% endif %}
+</section>
+
+<section id="links" class="tab-panel">
+  <h2 class="panel-title">Links over time</h2>
+  {% if links.available %}
+  <p class="muted">Did the students change in the half-minute after something you did? The lecture was cut into
+    {{ links.window_seconds }}-second parts ({{ links.analysed }} analysed), and each thing you did was compared with
+    how the students behaved shortly after it.{% if links.ai %} <span class="badge badge-llm">Written with AI from the
+    measured results and checked automatically</span>{% endif %}</p>
+  {% if links.overview %}<p class="lead">{{ links.overview }}</p>{% endif %}
+  <div class="two">
+    <div class="card points points-good">
+      <h3><span aria-hidden="true">✓</span> Positive points</h3>
+      {% if links.positive %}
+      <ul>{% for point in links.positive %}<li>{{ point }}</li>{% endfor %}</ul>
+      {% else %}<p class="muted">No positive link stood out in this lecture.</p>{% endif %}
+    </div>
+    <div class="card points points-bad">
+      <h3><span aria-hidden="true">✗</span> Negative points</h3>
+      {% if links.negative %}
+      <ul>{% for point in links.negative %}<li>{{ point }}</li>{% endfor %}</ul>
+      {% else %}<p class="muted">No negative link stood out in this lecture.</p>{% endif %}
+    </div>
+  </div>
+  {% if links.note %}<p class="note">{{ links.note }}</p>{% endif %}
+  {% else %}
+  <p class="muted">{{ links.reason }}</p>
+  {% endif %}
+</section>
+
+<section id="charts" class="tab-panel charts-panel">
+  <h2 class="panel-title">Charts</h2>
+  {% if timeline %}
+  <figure class="card chart timeline" id="timeline">
+    <h3 class="chart-title">Over the lecture</h3>
+    <p class="chart-sub">The share of the students in view with their heads up in each 10-second part, what you were
+      doing at the time, and the moments the student camera picked up. Point at the chart, or select it and use the
+      arrow keys, to read each part.</p>
+    <ul class="legend" aria-label="What you were doing">
+      {% for a in timeline.data.activities %}<li><span class="swatch act-{{ a.key }}" aria-hidden="true"></span>{{ a.label }}</li>{% endfor %}
+    </ul>
+    <div class="timeline-plot" role="img" aria-label="Line chart of the share of students in view with their heads up over the lecture, with a strip of what you were doing above it and rows of moments under it. The same numbers are in the table below the chart."></div>
+    <div class="chart-tip" role="status" hidden></div>
+    <script type="application/json" class="chart-data">{{ timeline.data | tojson }}</script>
+    <details class="table-view">
+      <summary>Show the numbers</summary>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Time</th><th>Students in view with heads up</th><th>You were</th><th>Moments</th></tr></thead>
+          <tbody>
+          {% for row in timeline.rows %}
+            <tr><td>{{ row.time }}</td><td>{{ row.heads_up }}</td>
+              <td><span class="swatch act-{{ row.key }}" aria-hidden="true"></span>{{ row.activity }}</td><td>{{ row.moments }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  </figure>
+  {% endif %}
+
+  {% if comparison %}
+  <figure class="card chart compare-chart" id="compare">
+    <h3 class="chart-title">Students during each of your activities</h3>
+    <p class="chart-sub">Average share of the time the students in view did each thing, over the 10-second parts of the
+      lecture. The thin line shows the 95% range for the average.</p>
+    <div class="compare" role="table" aria-label="Student behaviour during each instructor activity">
+      <div class="compare-row compare-head" role="row">
+        <span role="columnheader">You were</span>
+        {% for m in comparison.measures %}<span role="columnheader">{{ m.label }}</span>{% endfor %}
+      </div>
+      {% for row in comparison.rows %}
+      <div class="compare-row" role="row">
+        <div class="compare-name" role="rowheader">
+          <span class="swatch act-{{ row.key }}" aria-hidden="true"></span>
+          <span>{{ row.label }}<small>{{ row.share }}% of the lecture</small></span>
+        </div>
+        {% for cell in row.cells %}
+        <div class="compare-cell" role="cell" tabindex="0" data-tip="{{ cell.tip }}" aria-label="{{ cell.tip }}">
+          <span class="compare-measure" aria-hidden="true">{{ cell.measure }} (scale 0–{{ comparison.measures[loop.index0].max }}%)</span>
+          <span class="compare-track" aria-hidden="true">
+            <span class="compare-bar act-{{ row.key }}" style="width: {{ cell.width }}%"></span>
+            {% if cell.range %}<span class="compare-range" style="left: {{ cell.low }}%; width: {{ cell.span }}%"></span>{% endif %}
+          </span>
+          <span class="compare-value" aria-hidden="true">{{ cell.text }}{% if cell.range %} <small>{{ cell.range }}</small>{% endif %}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+      <div class="compare-row compare-scale" aria-hidden="true">
+        <span></span>
+        {% for m in comparison.measures %}<span><span>0%</span><span>{{ m.max }}%</span></span>{% endfor %}
+      </div>
+    </div>
+    <div class="chart-tip" role="status" hidden></div>
+    <figcaption>Each bar is an average, so a short stretch can hide inside it. Bars use their own scale per column
+      (shown underneath). The Feedback tab says which differences are unlikely to be chance.</figcaption>
+  </figure>
+  {% endif %}
+
+  {% if charts %}
+  <div class="charts">
+    {% for chart in charts %}
+    <figure class="card chart">
+      <img src="{{ url_for('lectures.chart', lecture_id=lecture.id, name=chart.file) }}" alt="{{ chart.title }}" loading="lazy">
+      <figcaption><strong>{{ chart.title }}.</strong> {{ chart.caption }}</figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if not (timeline or comparison or charts) %}<p class="muted">No charts are available for this lecture.</p>{% endif %}
+</section>
+
+<section id="moments" class="tab-panel">
+  <h2 class="panel-title">Moments <span class="muted small">(<span id="moments-count">{{ moments | length }}</span>)</span></h2>
+  {% if moments %}
+  <div class="filters" role="group" aria-label="Show moments of one kind">
+    <button type="button" class="chip" data-filter="all" aria-pressed="true">All</button>
+    {% for key, label in moment_kinds %}
+    <button type="button" class="chip" data-filter="{{ key }}" aria-pressed="false">{{ label }}</button>
+    {% endfor %}
+  </div>
+  <div class="table-wrap">
+  <table class="table" id="moments-table">
+    <thead><tr><th>Time</th><th>Seat</th><th>What was seen</th><th>Length</th><th>You were…</th></tr></thead>
+    <tbody>
+    {% for m in moments %}
+      <tr data-kind="{{ m.kind }}">
+        <td>{{ m.time }}–{{ m.end }}</td><td>{{ m.seat }}</td><td>{{ m.behaviour }}</td>
+        <td>{{ m.duration }} s</td><td>{{ m.activity }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="hint">Times are mm:ss from the moment both cameras were recording. Seat numbers are anonymous and run row by row from the top left of the student camera's view.</p>
+  {% else %}<p class="muted">No phone, head-down, hand-raise or book moments were detected.</p>{% endif %}
+</section>
+
+<section id="terms" class="tab-panel terms-panel">
+  <h2 class="panel-title">Key terms</h2>
+  {% if glossary %}
+  <p class="muted">What the words in this report mean.</p>
+  <div class="card">
+    <dl class="glossary">{% for term, meaning in glossary.items() %}<dt>{{ term }}</dt><dd>{{ meaning }}</dd>{% endfor %}</dl>
+  </div>
+  {% else %}<p class="muted">No key terms are available for this lecture.</p>{% endif %}
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='report.js') }}"></script>{% endblock %}

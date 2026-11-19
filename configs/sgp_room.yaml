@@ -1,0 +1,6 @@
+# Local override for the scenario recordings' room (docs/scenario_test_videos.md).
+# run_scenarios.py loads it by default; with analyze.py pass
+# --local-config configs/sgp_room.yaml.
+cameras:
+  instructor_view:
+    zones: data/calibration/sgp_room_instructor_view.yaml

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}New analysis · TeachLens{% endblock %}
+{% block content %}
+<h1>New analysis</h1>
+<p class="lead">Upload the two videos of one lecture, add what the class was about, and start the analysis.</p>
+
+{% if error %}<p class="banner banner-bad" role="alert">{{ error }}</p>{% endif %}
+{% if running %}
+<p class="banner">Another analysis is running
+  (<a href="{{ url_for('lectures.progress', lecture_id=running) }}">{{ running }}</a>). You can start this one when it has finished.</p>
+{% endif %}
+
+<form class="card form" method="post" action="{{ url_for('lectures.create') }}" enctype="multipart/form-data" id="new-lecture">
+  <fieldset>
+    <legend>Lecture</legend>
+    <label for="name">Lecture name</label>
+    <input id="name" name="name" type="text" maxlength="48" placeholder="e.g. Week 5 - Recursion" value="{{ form.get('name', '') }}">
+    <p class="hint">Shown in your list of lectures. Please don't use people's names.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Videos</legend>
+    <div class="two">
+      <div>
+        <label for="instructor_video">Instructor camera <span class="req">required</span></label>
+        <input id="instructor_video" name="instructor_video" type="file" accept="video/*,.mov,.mkv" required>
+      </div>
+      <div>
+        <label for="students_video">Student camera <span class="req">required</span></label>
+        <input id="students_video" name="students_video" type="file" accept="video/*,.mov,.mkv" required>
+      </div>
+    </div>
+    <p class="hint">Use the original files from the cameras or phones: sending them through apps like WhatsApp removes
+      the recording time used to line the two cameras up. Keep both cameras still on tripods.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Additional context <span class="muted">(optional)</span></legend>
+    <label for="topic">What was the class about?</label>
+    <input id="topic" name="topic" type="text" maxlength="200" placeholder="e.g. Introduction to recursion" value="{{ form.get('topic', '') }}">
+    <label for="notes">Anything else worth knowing</label>
+    <textarea id="notes" name="notes" rows="3" placeholder="e.g. minutes 20-30 were a quiz; students worked in pairs at the end">{{ form.get('notes', '') }}</textarea>
+    <label for="slides">Lecture slides</label>
+    <input id="slides" name="slides" type="file" accept=".pdf,.pptx,.ppt,.odp,.key">
+    <p class="hint">Kept with this lecture's report for your reference.</p>
+  </fieldset>
+
+  <button class="button button-big" type="submit" {% if running %}disabled{% endif %}>Start analysis</button>
+  <p class="hint" id="uploading" hidden>Uploading the videos… large files can take a few minutes. Keep this page open.</p>
+</form>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='forms.js') }}"></script>{% endblock %}

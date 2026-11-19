@@ -1,0 +1,262 @@
+/* Colours and fonts from the UAEU website's design tokens (given by the user), plus the UAEU logo rules from the UAEU
+   Brand Guidelines 2025. The page is always white (user request), also when the computer is set to dark mode.
+   The web fonts (Inter, Roboto) are not bundled, so on a computer without them the next font in the list is used. */
+:root {
+  color-scheme: light;
+  /* UAEU website tokens, as given */
+  --font-heading: "Inter", "Segoe UI", Arial, sans-serif;
+  --font-body: "Roboto", "Segoe UI", Arial, sans-serif;
+  --page-title-color: #232528; --page-title-size: clamp(1.75rem, 2.3vw, 2.5rem); --page-title-weight: 700;
+  --page-title-line-height: 1.2;
+  --clr-primary-100: #F4F7F8; --clr-primary-200: #E7EAED; --clr-primary-400: #DEE3E7; --clr-primary-450: #B1C4DA;
+  --clr-primary-500: #142E4A; --clr-primary-700: #102840;
+  --uaeu-red: #c01d2a; --uaeu-red-hover: #961721; --uaeu-red-soft: #fbe9ea;
+  --clr-neutral-100: #ffffff; --clr-neutral-300: #F7F7F7; --clr-neutral-500: #a5adb3; --clr-neutral-600: #5B6A7C;
+  --clr-neutral-800: #4B4F54; --clr-neutral-850: #060E22;
+  --clr-success-100: #cff0e0; --clr-success-500: #2C973F; --clr-warning-100: #fae9cf; --clr-warning-500: #BC760C;
+  --clr-danger-150: #FDE5E5; --clr-danger-500: #C91C2F;
+  --shadow-sm: 4px 4px 14px 0px rgba(23, 51, 71, .08);
+
+  /* what the page uses */
+  --font: var(--font-body);
+  --bg: var(--clr-neutral-100); --surface: var(--clr-neutral-100); --text: var(--clr-neutral-800);
+  --heading: var(--clr-primary-500); --muted: var(--clr-neutral-600);
+  --border: var(--clr-primary-400); --border-strong: var(--clr-neutral-500);
+  --accent: #ae1830; --accent-hover: var(--uaeu-red-hover); --accent-text: #ffffff;   /* buttons: the user's red */
+  --link: var(--clr-primary-500); --focus: var(--uaeu-red);
+  /* status: the site's colours for lines and backgrounds; its green and amber are too light for small text on white
+     (3.7:1), so text uses a darker step of the same hue (5.4:1 and 5.9:1) */
+  --good: #237a33; --good-line: var(--clr-success-500); --good-bg: #e8f6ee;
+  --bad: var(--clr-danger-500); --bad-bg: var(--clr-danger-150);
+  --run: #8a5a06; --run-bg: var(--clr-warning-100);
+  --radius: 6px; --shadow: var(--shadow-sm);
+  /* charts: slots 1-3 of the validated categorical palette (they pass the colour-vision checks as a set on this
+     surface), then neutral greys for "not a teaching activity"; marks and lines use ink, never text colours */
+  --viz-1: #2a78d6; --viz-2: #eb6834; --viz-3: #1baf7a; --viz-in-view: #7b8496; --viz-out: #c9ced8;
+  --viz-line: var(--clr-primary-500); --viz-grid: var(--clr-primary-200); --viz-axis: var(--clr-neutral-500);
+  --viz-moment: var(--clr-neutral-600);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }   /* class rules like .button or .stage must not show hidden elements */
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 var(--font); }
+a { color: var(--link); }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+h1, h2, h3 { color: var(--heading); font-family: var(--font-heading); }
+h1 { font-size: var(--page-title-size); font-weight: var(--page-title-weight); line-height: var(--page-title-line-height);
+  color: var(--page-title-color); margin: .2rem 0 .6rem; }
+h2 { font-size: 1.3rem; margin: 2rem 0 .8rem; }
+h3 { font-size: 1.05rem; margin: 0 0 .6rem; }
+code { font-size: .88em; word-break: break-all; }
+
+/* header: a red brand line, the UAEU logo whole, a divider, then the TeachLens name (kept apart from the logo) */
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .9rem 1.25rem;
+  background: var(--surface); border-top: 4px solid var(--uaeu-red); border-bottom: 1px solid var(--border); }
+.brand { display: flex; align-items: center; gap: 1.1rem; min-width: 0; }
+.brand-logo { display: block; height: 52px; width: auto; flex: none; }
+.brand-divider { align-self: stretch; width: 1px; background: var(--border-strong); }
+.brand-name { font-family: var(--font-heading); font-weight: 700; font-size: 1.4rem; letter-spacing: .01em;
+  color: var(--heading); text-decoration: none; white-space: nowrap; }
+.topbar nav { display: flex; gap: 1.1rem; align-items: center; }
+.topbar nav a:not(.button) { color: var(--clr-neutral-850); font-weight: 600; text-decoration: none; }
+.topbar nav a:not(.button):hover { color: var(--uaeu-red); }
+.page { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.1rem 1.25rem;
+  box-shadow: var(--shadow); }
+.lead { font-size: 1.08rem; color: var(--muted); margin: 0 0 1rem; }
+.muted { color: var(--muted); }
+.small { font-size: .85rem; }
+.right { text-align: right; }
+.hint { color: var(--muted); font-size: .88rem; margin: .35rem 0 0; }
+.note { color: var(--muted); font-size: .9rem; border-left: 3px solid var(--border); padding-left: .8rem; margin-top: 1rem; }
+.empty { text-align: center; padding: 2rem; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+.button { display: inline-block; background: var(--accent); color: var(--accent-text); border: 0; border-radius: 4px;
+  padding: .5rem .95rem; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+.button:hover { background: var(--accent-hover); }
+.button[disabled] { opacity: .5; cursor: not-allowed; }
+.button-big { padding: .7rem 1.3rem; font-size: 1.05rem; }
+.button-secondary { background: var(--surface); color: var(--heading); box-shadow: inset 0 0 0 1px var(--border-strong); }
+.button-secondary:hover { background: var(--clr-primary-100); }
+/* delete: a quiet text link in the list (the red buttons there open reports); the confirmation page asks first */
+.link-delete { color: var(--bad); font-weight: 600; }
+.link-delete:hover { color: var(--uaeu-red-hover); }
+.actions { white-space: nowrap; }
+.actions > * + * { margin-left: 1rem; }
+.confirm { max-width: 40rem; }
+.confirm-name { font-size: 1.1rem; margin-top: 0; }
+.confirm-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.2rem; }
+
+.banner { background: var(--run-bg); color: var(--run); border-radius: var(--radius); padding: .7rem 1rem; }
+.banner-bad { background: var(--bad-bg); color: var(--bad); }
+.banner-ok { background: var(--good-bg); color: var(--good); }
+.banner[data-autohide] { transition: opacity .4s ease; }   /* lectures.js fades short-lived messages out */
+.banner.is-fading { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .banner[data-autohide] { transition: none; } }
+.tag { display: inline-block; font-size: .82rem; padding: .1rem .55rem; border-radius: 999px; border: 1px solid var(--border); }
+.tag-ok { background: var(--good-bg); color: var(--good); border-color: transparent; }
+.tag-bad { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
+.tag-run { background: var(--run-bg); color: var(--run); border-color: transparent; }
+.badge { font-size: .8rem; padding: .1rem .5rem; border-radius: 6px; background: var(--bg); border: 1px solid var(--border); }
+.badge-llm { color: var(--link); }
+
+.table-wrap { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; }
+.table th, .table td { padding: .6rem .8rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.table th { font-size: .85rem; color: var(--heading); font-weight: 700; background: var(--clr-primary-200); }
+.table tr:last-child td { border-bottom: 0; }
+
+.form fieldset { border: 0; padding: 0; margin: 0 0 1.4rem; }
+.form legend { font-weight: 700; font-size: 1.05rem; margin-bottom: .5rem; }
+.form label { display: block; font-weight: 600; margin: .7rem 0 .25rem; }
+.form input[type=text], .form textarea { width: 100%; padding: .55rem .7rem; border: 1px solid var(--border-strong);
+  border-radius: 4px; background: var(--surface); color: var(--text); font: inherit; }
+.form input[type=text]:focus, .form textarea:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: transparent; }
+.form input[type=file] { width: 100%; padding: .45rem; border: 1px dashed var(--border-strong); border-radius: 4px;
+  background: var(--surface); color: var(--text); font: inherit; }
+.form .check { display: flex; gap: .5rem; align-items: center; font-weight: 600; }
+.req { font-weight: 400; font-size: .8rem; color: var(--bad); }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+.stages { list-style: none; padding: 0; margin: 1rem 0; }
+.stage { display: flex; align-items: center; gap: .75rem; padding: .45rem 0; color: var(--muted); }
+.stage .dot { width: .85rem; height: .85rem; border-radius: 50%; border: 2px solid var(--border); flex: none; }
+.stage .stage-state { margin-left: auto; font-size: .82rem; }
+.stage.done { color: var(--text); }
+.stage.done .dot { background: var(--good-line); border-color: var(--good-line); }
+.stage.done .stage-state::after { content: "done"; color: var(--good); }
+.stage.current { color: var(--text); font-weight: 600; }
+.stage.current .dot { border-color: var(--run); background: var(--run-bg); animation: pulse 1.2s infinite; }
+.stage.current .stage-state::after { content: "running…"; color: var(--run); }
+.stage.failed .dot { background: var(--bad); border-color: var(--bad); }
+.stage.failed .stage-state::after { content: "stopped"; color: var(--bad); }
+@keyframes pulse { 50% { transform: scale(1.25); } }
+.state-message { font-weight: 600; }
+.log pre { max-height: 18rem; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: .7rem; font-size: .8rem; white-space: pre-wrap; }
+
+.report-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
+/* report tabs: a sticky row under the header; it scrolls sideways on its own on a phone, never the page */
+.tabs { position: sticky; top: 0; z-index: 5; display: flex; gap: .25rem; margin: 1.1rem 0 0; background: var(--bg);
+  border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs a { flex: none; display: flex; align-items: center; gap: .4rem; padding: .7rem .9rem .6rem; margin-bottom: -1px;
+  color: var(--muted); font-weight: 600; font-size: .95rem; text-decoration: none; white-space: nowrap;
+  border-bottom: 3px solid transparent; border-radius: 6px 6px 0 0; }
+.tabs a:hover { color: var(--heading); }
+.tabs a:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.js .tabs a.is-active { color: var(--heading); border-bottom-color: var(--uaeu-red); }
+.tab-count { font-size: .75rem; line-height: 1.5; min-width: 1.5em; padding: 0 .4em; text-align: center;
+  border-radius: 999px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
+.js .tab-panel { padding-top: 1.4rem; }
+.js .tab-panel:not(.is-active) { display: none; }
+.js .tab-panel > .panel-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); margin: 0; }
+.points ul { margin: 0; padding-left: 1.2rem; }
+.points li { margin-bottom: .6rem; }
+.points-good { border-top: 4px solid var(--good-line); }
+.points-good h3 { color: var(--good); }
+.points-bad { border-top: 4px solid var(--bad); }
+.points-bad h3 { color: var(--bad); }
+.context { margin-top: 1.5rem; }
+.context dl, .glossary { display: grid; grid-template-columns: max-content 1fr; gap: .4rem 1rem; margin: 0; }
+.context dt, .glossary dt { font-weight: 600; }
+.context dd, .glossary dd { margin: 0; }
+.charts { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+.chart { margin: 0; position: relative; }
+.chart img { width: 100%; height: auto; border-radius: 6px; background: #fff; }
+.chart figcaption { margin-top: .6rem; color: var(--muted); font-size: .9rem; }
+.charts-panel > .card.chart { margin-bottom: 1rem; }
+.chart-title { margin: 0 0 .2rem; }
+.chart-sub { color: var(--muted); font-size: .9rem; margin: 0 0 .8rem; max-width: 52rem; }
+
+/* activity colours: the same activity has the same colour in every chart and every lecture */
+.act-explaining { --act: var(--viz-1); }
+.act-board { --act: var(--viz-2); }
+.act-not_facing { --act: var(--viz-3); }
+.act-in_view { --act: var(--viz-in-view); }
+.act-out_of_view { --act: var(--viz-out); }
+.swatch { display: inline-block; width: .7rem; height: .7rem; border-radius: 3px; background: var(--act); margin-right: .4rem;
+  vertical-align: -.05rem; flex: none; }
+.legend { display: flex; flex-wrap: wrap; gap: .3rem 1.1rem; list-style: none; padding: 0; margin: 0 0 .4rem; font-size: .85rem;
+  color: var(--muted); }
+
+/* timeline (drawn by report.js) */
+.timeline-plot { width: 100%; min-height: 2rem; }
+.timeline-plot svg { display: block; overflow: visible; font: 12px var(--font); }
+.timeline-plot svg:focus { outline: none; }
+.timeline-plot svg:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; border-radius: 4px; }
+.viz-label { fill: var(--muted); font-size: 12px; }
+.viz-tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.viz-grid { stroke: var(--viz-grid); stroke-width: 1; shape-rendering: crispEdges; }
+.viz-axis { stroke: var(--viz-axis); stroke-width: 1; shape-rendering: crispEdges; }
+.viz-line { fill: none; stroke: var(--viz-line); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.viz-area { fill: var(--viz-line); fill-opacity: .07; stroke: none; }
+.viz-dot { fill: var(--viz-line); stroke: var(--surface); stroke-width: 2; }
+.viz-value { fill: var(--text); font-size: 12px; font-weight: 600; }
+.viz-act { fill: var(--act); }
+.viz-moment { fill: var(--viz-moment); stroke: var(--surface); stroke-width: 2; }
+.viz-cross { stroke: var(--muted); stroke-width: 1; shape-rendering: crispEdges; }
+.chart-tip { position: absolute; z-index: 5; pointer-events: none; min-width: 11rem; max-width: 17rem; padding: .55rem .7rem;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; font-size: .85rem;
+  line-height: 1.4; box-shadow: 0 4px 16px rgba(0, 0, 0, .14); }
+.chart-tip .tip-time { color: var(--muted); font-size: .8rem; }
+.chart-tip .tip-value { font-size: 1.05rem; font-weight: 700; }
+.chart-tip .tip-row { display: flex; align-items: center; color: var(--muted); }
+.table-view { margin-top: .8rem; }
+.table-view summary { cursor: pointer; color: var(--link); font-size: .9rem; }
+.table-view .table { margin-top: .6rem; font-size: .88rem; }
+
+/* comparison: one row per instructor activity, one column per student behaviour */
+.compare { display: grid; gap: .1rem; }
+.compare-row { display: grid; grid-template-columns: minmax(9rem, 13rem) repeat(3, minmax(0, 1fr)); gap: 1.2rem; align-items: center;
+  padding: .55rem 0; border-bottom: 1px solid var(--border); }
+.compare-head { font-size: .8rem; font-weight: 600; color: var(--muted); padding-top: 0; }
+.compare-scale { border-bottom: 0; padding: .2rem 0 0; font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.compare-scale > span:not(:first-child) { display: flex; justify-content: space-between; padding-right: 4.6rem; }
+.compare-name { display: flex; align-items: baseline; font-weight: 600; font-size: .92rem; }
+.compare-name small { display: block; font-weight: 400; color: var(--muted); font-size: .8rem; }
+.compare-cell { display: grid; grid-template-columns: minmax(0, 1fr) 4.2rem; gap: .4rem; align-items: center; border-radius: 6px;
+  outline-offset: 3px; }
+.compare-cell:hover .compare-bar, .compare-cell:focus .compare-bar { filter: brightness(1.12); }
+.compare-measure { display: none; }
+.compare-track { position: relative; height: 14px; border-left: 1px solid var(--viz-axis); }
+.compare-bar { position: absolute; left: 0; top: 1px; height: 12px; min-width: 0; border-radius: 0 4px 4px 0; background: var(--act); }
+.compare-range { position: absolute; top: 6px; height: 2px; background: var(--viz-line); opacity: .75; }
+.compare-range::before, .compare-range::after { content: ""; position: absolute; top: -4px; width: 2px; height: 10px;
+  background: var(--viz-line); }
+.compare-range::before { left: -1px; }
+.compare-range::after { right: -1px; }
+.compare-value { font-weight: 600; font-size: .9rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.compare-value small { display: block; font-weight: 400; font-size: .72rem; color: var(--muted); }
+.filters { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .8rem; }
+.chip { font: inherit; font-size: .88rem; padding: .3rem .8rem; border-radius: 999px; border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--text); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+/* key terms: one row per word, the word on the left and its meaning on the right (stacked on a phone) */
+.terms-panel .glossary { gap: 0 1.75rem; }
+.terms-panel .glossary dt, .terms-panel .glossary dd { padding: .7rem 0; border-bottom: 1px solid var(--border); }
+.terms-panel .glossary dt { color: var(--heading); }
+.terms-panel .glossary dt::first-letter { text-transform: uppercase; }
+.terms-panel .glossary dt:last-of-type, .terms-panel .glossary dd:last-of-type { border-bottom: 0; }
+
+@media (min-width: 900px) { .charts { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 700px) {
+  .two { grid-template-columns: 1fr; } .topbar { flex-wrap: wrap; padding: .7rem 1rem; }
+  .brand { gap: .75rem; } .brand-logo { height: 32px; } .brand-name { font-size: 1.15rem; }
+  .terms-panel .glossary { grid-template-columns: 1fr; }
+  .terms-panel .glossary dt { border-bottom: 0; padding-bottom: 0; }
+  /* the comparison becomes one block per activity, each bar with its own label */
+  .compare-head, .compare-scale { display: none; }
+  .compare-row { grid-template-columns: 1fr; gap: .45rem; }
+  .compare-measure { display: block; grid-column: 1 / -1; font-size: .8rem; color: var(--muted); margin-bottom: -.2rem; }
+}
+@media print {
+  .topbar nav, .tabs, .filters { display: none; } body { background: #fff; } .card { box-shadow: none; }
+  .topbar { border-bottom: 0; padding: 0 0 1rem; }   /* the printed report keeps the UAEU logo and the TeachLens name */
+  /* a printed report has every section, one after another, each with its heading */
+  .js .tab-panel { display: block !important; padding-top: 0; }
+  .js .tab-panel > .panel-title { position: static; width: auto; height: auto; overflow: visible; clip: auto; margin: 2rem 0 .8rem; }
+}
+.printing .tab-panel { display: block !important; }   /* set by report.js just before printing, so charts draw full width */
