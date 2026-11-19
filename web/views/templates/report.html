@@ -34,7 +34,6 @@
       {% else %}<p class="muted">No clear negative point was found in this analysis.</p>{% endif %}
     </div>
   </div>
-  {% if feedback.note %}<p class="note">{{ feedback.note }}</p>{% endif %}
 
   {% if context.topic or context.notes or context.slides or activities %}
   <div class="card context">
@@ -116,7 +115,7 @@
     </div>
     <div class="chart-tip" role="status" hidden></div>
     <figcaption>Each bar is an average, so a short stretch can hide inside it. Bars use their own scale per column
-      (shown underneath). The Feedback tab says which differences are unlikely to be chance.</figcaption>
+      (shown underneath).</figcaption>
   </figure>
   {% endif %}
 

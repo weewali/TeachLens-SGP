@@ -180,8 +180,9 @@ def draw(out):
     side_box(ax, 40, top1, 290, half, "Instructor\nvideo", [("one static camera on the students' side", True)])
     side_box(ax, 40, top1 + half + 20, 290, half, "Student\nvideo", [("one static camera facing the students", True)])
     side_box(ax, 40, top2, 290, h2, "Optional\ncontext", [
-        ("Topic, notes, slides", False),
+        ("Topic, slides", False),
         ("Activities in class: quiz, group work, video, break (minutes)", False),
+        ("Additional information", False),
         ("Kept with the report; not used by the analysis yet", True)], dashed=True)
     mid1 = top1 + h1 / 2
     arrow(ax, [(330, top1 + half / 2), (355, top1 + half / 2), (355, mid1 - 20), (COL_X[0], mid1 - 20)])

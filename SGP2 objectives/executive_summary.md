@@ -19,6 +19,8 @@ The system:
    - Students: heads up, head down and still, hand raised, phone in view.
 5. Places students on anonymous seats found automatically from where they sat.
 
+TeachLens is a hybrid system: pretrained deep-learning models detect people, body keypoints and objects; transparent rules turn them into observable behaviours; statistical tests link instructor and student behaviour; and an optional language model rewrites the feedback in plain English. No model was trained by the team.
+
 The evidence is saved as timestamped events in the team's shared JSONL format. The analysis then:
 - splits the lecture into 10-second windows and compares student behaviour during each instructor activity with the
   rest of the lecture;
@@ -30,7 +32,8 @@ The statistics allow for neighbouring moments being alike and for the number of 
 Rules turn the results into feedback, and an optional rewrite by Claude Opus 5.5 rephrases it. The rewrite sees only
 anonymised numbers and is checked automatically: every number must match the measurements, and causal or inner-state
 wording is rejected. A local Flask web application lets the instructor upload the videos, follow the analysis, and
-read a report in tabs: feedback, charts, timestamped moments and key terms. Instructors may add
+read a report in tabs: feedback, charts, timestamped moments and key terms. The seat chart shows the classroom with
+the faces pixelated. Instructors may add
 optional context, including activities that were not teaching and how long each lasted (for example a 15-minute
 quiz); these are
 stored with the report but not yet used by the analysis.
@@ -48,7 +51,7 @@ stored with the report but not yet used by the analysis.
 - A second test lecture of 10 minutes 26 seconds (about six students) also ran end to end.
 - The team's fusion layer found no link between instructor actions and student behaviour that passed the correction
   for multiple testing in either lecture. Lectures this short cannot show such a link (see the results chapter).
-- 249 automated tests pass (98 for System B, 151 for System A). They cover the event format, seat finding, feedback
+- 251 automated tests pass (100 for System B, 151 for System A). They cover the event format, seat finding, feedback
   wording, the fusion step, the AI-text checks and the web application.
 
 **Limitations.** The detections have not yet been checked against human labels, so no accuracy figure can be claimed.
@@ -61,6 +64,8 @@ share one event format but have not been merged.
 
 **Next steps:**
 - Human labelling with the built-in review sheets to measure accuracy.
+- Tuning the behaviour-rule thresholds against those labels, checked on lectures not used for tuning; the
+  statistical settings stay fixed.
 - Full-length recorded lectures (55–75 minutes), with consent.
 - Decide how to use the activities instructors note (quiz, group work, video, break, with their length) in the
   analysis **[TODO]**.

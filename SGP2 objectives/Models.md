@@ -6,6 +6,8 @@ This list contains only the models that the project's code actually runs. TeachL
   per run.
 - **System B**, the two-camera analysis, reporting and web application (branch `pipeline_creation`, `main code/`).
 
+TeachLens is a hybrid system: pretrained deep-learning models detect people, body keypoints and objects; transparent rules turn them into observable behaviours; statistical tests link instructor and student behaviour; and an optional language model rewrites the feedback in plain English. No model was trained by the team.
+
 ![TeachLens pipeline](pipeline.png)
 
 ## 1. Computer vision models (pretrained, used without retraining)

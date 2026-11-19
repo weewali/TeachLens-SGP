@@ -11,11 +11,18 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tests" / "fixtures"))
 
 from demo_lecture import make_demo_lecture  # noqa: E402
 from web.app import create_app  # noqa: E402
+from web.models import charts  # noqa: E402
 from web.models import lecture as lecture_model  # noqa: E402
 from web.models import report as report_model  # noqa: E402
 from web.models import stat_charts  # noqa: E402
@@ -123,6 +130,8 @@ class PageTests(WebTestCase):
                                  "possible links between what the instructor did", "Suggestions and limitations",
                                  "<summary>Suggestions", "<summary>Limitations", "limitations say",
                                  "<figcaption><strong>",   # no caption under the heatmaps (title above instead)
+                                 'class="note"', "is a posture, not a measure of attention or learning: taking notes",
+                                 # the fixed note under the feedback was removed (user request 2026-11-19)
                                  # the "Links over time" tab was removed (user decision 2026-11-19)
                                  'href="#links"', 'id="links"', "Links over time", "possible links between what you did",
                                  "Too rare to test",
@@ -520,6 +529,60 @@ class ModelTests(unittest.TestCase):
                 parse(types, durations)
         self.assertEqual(lecture_model.describe_activity({"type": "group_work", "minutes": 20}),
                          "Group or pair work (20 minutes)")
+
+
+class FaceBlurTests(unittest.TestCase):
+    """The Student Seats chart pixelates the heads in its camera frame; the analysis frames are never changed."""
+
+    PEOPLE = pd.DataFrame([
+        # shoulders readable: 1.3 shoulder widths around the shoulder midpoint, from the box top to the shoulders
+        {"x1": 100, "y1": 50, "x2": 200, "y2": 250, "sx": 150, "sy": 110, "sw": 60, "img_w": 400, "img_h": 300},
+        # no shoulders: the top 45% of the box
+        {"x1": 300, "y1": 100, "x2": 360, "y2": 200, "sx": np.nan, "sy": np.nan, "sw": np.nan, "img_w": 400, "img_h": 300}])
+
+    def test_head_areas_and_pixelation(self):
+        areas = charts.head_areas(self.PEOPLE)
+        expected = [(111 - 15.6, 50 - 12, 189 + 15.6, 110 + 12), (300 - 12, 100 - 9, 360 + 12, 145 + 9)]   # pixels, 20% pad
+        for area, (x1, y1, x2, y2) in zip(areas, expected):
+            np.testing.assert_allclose(area, (x1 / 400, y1 / 300, x2 / 400, y2 / 300))
+        image = np.random.default_rng(0).integers(0, 256, (300, 400, 3), dtype=np.uint8)
+        out = charts.pixelate(image, areas)
+        self.assertTrue((out[170:] == image[170:]).all())                   # everything below the heads is untouched
+        self.assertTrue((out[:, :90] == image[:, :90]).all())
+        head = out[40:120, 97:203]
+        self.assertLessEqual(len(np.unique(head.reshape(-1, 3), axis=0)), 49)   # a few flat blocks, not the face
+        self.assertTrue((charts.pixelate(image, []) == image).all())
+        self.assertEqual(image[60, 150].tolist(), np.random.default_rng(0).integers(0, 256, (300, 400, 3),
+                                                                                   dtype=np.uint8)[60, 150].tolist())
+
+    def test_the_seat_chart_blurs_its_frame_and_old_unblurred_charts_are_replaced(self):
+        with tempfile.TemporaryDirectory() as directory:
+            make_demo_lecture(directory)
+            lecture = Lecture("demo_lecture", Path(directory))
+            frame = lecture.session_dir / "frames" / "students" / "frame_0000.jpg"
+            frame.parent.mkdir(parents=True)
+            plt.imsave(frame, np.full((240, 320, 3), 200, dtype=np.uint8))
+            before = frame.read_bytes()
+            old = charts.chart_path(lecture, "seat_heatmap.png")
+            old.parent.mkdir(parents=True, exist_ok=True)
+            old.write_bytes(b"an old chart drawn on the unblurred frame")   # newer than the tables, but an old style
+            (lecture.charts_dir / "style.txt").unlink(missing_ok=True)
+            with mock.patch.object(charts, "pixelate", wraps=charts.pixelate) as blurred:
+                charts.ensure_charts(lecture)
+            self.assertTrue(blurred.called)
+            self.assertGreaterEqual(len(blurred.call_args.args[1]), 8)      # at least one head per seat
+            self.assertNotEqual(old.read_bytes(), b"an old chart drawn on the unblurred frame")
+            self.assertEqual(frame.read_bytes(), before)                     # the analysis frame itself is unchanged
+            self.assertEqual((lecture.charts_dir / "style.txt").read_text(encoding="utf-8"), charts.CHART_STYLE)
+
+            (lecture.charts_dir / "style.txt").write_text("1", encoding="utf-8")
+            with mock.patch.object(charts, "draw_seat_heatmap", return_value=False):
+                shown = charts.ensure_charts(lecture)
+            self.assertFalse(old.exists())                                   # cannot be redrawn: not shown at all
+            self.assertEqual([c["file"] for c in shown], ["instructor_heatmap.png"])
+
+            with mock.patch.object(charts, "head_areas", side_effect=ValueError("bad table")):
+                self.assertIsNone(charts._student_background(lecture, pd.DataFrame()))   # never the unblurred frame
 
 
 if __name__ == "__main__":

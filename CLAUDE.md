@@ -142,7 +142,12 @@ request: `required` in the form, "Enter a lecture title." from `LectureRepositor
 "Video of the instructor", "Video of the students", "Additional information:"; lead sentence "...highlights the strengths of your lecture and recommendations for future lessons"
 (user's wording; the report itself has positive/negative points, no recommendations yet). The user removed the
 "Before you start" ethics box and the original-files/messaging-apps hint. Do not claim the videos stay private: the
-seat/instructor heatmaps are drawn on a real video frame. Section titles are navy headings with a red bar
+instructor heatmap is drawn on a real video frame. The Student Seats chart's frame has every head pixelated since
+2026-11-19 (user request; `head_areas` / `pixelate` / `_student_background` in `web/models/charts.py`: heads of
+everyone detected in the first 5 samples, any role, plus each seat's usual head spot, from box top to shoulder line,
+1.3 shoulder widths wide, padded 20%; a failure gives no background, never the raw frame). Only the chart is changed,
+never the analysis frames, which stay unblurred on disk. `CHART_STYLE` + `charts/style.txt` redraw older saved charts;
+one that cannot be redrawn is deleted. A person missed in all those samples and in no seat would stay visible. Section titles are navy headings with a red bar
 (`.form legend` in style.css). `TEMPLATES_AUTO_RELOAD = True` in `create_app` so template edits show
 on a refresh; Python code changes still need a server restart.
 Planned activities (2026-11-19, user chose "point 2" of: optional / quick buttons / ask after the report / automatic
@@ -170,7 +175,10 @@ sentences and 8 of 10 limitations are fixed method text). Everything removed sta
 app no longer reads that file. The feedback note no longer points to "the report's limitations" (saved reports patched).
 The last tab is "Key terms" (the glossary from facts.json, shown open; the data-only terms "window", "observable
 students" and "observable student time" are left out in `web/models/report.py` DATA_TERMS). Negative points use "✗"
-instead of "!". The two heatmaps in the Charts tab have a title above them ("Instructor Movement",
+instead of "!". The fixed note under the feedback points (FEEDBACK_NOTE in Main Code.py: definitions, the time base,
+"automatic detections that no person has checked yet") is no longer shown on the page (user request 2026-11-19; it
+stays in final_feedback_report.txt and facts.json), so the page itself no longer says the detections are unverified.
+The two heatmaps in the Charts tab have a title above them ("Instructor Movement",
 "Student Seats"; user's wording, the second asked as "Students Seats") and no caption under them (user request 2026-11-19); the old caption text is now only the image's
 alt text (`CHARTS` in `web/models/charts.py`), and the head-up caveat stays in Key terms. The report is now tabs instead of one long page (user request): Feedback (with the lecture context) |
 Charts | Moments (count) | Key terms. The old "Links over
@@ -267,7 +275,7 @@ names contain a space; always quote paths.
 ```
 python "main code/Main Code.py" --instructor I.mp4 --students S.mp4 [--session lecture01] [--offset 2.5] [--overwrite]
 python "main code/Main Code.py"     # every classroom_project/videos/<lecture>/ with instructor.* + students.*
-python -m unittest discover -s tests/unit -v                         # 249 tests (98 System B + 151 System A), no network, no video
+python -m unittest discover -s tests/unit -v                         # 251 tests (100 System B + 151 System A), no network, no video
 python "main code/llm_report.py" --session lecture01 --dry-run       # shows prompt + cost, calls nothing
 python "main code/llm_report.py" --session lecture01 --model haiku   # real call: haiku ~0.1c, sonnet ~2c, opus ~4c
 python "main code/validate_indicators.py" make-sheets --session lecture01

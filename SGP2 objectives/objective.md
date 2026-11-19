@@ -39,14 +39,17 @@ causes, and never claims to measure inner states such as attention, engagement, 
    measured numbers, with the rule-based text as a fallback.
 7. **Deliver it through a simple web application.** Instructors give the lecture a title, upload the two videos,
    follow the analysis stage by stage, and read a report in tabs: feedback, charts, timestamped
-   moments and key terms. Context is optional: the topic, notes, slides, and activities in class that were not teaching
-   (a quiz, group work, a video or a break, added with one click and its duration in minutes).
+   moments and key terms. Context is optional: the topic, the slides, activities in class that were not teaching
+   (a quiz, group work, a video or a break, added with one click and its duration in minutes) and additional
+   information.
 8. **Protect people and state limits openly.** The design rules:
    - Processing stays local.
    - Nobody is identified.
    - Only anonymised numbers ever reach the language model.
    - Inner states are never claimed.
-   - Every report states its limitations.
+   - Every saved report file states its limitations. The web page keeps to the points, charts, moments and key
+     terms, and no longer repeats the "unverified" note **[TODO: decide whether it should]**.
+   - Faces are pixelated in the seat chart the instructor sees.
 9. **Verify and evaluate.**
    - Test the software automatically.
    - Run it end to end on a real two-camera recording.
@@ -62,9 +65,9 @@ causes, and never claims to measure inner states such as attention, engagement, 
 | 4 Shared evidence format | Done | Two JSONL files per lecture in the team's event format |
 | 5 Association analysis | Done | Comparisons, and the team's fusion layer on System B's event files, run on the two test lectures; no link passed the correction (see the results chapter) |
 | 6 Plain-English feedback | Done (rule-based); AI rewrite implemented, first real call pending | Feedback on the real lectures; offline tests of the checks |
-| 7 Web application | Done (local) | Upload with optional context and activities, progress, tabbed report, delete; 29 automated web tests. Marked activities are stored but not yet used by the analysis **[TODO]** |
-| 8 Privacy and honesty | Done in design and code | Local processing, anonymous seats, word checks, limitations in the analysis details |
-| 9 Verification | Partly done | 249 automated tests pass (98 System B, 151 System A); human-labelled accuracy **[TODO]** |
+| 7 Web application | Done (local) | Upload with optional context and activities, progress, tabbed report, delete; 31 automated web tests. Marked activities are stored but not yet used by the analysis **[TODO]** |
+| 8 Privacy and honesty | Done in design and code | Local processing, anonymous seats, faces pixelated in the seat chart, word checks, limitations in the analysis details |
+| 9 Verification | Partly done | 251 automated tests pass (100 System B, 151 System A); human-labelled accuracy **[TODO]** |
 
 ## The positive side of the project
 
@@ -81,8 +84,8 @@ causes, and never claims to measure inner states such as attention, engagement, 
 
 ### For students
 
-- **No student is identified or graded.** Seats are anonymous numbers, no faces are stored or matched, and nothing is
-  reported about any named student.
+- **No student is identified or graded.** Seats are anonymous numbers, no faces are stored or matched, faces are
+  pixelated in the report's seat chart, and nothing is reported about any named student.
 - **Benefit from better-informed teaching.** For example, a long stretch of explanation with no hand raises is pointed
   out together with a simple suggestion: ask a short question.
 

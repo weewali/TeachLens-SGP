@@ -16,8 +16,8 @@ feedback in a local web application. Drawn by `scripts/make_pipeline_diagram.py`
    ("attentive").
 3. **Unknown is not zero.** Hidden or unreadable posture stays unknown and is left out of percentages.
 4. **Associations, not causes.** Statistics are corrected for autocorrelation and multiple testing.
-5. **Local and anonymous.** Video never leaves the computer. Students are anonymous seat numbers. Only anonymised
-   numbers may reach the language model.
+5. **Local and anonymous.** Video never leaves the computer. Students are anonymous seat numbers, and faces are
+   pixelated in the seat chart. Only anonymised numbers may reach the language model.
 6. **Rebuildable.** Every report can be regenerated from saved files without processing the video again.
 
 ## 2. Architecture
@@ -32,7 +32,7 @@ feedback in a local web application. Drawn by `scripts/make_pipeline_diagram.py`
 | 6. Association analysis | Windows; the two JSONL event files | Comparisons during each instructor activity (HAC test). The team's fusion layer on the two event files (since 19 November 2026; it replaced System B's own lag analysis): 5-second windows, student changes 5–30 s after each instructor feature, circular-shift test, Benjamini-Hochberg q-values, lagged OLS with Newey-West errors, averages around the moments an action started. Only the indicators System B measures are tested. | `fusion.json`, `fusion_windows.csv`, `fusion_links.csv` |
 | 7. Report | All of the above | Rule-based positive and negative points, suggestions, evidence, limitations, glossary. `facts.json` holds anonymised numbers only. The fusion results become "links over time" points (`lag_facts.py`). | `final_feedback_report.txt`, `analysis_details.txt`, `facts.json`, `links/report_points.json` |
 | 8. Optional AI rewrite | `facts.json`, `fusion.json` | Claude Opus 5.5 rewrites the feedback points and the links over time. Code checks the numbers and the wording, with one retry and a fallback. | `llm_output.json`, `links/report_points.json`, checked report text |
-| Web application | A lecture title, the two videos and optional context; saved results | Upload (with optional topic, notes, slides and activities that were not teaching), progress by stage, tabbed report, delete | Pages served on the local computer; `context.json` with the instructor's context |
+| Web application | A lecture title, the two videos and optional context; saved results | Upload (lecture title and the two videos; optional topic, slides, activities in class with their duration, additional information), progress by stage, tabbed report, delete | Pages served on the local computer; `context.json` with the instructor's context |
 
 ## 3. Behaviour rules (System B)
 
@@ -84,7 +84,9 @@ feedback in a local web application. Drawn by `scripts/make_pipeline_diagram.py`
     marks before any video is saved.
   - `job.py`: runs the pipeline in the background and records stages 1–7, plus stage 8 for the AI rewrite.
   - `report.py`: gathers the report data from saved files.
-  - `charts.py`: the instructor position heatmap and heads up by seat.
+  - `charts.py`: the instructor position heatmap and heads up by seat. The camera frame behind the seat chart has
+    every head it can locate pixelated: everyone detected in the first 10 seconds, plus where each seat's head usually
+    was. Only this picture is changed; the analysis reads the original frames.
   - `stat_charts.py`: data for the lecture timeline and the activity comparison.
 - **Views:** Jinja2 pages for the lecture list, the upload form, live progress, the report and the delete
   confirmation.
@@ -137,3 +139,5 @@ feedback in a local web application. Drawn by `scripts/make_pipeline_diagram.py`
 | HAC tests; for the lags, the team's circular-shift test with Benjamini-Hochberg q-values | Plain correlations and t-tests | Neighbouring windows are alike, so plain p-values overstate certainty. Shifting the instructor's timeline keeps that likeness and breaks only the alignment. |
 | Rule-based text plus a checked AI rewrite | The AI writes the report freely | Every sentence must trace back to a measured number. |
 | Local web application | Cloud hosting | Videos show real people, so processing stays on the local computer. |
+| Seat chart on a camera frame with pixelated faces | The raw frame, or no picture | The instructor can still see where each seat is, but no student can be recognised. Only the chart is changed; the analysis reads the original frames. |
+| Fixed statistical settings; behaviour thresholds tuned later from human labels | Letting the system tune everything on each lecture | Without human labels there is no correct answer to tune towards, and tuning the statistics on the data would produce false findings. |

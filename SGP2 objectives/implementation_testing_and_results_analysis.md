@@ -28,7 +28,7 @@
 | `src/reporting/lag_facts.py`, `llm_text.py` | Turn fusion output into facts and checked plain-English points |
 | `web/` | Flask application: models, views, controller |
 | `scripts/make_pipeline_diagram.py` | Draws the pipeline figure of this report |
-| `tests/unit/` | 98 automated tests for System B (plus System A's 151) |
+| `tests/unit/` | 100 automated tests for System B (plus System A's 151) |
 
 ### 1.3 Key parameters
 
@@ -47,7 +47,10 @@
 | Seat | Occupied in ≥ 10% of samples; match within 1 shoulder width | Automatic anonymous seats |
 | Model batch | 20 frames per call | Keeps memory flat on small machines |
 
-All rule thresholds are unvalidated starting values.
+All rule thresholds are unvalidated starting values. They are where accuracy can be improved later: once the review
+sheets are labelled, each threshold can be tuned to agree best with the human labels and then checked on lectures
+that were not used for tuning. The statistical settings (windows, lags, q ≤ 0.05, minimum evidence) stay fixed in
+advance, because tuning them on the data would turn chance patterns into "findings".
 
 ### 1.4 Implementation notes
 
@@ -62,7 +65,7 @@ All rule thresholds are unvalidated starting values.
 
 ## 2. Testing
 
-### 2.1 Automated tests (System B): 98 tests, all passing on 19 November 2026
+### 2.1 Automated tests (System B): 100 tests, all passing on 19 November 2026
 
 | Test file | Tests | What it checks |
 |---|---|---|
@@ -72,9 +75,9 @@ All rule thresholds are unvalidated starting values.
 | `test_feedback_wording.py` | 4 | Feedback is plain English (no "window", "p =", "observable", raw seat IDs) and addresses the instructor as "you"; exact sentences for small cases |
 | `test_lag_facts.py` | 26 | Fusion output → facts: the real fusion format (run fresh through the team's code), every test counted in the correction, strongest lag per pair, chance links and unknown indicators left out, weak links capped, the vocabulary covers every fusion feature with the same direction |
 | `test_llm_text.py` | 14 | AI-text checks with simulated answers: each kind of mistake caught, weak links need a hedge, numbers must come from the analysis, retry then cache, fallback to rules when the service is unreachable or two answers fail |
-| `test_web_app.py` | 29 | Pages, upload checks (including a required title and the activity rows: whole minutes from 1 to 180, at most 180 minutes in total, checked before any video is saved), progress, failed and interrupted analyses, delete, the AI deployment setting, report contents (no developer details or removed sections), chart data, 95% ranges, safe file serving |
+| `test_web_app.py` | 31 | Pages, upload checks (including a required title and the activity rows: whole minutes from 1 to 180, at most 180 minutes in total, checked before any video is saved), progress, failed and interrupted analyses, delete, the AI deployment setting, report contents (no developer details or removed sections), chart data, 95% ranges, safe file serving, faces pixelated in the seat chart (and old unblurred charts replaced) |
 
-All 249 tests (System B and System A) run without network access or video, in about 16 seconds.
+All 251 tests (System B and System A) run without network access or video, in about 16 seconds.
 
 System A (the team's evidence pipeline, copied into this working tree at commit ee5b6bb) has 151 tests, which pass in
 the same run.
@@ -218,12 +221,17 @@ and since 19 November 2026 the team's fusion layer, which corrects over every pa
 - No board region was calibrated, so board work was not measured.
 - The cameras are aligned to about 1 s.
 - The AI rewrite has not yet been tried on a real call.
+- Faces in the seat chart are pixelated only where a person was detected (in the first 10 seconds or in a seat);
+  someone never detected would stay visible. The original frames used by the analysis are not blurred.
+- The web page no longer says that the detections are unverified; only the saved report files do.
 - Planned activities look like off-task behaviour: during a quiz, students writing look like "heads down". The
   upload form now records such activities (quiz, group work, video, break) and how many minutes each lasted, but not
   when it happened, so the analysis cannot tell which minutes to leave out. It does not use them yet.
 
 **Next steps:**
 - Label the review sheets and report precision and recall.
+- Tune the behaviour-rule thresholds against the labels (never the statistical settings) and check them on other
+  lectures.
 - Record full-length lectures (55–75 minutes) with consent.
 - Decide how to use the noted activities **[TODO]**. Since only their length is known, options are a note beside the
   student figures they affect, or finding a stretch of matching length automatically (for example many heads down
