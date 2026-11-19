@@ -1,26 +1,32 @@
-"""Analyze whole lessons with one command: both cameras, camera links, and lag analysis.
+"""Analyze whole lessons with one command: both cameras, camera links, lag analysis, LLM facts.
 
 Input: a lesson's two recordings (student camera and instructor camera), as
 two video files or as scenarios of data/manifests/sgp_scenario_videos.csv.
-Steps per lesson (src/lesson.py): line the cameras up by real time and keep
-the stretch both filmed; analyze each camera with every switched-on
-indicator; optionally detect objects; link the cameras by timing; fuse the
-two runs and run the lag analysis.
+Steps per lesson (src/pipeline.analyze_lesson): line the cameras up by real
+time and keep the stretch both filmed; analyze each camera with every
+switched-on indicator; optionally detect objects; link the cameras by timing;
+fuse the two runs and run the lag analysis; write facts.json for the LLM
+report stage and a side-by-side review video.
 
-Outputs (under outputs/, local and ignored by Git):
-    events/<run>.list_a.jsonl, reports/<run>.list_a.json, debug/<run>.list_a.mp4  per camera
-    reports/<lesson>.cross_camera.json   timing links between the cameras
-    reports/<lesson>.fusion.json, .fusion_windows.csv, .fusion_links.csv,
-    visualizations/<lesson>.fusion.png   lag analysis and timelines
-    reports/<lesson>.lesson.json         what ran, on which ranges, and every output path
-The review MP4s hold original classroom footage: keep them local.
+Each lesson gets one folder, outputs/lessons/<YYYY-MM-DD_HHMM>_<lesson>/:
+    lesson.json            what ran, on which ranges, findings, every path
+    student/, instructor/  events.jsonl, summary.json, review.mp4, run.json per camera
+    cross_camera.json      timing links between the cameras
+    fusion/                fusion.json, windows.csv, links.csv, timeline.png
+    facts.json             input for the LLM report (llm_report.py --facts ...)
+    side_by_side.mp4       both review videos lined up by real time
+With --pool NAME, the lessons of this command are also tested together
+(outputs/pooled/<stamp>_<NAME>/). The videos hold original classroom
+footage: keep them local.
 
 Examples (repository root, TeachLens environment):
+    python scripts/analyze_lesson.py --scenario A3 --tag lesson
+    python scripts/analyze_lesson.py --all-scenarios --tag lesson --pool scenarios
     python scripts/analyze_lesson.py --student-video data/raw_student_videos/sgp_A1_student.MOV ^
         --instructor-video data/raw_instructor_videos/sgp_A1_instructor.MOV --name lesson_01
-    python scripts/analyze_lesson.py --scenario A1 --tag lesson
-    python scripts/analyze_lesson.py --all-scenarios --tag lesson
     python scripts/analyze_lesson.py --scenario B1 --tag try --start 2:00 --end 4:00 --no-save-video
+    python scripts/analyze_lesson.py --scenario A2 --tag lesson --reuse   # redo links/fusion/facts only
+    python scripts/analyze_lesson.py --scenario A4 --tag lesson --reuse --redo instructor
 """
 
 import argparse
@@ -33,9 +39,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from analyze import parse_real_time, parse_seconds  # noqa: E402
-from src.lesson import (DEFAULT_MANIFEST, analyze_lesson, plan_from_manifest,  # noqa: E402
-                        plan_from_videos, read_manifest)
-from src.pipeline import AnalysisStopped  # noqa: E402
+from src.pipeline import AnalysisStopped, analyze_lesson, pool_lessons  # noqa: E402
+from src.preprocessing.alignment import (DEFAULT_MANIFEST, plan_from_manifest, plan_from_videos,  # noqa: E402
+                                         read_manifest)
 from src.utils.config import load_config  # noqa: E402
 from src.utils.paths import project_path  # noqa: E402
 
@@ -72,18 +78,24 @@ def main() -> int:
                         help="Room override with zones/targets (default: the scenario room, "
                              "configs/sgp_room.yaml); 'none' for no override")
     parser.add_argument("--weight", type=Path, help="Local YOLO26 pose .pt; never auto-downloaded")
-    parser.add_argument("--output-dir", type=Path, help="Root for events/, reports/, debug/, visualizations/")
+    parser.add_argument("--output-dir", type=Path, help="Root of lessons/, runs/, pooled/ (default: outputs/)")
     parser.add_argument("--device", help="Ultralytics device, e.g. cpu or 0")
     parser.add_argument("--save-video", action=argparse.BooleanOptionalAction, default=None,
                         help="Write the review MP4s (default: review.save_video, on)")
+    parser.add_argument("--side-by-side", action=argparse.BooleanOptionalAction, default=True,
+                        help="Write side_by_side.mp4 from the two review videos")
     parser.add_argument("--objects", action="store_true",
                         help="Also run the isolated COCO object detector on both cameras")
     parser.add_argument("--plot", action=argparse.BooleanOptionalAction, default=True,
-                        help="Draw the fusion timeline PNG")
+                        help="Draw fusion/timeline.png")
+    parser.add_argument("--pool", metavar="NAME",
+                        help="Also test the hypotheses over all lessons of this command (outputs/pooled/)")
     existing = parser.add_mutually_exclusive_group()
     existing.add_argument("--overwrite", action="store_true", help="Replace existing outputs")
     existing.add_argument("--reuse", action="store_true",
                           help="Keep camera runs that already exist and redo only the later steps")
+    parser.add_argument("--redo", action="append", choices=("student", "instructor"), default=[],
+                        help="With --reuse: analyze this camera again (repeatable), e.g. after a teacher rule change")
     parser.add_argument("--dry-run", action="store_true", help="Show the planned runs and stop")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -116,7 +128,7 @@ def main() -> int:
             window = f"{run.start:g}-{'end' if run.end is None else f'{run.end:g}'} s"
             print(f"{name:<22} {run.camera:<16} {run.video_id:<34} {window:<18} {run.video.name}")
     missing = [str(run.video) for _, runs in lessons for run in runs if not run.video.is_file()]
-    if missing:
+    if missing and not args.reuse:
         LOGGER.error("Missing video files (check --data-root): %s", ", ".join(missing))
         return 1
     if args.dry_run:
@@ -133,7 +145,8 @@ def main() -> int:
             lesson = analyze_lesson(runs, name, config, output_dir=output_dir,
                                     weight=args.weight.resolve() if args.weight else None, device=args.device,
                                     overwrite=args.overwrite, reuse=args.reuse, save_video=args.save_video,
-                                    objects=args.objects, plot=args.plot)
+                                    objects=args.objects, plot=args.plot, side_by_side=args.side_by_side,
+                                    redo=[f"{camera}_view" for camera in args.redo])
         except AnalysisStopped as exc:
             LOGGER.warning("%s stopped: %s", name, exc)
             return 1
@@ -149,11 +162,23 @@ def main() -> int:
             print(f"{name:<22} {status}")
             continue
         fusion = lesson["fusion"]
-        kinds = ", ".join(f"{f['kind']} {f['teacher_feature']} -> {f['student_feature']}"
-                          for f in fusion["findings"][:3]) or "none"
-        print(f"{name:<22} {fusion['windows']:>4} windows, {lesson['cross_camera_links']} camera links, "
-              f"{len(fusion['findings'])} findings ({kinds}); {lesson['seconds'] / 60:.1f} min")
-        print(f"{'':<22} {lesson['outputs']['lesson']}")
+        tested = [h for h in lesson["hypotheses"] if h.get("r") is not None]
+        print(f"{name:<22} {fusion['windows']:>4} windows, {len(tested)} of {len(lesson['hypotheses'])} hypotheses "
+              f"testable, {len(fusion['findings'])} findings, {lesson['cross_camera_links']} camera links; "
+              f"{lesson['seconds'] / 60:.1f} min")
+        for h in tested:
+            print(f"{'':<24}{h['code'] or '':<8} {h['teacher_feature']:<22} -> {h['student_feature']:<14} "
+                  f"r {h['r']:+.2f} q {h['q']:.2f} {'as expected' if h['matches_expectation'] else 'opposite'}")
+        print(f"{'':<24}{lesson['folder']}")
+    done = [lesson for _, _, lesson in results if lesson is not None]
+    if args.pool and len(done) >= 2:
+        try:
+            pooled = pool_lessons([Path(lesson["folder"]) for lesson in done], args.pool, config,
+                                  output_dir=output_dir, overwrite=args.overwrite)
+        except (FileNotFoundError, FileExistsError, ValueError) as exc:
+            LOGGER.error("Pooling failed: %s", exc)
+            return 1
+        print(f"\npooled over {len(done)} lessons: {len(pooled['findings'])} findings; {pooled['folder']}")
     return 1 if any(lesson is None for _, _, lesson in results) else 0
 
 

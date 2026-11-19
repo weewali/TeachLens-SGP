@@ -50,8 +50,8 @@ only the models it needs.
 
 ## Testing one indicator at a time
 
-Each run writes `outputs/events/<id>.list_a.jsonl`, the summary, and the
-review video `outputs/debug/<id>.list_a.mp4`; the runner names the run
+Each run writes `events.jsonl`, `summary.json`, `run.json`, and the review
+video `review.mp4` to `outputs/runs/<YYYY-MM-DD_HHMM>_<id>/`; the runner names the run
 `<file>_<indicators>`. Pick the scenario that shows the behaviour
 (`docs/test_recording_scenarios.pdf`; takes do not follow the script times
 exactly).

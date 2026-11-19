@@ -36,7 +36,8 @@ models/**
 outputs/**
 !outputs/**/
 !outputs/**/.gitkeep
-runs/
+# Training runs at the repository root (outputs/runs/ follows the outputs rules above)
+/runs/
 
 # Local configuration overrides
 configs/*.local.yaml

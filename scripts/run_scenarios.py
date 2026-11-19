@@ -33,9 +33,10 @@ import time
 # Allow direct `python scripts/run_scenarios.py` from any working directory.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.lesson import CAMERAS, DEFAULT_MANIFEST, read_manifest  # noqa: E402,F401 (shared manifest reader)
+from src.preprocessing.alignment import CAMERAS, DEFAULT_MANIFEST, read_manifest  # noqa: E402,F401 (shared)
 from src.preprocessing.recording_time import parse_timestamp  # noqa: E402
 from src.utils.config import INDICATORS  # noqa: E402
+from src.utils.output_layout import find_run  # noqa: E402
 from src.utils.paths import project_path  # noqa: E402
 
 LOGGER = logging.getLogger("run_scenarios")
@@ -169,12 +170,11 @@ def main() -> int:
     config = load_config(args.config, args.local_config)
     output_root = (args.output_dir.resolve() if args.output_dir
                    else project_path(config["paths"]["outputs"]))
-    suffix = "objects" if args.objects else "list_a"
+
     failed = []
     for number, run in enumerate(runs, start=1):
-        summary = output_root / "reports" / f"{run.video_id}.{suffix}.json"
-        if args.skip_existing and summary.exists():
-            LOGGER.info("[%d/%d] %s: summary exists, skipped", number, len(runs), run.video_id)
+        if args.skip_existing and find_run(output_root, run.video_id) is not None:
+            LOGGER.info("[%d/%d] %s: saved run exists, skipped", number, len(runs), run.video_id)
             continue
         LOGGER.info("[%d/%d] %s (%s)", number, len(runs), run.video_id, run.camera)
         started = time.perf_counter()

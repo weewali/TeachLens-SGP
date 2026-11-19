@@ -127,6 +127,11 @@ analysis:
   shoulder_rise_sitting_max: 0.35
   shoulder_rise_history_seconds: 3.0  # shoulder history needed before any label
   shoulder_rise_max_seat_shift: 1.0  # widths away from the seat -> unknown (left the seat)
+  # Teacher behind the desk (instructor camera with a `desk` target; legs
+  # hidden): shoulders' height above the desk's top edge, in shoulder widths
+  # (2026-11-19). Seated A3/A4 teacher: 0.56-0.77; standing is about 1.75.
+  desk_sitting_max_widths: 1.1
+  desk_standing_min_widths: 1.4
   # Median apparent joint displacement in body-heights/second.
   motion_low_max: 0.08
   motion_medium_max: 0.35
@@ -266,13 +271,30 @@ fusion:
   window_seconds: 5.0         # analysis window on the shared real-time line
   min_known_fraction: 0.5     # a share needs this fraction of a window of known evidence
   max_lag_windows: 6          # lags tested: 1..6 windows (5-30 s) after the teacher action
-  min_active_windows: 5       # teacher features present in fewer windows are not correlated
+  min_active_windows: 5       # a teacher feature needs this many windows with it AND without it
   permutations: 500           # circular shifts / random onsets per test
   alpha: 0.05                 # q-value (Benjamini-Hochberg) for a finding
   seed: 0                     # random generator seed; same seed, same p-values
   model_lags: [1, 2, 3]       # lagged models Y_t ~ X_(t-k) + Y_(t-1) for these k
-  outcomes: [S_on_target, S_off_target, S_phone, S_talking, S_head_down]
-  model_predictors: [T_facing_class, T_board_or_screen, T_gesturing, T_walking, T_pointing, T_writing]
+  outcomes: [S_on_task, S_off_task, S_phone, S_talking]
+  model_predictors: [T_facing_class, T_gesturing, T_walking, T_seated, T_reading_notes, T_back_to_class]
+  comparison_lag_windows: 1   # comparisons: students in the window after the teacher feature (5-10 s later)
+  # Hypotheses fixed in advance (2026-11-19), from the scenario booklet's
+  # instructor codes (docs/test_recording_scenarios.pdf): what "effective" and
+  # "ineffective" teaching are scripted to do, and which way the class should
+  # move. expect +1: the student feature should rise after the teacher
+  # feature; -1: fall. Tested and corrected among themselves; every other
+  # teacher x student pair is exploratory.
+  hypotheses:
+    - {teacher: T_facing_class, student: S_on_task, expect: 1, code: T-STAND}
+    - {teacher: T_looking_at_students, student: S_on_task, expect: 1, code: T-STAND}
+    - {teacher: T_gesturing, student: S_on_task, expect: 1, code: T-GEST}
+    - {teacher: T_walking, student: S_on_task, expect: 1, code: T-WALK}
+    - {teacher: T_pointing_at_students, student: S_hand_raises, expect: 1, code: T-ASK}
+    - {teacher: T_seated, student: S_off_task, expect: 1, code: T-SIT}
+    - {teacher: T_at_desk, student: S_off_task, expect: 1, code: T-SIT}
+    - {teacher: T_reading_notes, student: S_off_task, expect: 1, code: T-READ}
+    - {teacher: T_back_to_class, student: S_phone, expect: 1, code: T-WRITE}
   min_events: 3               # peri-event averages need at least this many teacher onsets
   onset_min_gap_seconds: 10   # onsets closer than this to the previous one are one onset
   peri_event_before_windows: 2

@@ -110,6 +110,11 @@ def validate_config(config: dict[str, Any]) -> None:
     for key in ("min_known_fraction", "alpha"):
         if key in fusion and not 0 < float(fusion[key]) <= 1:
             raise ValueError(f"fusion.{key} must be in (0, 1]")
+    for spec in fusion.get("hypotheses") or []:
+        if not isinstance(spec, dict) or not spec.get("teacher") or not spec.get("student")                 or int(spec.get("expect", 0)) not in (-1, 0, 1):
+            raise ValueError("fusion.hypotheses entries need teacher, student, and expect -1, 0, or 1")
+    if int(fusion.get("comparison_lag_windows", 1)) < 0:
+        raise ValueError("fusion.comparison_lag_windows must be 0 or more")
     lags = fusion.get("model_lags", [1])
     if not isinstance(lags, list) or not all(isinstance(k, int) and k >= 1 for k in lags):
         raise ValueError("fusion.model_lags must be a list of positive whole numbers of windows")
@@ -163,6 +168,9 @@ def validate_config(config: dict[str, Any]) -> None:
     if not (0 < float(analysis.get("shoulder_rise_sitting_max", 0.35))
             < float(analysis.get("shoulder_rise_standing_min", 0.7))):
         raise ValueError("Expected 0 < shoulder_rise_sitting_max < shoulder_rise_standing_min")
+    if not (0 < float(analysis.get("desk_sitting_max_widths", 1.1))
+            < float(analysis.get("desk_standing_min_widths", 1.4))):
+        raise ValueError("Expected 0 < desk_sitting_max_widths < desk_standing_min_widths")
     for key, default in (("shoulder_rise_history_seconds", 3.0), ("shoulder_rise_max_seat_shift", 1.0)):
         if float(analysis.get(key, default)) <= 0:
             raise ValueError(f"analysis.{key} must be positive")

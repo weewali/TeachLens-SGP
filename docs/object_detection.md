@@ -36,8 +36,8 @@ python scripts/show_indicator.py sgp_A2_student_objects object --value "cell pho
 ```
 
 Class names with spaces need quotes. `--objects` cannot be combined with
-`--indicators`. Outputs: `outputs/events/<id>.objects.jsonl`,
-`outputs/reports/<id>.objects.json`, `outputs/debug/<id>.objects.mp4`.
+`--indicators`. Outputs in `outputs/runs/<YYYY-MM-DD_HHMM>_<id>/`:
+`objects.jsonl`, `objects_summary.json`, `objects_review.mp4`, `objects_run.json`.
 
 ## Events and summary
 

@@ -148,6 +148,11 @@ class RunTests(unittest.TestCase):
                 with self.assertRaises(FileExistsError):  # no silent overwrite
                     detect_objects(clip, "v_objects", "student_view", config, output_dir=root,
                                    labels=["laptop"])
+            # One dated run folder: runs/<YYYY-MM-DD_HHMM>_v_objects/ with objects.* and objects_run.json.
+            self.assertRegex(events.parent.name, r"^\d{4}-\d{2}-\d{2}_\d{4}_v_objects$")
+            self.assertEqual(events.parent.parent.name, "runs")
+            self.assertEqual(json.loads((events.parent / "objects_run.json").read_text(encoding="utf-8"))["run_id"],
+                             "v_objects")
             rows = [json.loads(line) for line in events.read_text(encoding="utf-8").splitlines()]
             counts = [row for row in rows if row["indicator_name"] == "object_count"]
             self.assertEqual([row["value"] for row in counts],

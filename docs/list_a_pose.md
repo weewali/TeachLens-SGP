@@ -39,9 +39,22 @@ names are based on this ID. One run writes three files:
 
 | File | Contents |
 | --- | --- |
-| `outputs/events/<id>.list_a.jsonl` | Timestamped evidence, one event per line. |
-| `outputs/reports/<id>.list_a.json` | Summary reduced from that evidence. |
-| `outputs/debug/<id>.list_a.mp4` | Annotated review video (skip with `--no-save-video`). |
+| `outputs/runs/<YYYY-MM-DD_HHMM>_<id>/events.jsonl` | Timestamped evidence, one event per line. |
+| `.../summary.json` | Summary reduced from that evidence. |
+| `.../review.mp4` | Annotated review video (skip with `--no-save-video`). |
+| `.../run.json` | What was analyzed (range, recording start, indicators) and the review frames' timing. |
+
+A lesson's two runs go to `outputs/lessons/<stamp>_<lesson>/student/` and
+`instructor/` instead (docs/lesson_pipeline.md, docs/outputs_guide.md).
+
+Teacher behind the desk (2026-11-19): when the legs are hidden and the
+instructor camera has a `desk` target, posture comes from the shoulders'
+height above the desk's top edge, in shoulder widths (`analysis.
+desk_sitting_max_widths` 1.1, `desk_standing_min_widths` 1.4; basis `desk`,
+limited coverage, overlay "sitting (desk)"; `desk_shoulder_height` samples
+for tuning). The seated A3/A4 teacher measured 0.56-0.77 widths in every
+sample (posture was unknown for the whole lesson before); standing behind
+the desk is about 1.75 by body proportions and has not been filmed yet.
 
 Outputs and weights are local and ignored by Git. `--debug` logs the detected
 track count per sampled frame. Existing outputs are preserved by default; use
@@ -237,7 +250,7 @@ path is the time-sorted `hip_center_in_shot` values of `position` events with
 ```python
 import json
 path = [(e["start_time"], e["value"]["camera_shot"], e["value"]["hip_center_in_shot"])
-        for e in map(json.loads, open("outputs/events/<id>.list_a.jsonl", encoding="utf-8"))
+        for e in map(json.loads, open("outputs/runs/<stamp>_<id>/events.jsonl", encoding="utf-8"))
         if e["indicator_name"] == "position" and e["role"] == "teacher"
         and e["value"]["hip_center_in_shot"] is not None]
 path.sort()

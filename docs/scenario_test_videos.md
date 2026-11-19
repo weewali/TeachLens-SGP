@@ -67,7 +67,7 @@ A4 uses take 1 (take 2 has no student video).
 ## Testing one indicator at a time
 
 `--indicators` turns on only the named indicators, so the JSONL, the summary,
-and the review video `outputs/debug/<id>.list_a.mp4` show just them (the
+and the review video (`outputs/runs/<stamp>_<id>/review.mp4`) show just them (the
 video's panel says `showing: ...`). Boxes, tracker IDs, and roles are always
 drawn because every indicator builds on them. The runner names each run
 `<file>_<indicator>`, for example `sgp_A1_student_sitting_standing`.

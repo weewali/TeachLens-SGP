@@ -14,9 +14,12 @@ Each window gets one value per feature:
   min_known_fraction of a window of known time is NaN, not 0.
 - count: events starting in the window (hand raises, answers).
 - path: the teacher's hip-centre path length in the window (frame heights).
+- on_task / off_task: each student's state second by second from several
+  indicators (student_state()), as a share of the known student-seconds.
 Coverage columns say how much evidence each window has.
 """
 
+from bisect import bisect_right
 from dataclasses import dataclass
 from datetime import datetime
 import json
@@ -32,7 +35,7 @@ class Feature:
     camera: str                 # "teacher" or "students"
     indicator: str              # indicator_name in the JSONL
     labels: tuple[str, ...]     # labels counted (share); ignored for path
-    kind: str = "share"         # share, count, path
+    kind: str = "share"         # share, episode, count, path, on_task, off_task
     desirable: int = 0          # students only: +1 more is better, -1 more is worse, 0 neutral
     description: str = ""
 
@@ -52,12 +55,24 @@ FEATURES: tuple[Feature, ...] = (
             description="teacher points at something"),
     Feature("T_pointing_at_students", "teacher", "pointing", ("students",),
             description="teacher points toward the class (interaction proxy)"),
+    Feature("T_back_to_class", "teacher", "facing_direction", ("away_from_class",),
+            description="teacher's back to the class (board writing, T-WRITE)"),
+    Feature("T_reading_notes", "teacher", "head_orientation", ("notes",),
+            description="teacher's head down at notes or a laptop (T-READ)"),
+    Feature("T_seated", "teacher", "sitting_standing", ("sitting",),
+            description="teacher seated (from the legs, or behind the desk from the shoulders' height; T-SIT)"),
+    Feature("T_at_desk", "teacher", "classroom_zone", ("desk_area",),
+            description="teacher in the calibrated desk zone"),
     Feature("T_gesturing", "teacher", "gesture", ("gesturing",), description="hand gestures"),
     Feature("T_walking", "teacher", "gesture", ("walking",), description="teacher walks"),
     Feature("T_stationary", "teacher", "stationary_episode", (), kind="episode",
             description="teacher stands still (stationary episode)"),
     Feature("T_path", "teacher", "position", (), kind="path",
             description="teacher hip path length in the window (frame heights)"),
+    Feature("S_on_task", "students", "", (), kind="on_task", desirable=+1,
+            description="students on task: facing the focus, writing, or reading (and not off task)"),
+    Feature("S_off_task", "students", "", (), kind="off_task", desirable=-1,
+            description="students off task: phone, dozing, chatting with a neighbour, or facing away"),
     Feature("S_on_target", "students", "orientation_proxy", ("on_target",), desirable=+1,
             description="students facing the current focus (attention proxy)"),
     Feature("S_off_target", "students", "orientation_proxy", ("off_target",), desirable=-1,
@@ -147,6 +162,60 @@ def _share(events, feature: Feature, grid: _Grid, min_known: float) -> tuple[lis
     return values, known
 
 
+# Student indicators combined into one on-task / off-task state per second.
+STATE_INDICATORS = ("orientation_proxy", "device_use", "note_taking", "reading", "alertness", "head_target")
+
+
+def student_state(labels: dict[str, str]) -> str:
+    """One student's state at one moment from their current labels.
+
+    off_task: a phone (seen or likely), dozing or possible sleep, talking
+    toward a classmate, or facing away from the current focus. on_task:
+    facing the focus (or answering), writing, or reading. Off task wins
+    when both apply; anything else is unknown. Proxies, not attention:
+    reading a phone message under the desk and reading notes can look alike.
+    """
+    if (labels.get("device_use") in ("phone", "phone_likely")
+            or labels.get("alertness") in ("dozing", "possible_sleep")
+            or labels.get("head_target") == "talking_peer"
+            or labels.get("orientation_proxy") == "off_target"):
+        return "off_task"
+    if (labels.get("orientation_proxy") in ("on_target", "speaking")
+            or labels.get("note_taking") == "writing" or labels.get("reading") == "reading"):
+        return "on_task"
+    return "unknown"
+
+
+def _student_states(events, grid: _Grid, min_known: float) -> tuple[list[float], list[float], list[float]]:
+    """Per window: on-task share, off-task share, and known student-seconds (1 s steps)."""
+    timelines: dict[int, dict[str, tuple[list[float], list[tuple[float, str]]]]] = {}
+    for e in sorted(events, key=lambda e: e["t0"]):
+        if e["indicator_name"] in STATE_INDICATORS and e["role"] == "student" and e.get("track_id") is not None:
+            starts, spans = timelines.setdefault(e["track_id"], {}).setdefault(e["indicator_name"], ([], []))
+            starts.append(e["t0"])
+            spans.append((e["t1"], e["value"]))
+    on, off = [0.0] * grid.count, [0.0] * grid.count
+    steps = max(1, int(round(grid.seconds)))
+    for w in range(grid.count):
+        for i in range(steps):
+            t = grid.start + w * grid.seconds + (i + 0.5) * grid.seconds / steps
+            for indicators in timelines.values():
+                labels = {}
+                for name, (starts, spans) in indicators.items():
+                    k = bisect_right(starts, t) - 1
+                    if k >= 0 and t <= spans[k][0]:
+                        labels[name] = spans[k][1]
+                state = student_state(labels)
+                if state == "on_task":
+                    on[w] += grid.seconds / steps
+                elif state == "off_task":
+                    off[w] += grid.seconds / steps
+    known = [a + b for a, b in zip(on, off)]
+    on_share = [a / k if k > 0 and k >= min_known else math.nan for a, k in zip(on, known)]
+    off_share = [b / k if k > 0 and k >= min_known else math.nan for b, k in zip(off, known)]
+    return on_share, off_share, known
+
+
 def _episode_share(events, feature: Feature, grid: _Grid, presence: list[float]) -> list[float]:
     role = CAMERA_ROLE[feature.camera]
     inside = [0.0] * grid.count
@@ -208,9 +277,15 @@ def build_windows(student: Sequence[dict[str, Any]], teacher: Sequence[dict[str,
         if e["indicator_name"] == "teacher_presence" and e["value"] == "visible":
             for w, seconds in grid.spread(e["t0"], e["t1"]):
                 presence[w] += seconds
+    states = None
     for feature in features:
         events = teacher if feature.camera == "teacher" else student
-        if feature.kind == "share":
+        if feature.kind in ("on_task", "off_task"):
+            if states is None:
+                states = _student_states(student, grid, min_known)
+                coverage["students_state_known_seconds"] = states[2]
+            columns[feature.name] = states[0] if feature.kind == "on_task" else states[1]
+        elif feature.kind == "share":
             columns[feature.name], known = _share(events, feature, grid, min_known)
             if feature.name in ("T_facing_class", "S_on_target"):
                 coverage["teacher_known_seconds" if feature.camera == "teacher"
