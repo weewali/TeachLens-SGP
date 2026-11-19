@@ -2,9 +2,11 @@
 
 ![TeachLens pipeline](pipeline.png)
 
-*Figure: TeachLens pipeline. Two recordings of one lecture are aligned and sampled, people and objects are detected by
-pretrained YOLO26 models, transparent rules turn the detections into observable behaviour, statistics link instructor
-activity to student behaviour, and the result is reported as plain-English feedback in a local web application.*
+*Figure: TeachLens pipeline (System B), in the eight stages the web application shows while a lecture is analysed.
+Two recordings of one lecture are aligned and sampled, people and objects are detected by pretrained YOLO26 models,
+transparent rules turn the detections into observable behaviour, 10-second windows compare student behaviour across
+instructor activities, the team's fusion layer tests links over time, and the result is reported as plain-English
+feedback in a local web application. Drawn by `scripts/make_pipeline_diagram.py`.*
 
 ## 1. Design principles
 
@@ -30,7 +32,7 @@ activity to student behaviour, and the result is reported as plain-English feedb
 | 6. Association analysis | Windows; the two JSONL event files | Comparisons during each instructor activity (HAC test). The team's fusion layer on the two event files (since 19 November 2026; it replaced System B's own lag analysis): 5-second windows, student changes 5–30 s after each instructor feature, circular-shift test, Benjamini-Hochberg q-values, lagged OLS with Newey-West errors, averages around the moments an action started. Only the indicators System B measures are tested. | `fusion.json`, `fusion_windows.csv`, `fusion_links.csv` |
 | 7. Report | All of the above | Rule-based positive and negative points, suggestions, evidence, limitations, glossary. `facts.json` holds anonymised numbers only. The fusion results become "links over time" points (`lag_facts.py`). | `final_feedback_report.txt`, `analysis_details.txt`, `facts.json`, `links/report_points.json` |
 | 8. Optional AI rewrite | `facts.json`, `fusion.json` | Claude Opus 5.5 rewrites the feedback points and the links over time. Code checks the numbers and the wording, with one retry and a fallback. | `llm_output.json`, `links/report_points.json`, checked report text |
-| Web application | Saved results | Upload, progress by stage, report page with charts and moments | Pages served on the local computer |
+| Web application | A lecture title, the two videos and optional context; saved results | Upload (with optional topic, notes, slides and activities that were not teaching), progress by stage, tabbed report, delete | Pages served on the local computer; `context.json` with the instructor's context |
 
 ## 3. Behaviour rules (System B)
 
@@ -78,23 +80,39 @@ activity to student behaviour, and the result is reported as plain-English feedb
 ## 5. Web application design (Model–View–Controller, Flask + Jinja2)
 
 - **Models:**
-  - `lecture.py`: where each lecture's videos, context and results are stored.
+  - `lecture.py`: where each lecture's videos, context and results are stored; checks the activities an instructor
+    marks before any video is saved.
   - `job.py`: runs the pipeline in the background and records stages 1–7, plus stage 8 for the AI rewrite.
   - `report.py`: gathers the report data from saved files.
   - `charts.py`: the instructor position heatmap and heads up by seat.
   - `stat_charts.py`: data for the lecture timeline and the activity comparison.
-- **Views:** Jinja2 pages for the lecture list, the upload form, live progress and the report.
-- **Report page contents:**
-  - feedback;
-  - two statistical charts with table views;
-  - two heatmaps;
-  - links over time;
-  - a filterable moments table;
-  - suggestions, limitations and word meanings.
+- **Views:** Jinja2 pages for the lecture list, the upload form, live progress, the report and the delete
+  confirmation.
+- **Upload form:**
+  - Required: a lecture title (so the lecture can be found later) and the two videos. A missing title or video is
+    refused before anything is saved.
+  - Optional, in two sections: "Additional context" (the topic and the lecture slides) and "Activities in class"
+    (activities that were not teaching, then additional information as free text). Each activity (quiz or test, group
+    or pair work, video, break) is added with one button and one box for how many minutes it lasted (whole minutes, at
+    most 180 in total).
+  - The optional context is kept with the report and is not yet used by the analysis **[TODO]**.
+- **Report page tabs:**
+  - Feedback, with the context the instructor gave;
+  - Charts: two statistical charts with table views and two heatmaps ("Instructor Movement", "Student Seats");
+  - Moments: a filterable table;
+  - Key terms.
+
+  Suggestions and limitations stay in `analysis_details.txt` and are not shown on the page. The links over time (the
+  fusion layer's results) are still computed and saved (`fusion.json`, `links/report_points.json`, and section 3 of
+  `analysis_details.txt`), but since 19 November 2026 they have no tab of their own **[TODO: decide whether and how
+  instructors see them]**.
 - **Controller:** `lectures.py` with the routes `/`, `/lectures/new`, `POST /lectures`, `/lectures/<id>/progress`,
-  `/lectures/<id>/status`, `/lectures/<id>` and `/lectures/<id>/charts/<name>`.
-- **Security:** the server listens only on 127.0.0.1, and chart files are served by exact name only. The AI rewrite is
-  a deployment setting, so instructors never handle API keys.
+  `/lectures/<id>/status`, `POST /lectures/<id>/run` (run again), `/lectures/<id>/delete` (confirmation page, then
+  POST), `/lectures/<id>` and `/lectures/<id>/charts/<name>`.
+- **Security:**
+  - The server listens only on 127.0.0.1, and chart files are served by exact name only.
+  - A delete sent from another website is refused.
+  - The AI rewrite is a deployment setting, so instructors never handle API keys.
 
 ## 6. Integration
 
@@ -104,6 +122,7 @@ activity to student behaviour, and the result is reported as plain-English feedb
 | System A ↔ System B | System B writes the same JSONL event format, using an identical copy of System A's `events.py`: role `teacher`, times in each original video, real times, seats in `zone`. | Format shared; the two pipelines are not merged **[TODO: team decision]** |
 | Evidence ↔ fusion layer ↔ reporting | System B writes the indicators the team's fusion layer reads (its names and labels, from System B's own rules) and runs that layer on its two event files. The reporting layer (`src/reporting/lag_facts.py`) reads the fusion output (`<name>.fusion.json`). | Connected (18–19 November 2026); tested on synthetic data with planted links and on the two recorded test lectures |
 | Pipeline ↔ web application | The web job runs `Main Code.py` as a separate process and follows its stage messages. The report page reads saved files only. | Done |
+| Instructor's context ↔ analysis | The upload form stores each activity that was not teaching and its duration in `context.json`, but not when it happened, so the analysis cannot tell which minutes it covered. Options: a note beside the student figures it affects, or a stretch of matching length found automatically and confirmed by the instructor. Once the minutes are known, student states there can be marked unknown (the fusion layer already skips unknown time) and left out of the comparisons and moments. | Stored and shown; not yet used **[TODO: decide]** |
 | Reporting ↔ language model | `facts.json` → Claude Opus 5.5 → checks → `llm_output.json`. Rule-based text on any failure. | Implemented; first real call pending **[TODO]** |
 
 ## 7. Main design decisions

@@ -136,6 +136,32 @@ browser marks as cross-site (Origin / Sec-Fetch-Site) is refused with 403. Tests
 The "... was deleted." message fades out after 5 s (`data-autohide="5000"` in index.html, `static/lectures.js`, user
 request), and `?deleted=` is removed from the address at once, so a reload does not show it again.
 Never press Delete on the user's real lectures while testing: test only with made-up lectures in temporary folders.
+New-analysis form (2026-11-19, user request: the instructor only uploads videos, does not record them): hints rewritten
+in plain, ethical wording (no "people's names", no tripods); labels "Lecture title" (required since 2026-11-19, user
+request: `required` in the form, "Enter a lecture title." from `LectureRepository.create` before any file is saved),
+"Video of the instructor", "Video of the students", "Additional information:"; lead sentence "...highlights the strengths of your lecture and recommendations for future lessons"
+(user's wording; the report itself has positive/negative points, no recommendations yet). The user removed the
+"Before you start" ethics box and the original-files/messaging-apps hint. Do not claim the videos stay private: the
+seat/instructor heatmaps are drawn on a real video frame. Section titles are navy headings with a red bar
+(`.form legend` in style.css). `TEMPLATES_AUTO_RELOAD = True` in `create_app` so template edits show
+on a refresh; Python code changes still need a server restart.
+Planned activities (2026-11-19, user chose "point 2" of: optional / quick buttons / ask after the report / automatic
+suggestions / reuse): "Activities in class" (was "Activities that were not teaching"; hint says "Add any part of the
+lecture that was not teaching ...") in the optional section, buttons Quiz or test, Group or pair
+work, Video, Break; each adds a row with ONE box, "Duration [..] minutes" (user request 2026-11-19: duration only, no
+"from/to" times; the first version had from/to minutes). `parse_activities(types, durations)` in
+`web/models/lecture.py` checks rows before any video is saved (type, whole minutes 1-180, total <= 180, <= 10 rows;
+empty rows skipped) and `context.json` stores `activities: [{type, minutes}]` in the order given; the report's "Context
+you gave" lists them ("Quiz or test (15 minutes)"). No-JS fallback: one row with a select. The notes label is
+"Additional information:" (placeholder "e.g. first lecture after the midterm"). Form order (user requests
+2026-11-19): Lecture | Videos | Additional context (optional: topic, slides) | Activities in class (optional; its own
+section with the same red-bar heading as the others: activity buttons and rows, then "Additional information:" last) |
+Start analysis. **Not used by the analysis yet** (the user's lectures are 55-75 min of teaching).
+Consequence of duration-only (told to the user): the analysis cannot know WHICH minutes to leave out. The earlier plan
+(convert to the shared clock, mark student states unknown so the fusion skips them, shade the timeline) needs the
+times; with a duration alone the options are a note beside the affected figures, or finding a stretch of matching
+length automatically and letting the instructor confirm it (point 4). Not decided. Points 4 (automatic suggestions
+from class-wide patterns, confirmed by the instructor) and 5 ("same as last time") were explained, not built.
 
 Report page changes (2026-11-17, user request): the five "fact" boxes at the top are gone (length is in the date line).
 Later the same day the user also removed the instructor, student and linkage sections from the bottom of the page, and
@@ -144,15 +170,19 @@ sentences and 8 of 10 limitations are fixed method text). Everything removed sta
 app no longer reads that file. The feedback note no longer points to "the report's limitations" (saved reports patched).
 The last tab is "Key terms" (the glossary from facts.json, shown open; the data-only terms "window", "observable
 students" and "observable student time" are left out in `web/models/report.py` DATA_TERMS). Negative points use "✗"
-instead of "!". The report is now tabs instead of one long page (user request): Feedback (with the lecture context) |
+instead of "!". The two heatmaps in the Charts tab have a title above them ("Instructor Movement",
+"Student Seats"; user's wording, the second asked as "Students Seats") and no caption under them (user request 2026-11-19); the old caption text is now only the image's
+alt text (`CHARTS` in `web/models/charts.py`), and the head-up caveat stays in Key terms. The report is now tabs instead of one long page (user request): Feedback (with the lecture context) |
 Charts | Moments (count) | Key terms. The old "Links over
 time" tab (System B's own lag analysis in words) was removed on 2026-11-17 at the user's request: on one short lecture
-its "unlikely to be chance" links rested on 3 hand raises and 1 phone moment. **It is back since 2026-11-19 (user chose
-"its own tab again")**, now from the team's fusion layer, which refuses actions seen in fewer than 5 windows or 3 times:
-Feedback | Links over time | Charts | Moments | Key terms. `web/models/report.py links()` reads `reports/fusion.json` +
-`reports/links/report_points.json`; older lectures show "Run its analysis again to add it", a failed fusion a generic
-reason. Stage 8 (AI on) also runs `scripts/report.py --lag-results reports/fusion.json --out-dir reports/links --you`
-(`JobRunner.links_command`, config `LINKS_REPORT`): up to two Claude calls per lecture (~4 cents each, opus).
+its "unlikely to be chance" links rested on 3 hand raises and 1 phone moment. It came back on 2026-11-19 (user chose
+"its own tab again", from the team's fusion layer) and **was removed again the same evening** (user: "remove links over
+time tab. idk what was the purpose of this"; the real lectures only showed "Run its analysis again to add it"). Tabs
+now: Feedback | Charts | Moments | Key terms; `links()` was deleted from `web/models/report.py`. The fusion still runs
+(stage 6) and its files are still written (`reports/fusion.json`, `reports/links/report_points.json`,
+analysis_details.txt section 3). Stage 8 (AI on) also runs `scripts/report.py --lag-results reports/fusion.json --out-dir reports/links --you`
+(`JobRunner.links_command`, config `LINKS_REPORT`): up to two Claude calls per lecture (~4 cents each, opus); with the
+tab gone nobody sees the second one's text (asked the user whether to switch it off; not answered yet).
 `report.js` renames each section id to
 `panel-<name>` so `#charts` in the address never makes the browser jump; without scripts the tabs are plain links and
 every section shows; printing shows every section.
@@ -208,6 +238,11 @@ evidence is thin; never pad).
 - The user likes **short, plain answers**, and wants limitations stated honestly. Do not overclaim. Say plainly when
   something is unverified or when an earlier statement turned out to be too generous.
 - Do not commit or push unless asked. Do not delete the user's files.
+- **After every change to the project, update the SGP2 report chapters in `SGP2 objectives/`** (user request
+  2026-11-19, "everytime"). If the pipeline changed, edit STAGES in `scripts/make_pipeline_diagram.py` and run
+  `python scripts/make_pipeline_diagram.py` to redraw `SGP2 objectives/pipeline.png` (its 8 steps match the web app's
+  stages), then look at the PNG. Last full update: 2026-11-19 (test counts, fusion results of both lectures, second
+  lecture's numbers, web form and report tabs, planned activities).
 
 ## Code map
 The working scripts moved from `Downloaded from prototype/` to `main code/` on 2026-11-17 (user request). Both folder
@@ -232,7 +267,7 @@ names contain a space; always quote paths.
 ```
 python "main code/Main Code.py" --instructor I.mp4 --students S.mp4 [--session lecture01] [--offset 2.5] [--overwrite]
 python "main code/Main Code.py"     # every classroom_project/videos/<lecture>/ with instructor.* + students.*
-python -m unittest discover -s tests/unit -v                         # 246 tests (95 System B + 151 System A), no network, no video
+python -m unittest discover -s tests/unit -v                         # 249 tests (98 System B + 151 System A), no network, no video
 python "main code/llm_report.py" --session lecture01 --dry-run       # shows prompt + cost, calls nothing
 python "main code/llm_report.py" --session lecture01 --model haiku   # real call: haiku ~0.1c, sonnet ~2c, opus ~4c
 python "main code/validate_indicators.py" make-sheets --session lecture01

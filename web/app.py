@@ -27,6 +27,8 @@ VIEWS = Path(__file__).resolve().parent / "views"
 def create_app(**overrides):
     app = Flask(__name__, template_folder=str(VIEWS / "templates"), static_folder=str(VIEWS / "static"))
     app.config.update(DEFAULTS)
+    # Re-read changed templates without a server restart (Flask only does this in debug mode by default).
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
     app.config.update(overrides)
     config = app.config
     app.extensions["teachlens"] = {

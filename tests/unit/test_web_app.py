@@ -104,17 +104,15 @@ class PageTests(WebTestCase):
         page = response.get_data(as_text=True)
         self.assertNotIn("<footer", page)   # the advisory footer line was removed (user request, 2026-11-18)
         for expected in ("Positive points", "Negative points", "A phone was seen", "Phone in view", "Head down and still",
-                         "explaining to the class", "Where you were", "Heads up by seat",
+                         "explaining to the class", '<h3 class="chart-title">Instructor Movement</h3>',
+                         '<h3 class="chart-title">Student Seats</h3>',
                          "What the words in this report mean", '<a href="#terms">Key terms</a>',
                          '<section id="terms" class="tab-panel terms-panel">', "<dt>heads up</dt>", "05:00 of lecture", "✗",
                          '<nav class="tabs"', '<section id="feedback" class="tab-panel is-active">',
                          '<section id="charts" class="tab-panel charts-panel">', '<section id="moments" class="tab-panel">',
                          '<span class="tab-count">', "uaeu-logo.svg", 'alt="United Arab Emirates University (UAEU)"',
                          "Over the lecture", 'class="chart-data"', "Show the numbers",
-                         "Students during each of your activities", "compare-bar act-explaining",
-                         # the team's fusion results in plain language (brought back, user decision 2026-11-19)
-                         '<a href="#links">Links over time</a>', '<section id="links" class="tab-panel">',
-                         "possible links between what you did", "5-second parts", "Too rare to test"):
+                         "Students during each of your activities", "compare-bar act-explaining"):
             self.assertIn(expected, page)
         for developer_detail in ("Claude", ".jsonl", "Written by the rule-based", "analysis_details.txt",
                                  "evidence.strength", "Describe it as",   # not shown to the instructor
@@ -124,6 +122,10 @@ class PageTests(WebTestCase):
                                  "grid cell", "fusion", "T_facing_class", "S_on_target", "q-value",
                                  "possible links between what the instructor did", "Suggestions and limitations",
                                  "<summary>Suggestions", "<summary>Limitations", "limitations say",
+                                 "<figcaption><strong>",   # no caption under the heatmaps (title above instead)
+                                 # the "Links over time" tab was removed (user decision 2026-11-19)
+                                 'href="#links"', 'id="links"', "Links over time", "possible links between what you did",
+                                 "Too rare to test",
                                  "<dt>window</dt>", "<dt>observable student time</dt>"):   # removed from the page
             self.assertNotIn(developer_detail, page)
         lecture = Lecture("demo_lecture", self.base)
@@ -140,8 +142,12 @@ class PageTests(WebTestCase):
 
     def test_new_form(self):
         page = self.client.get("/lectures/new").get_data(as_text=True)
-        for expected in ("Instructor camera", "Student camera", "What was the class about?", "Lecture slides",
-                         "Start analysis"):
+        for expected in ("Video of the instructor", "Video of the students", "What was the class about?", "Lecture slides",
+                         "Start analysis", '<legend>Activities in class <span class="muted">(optional)</span></legend>',
+                         "Additional information:",
+                         'value="" required>', 'data-activity="quiz"', 'name="activity_minutes" min="1" max="180"',
+                         'data-activity="group_work"', 'data-activity="video"', 'data-activity="break"',
+                         '<template id="activity-row">', 'id="activity-add" hidden', "<noscript>"):
             self.assertIn(expected, page)
         for not_for_instructors in ("Claude", "API key", "use_llm", "cents"):
             self.assertNotIn(not_for_instructors, page)
@@ -149,17 +155,48 @@ class PageTests(WebTestCase):
     def test_upload_is_checked(self):
         response = self.client.post("/lectures", data={"name": "x"}, content_type="multipart/form-data")
         self.assertEqual(response.status_code, 400)
-        self.assertIn("Choose the instructor-camera video", response.get_data(as_text=True))
-        response = self.client.post("/lectures", content_type="multipart/form-data", data={
+        self.assertIn("Choose the video of the instructor", response.get_data(as_text=True))
+        for title in (None, "   "):   # the title is required too, and checked before any video is saved
+            data = {"instructor_video": (io.BytesIO(b"v"), "a.mp4"), "students_video": (io.BytesIO(b"v"), "b.mp4")}
+            if title is not None:
+                data["name"] = title
+            response = self.client.post("/lectures", content_type="multipart/form-data", data=data)
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("Enter a lecture title.", response.get_data(as_text=True))
+        self.assertFalse((self.base / "videos" / "lecture").exists())
+        response = self.client.post("/lectures", content_type="multipart/form-data", data={"name": "x",
             "instructor_video": (io.BytesIO(b"v"), "a.mp4"), "students_video": (io.BytesIO(b"v"), "notes.txt")})
         self.assertEqual(response.status_code, 400)
         self.assertIn("student video must be one of", response.get_data(as_text=True))
+
+    def test_a_wrong_activity_is_refused_before_any_video_is_saved_and_its_rows_come_back(self):
+        response = self.client.post("/lectures", content_type="multipart/form-data", data={
+            "name": "Activity check", "activity_type": ["quiz", "break"], "activity_minutes": ["15", "half"],
+            "instructor_video": (io.BytesIO(b"i"), "a.mp4"), "students_video": (io.BytesIO(b"s"), "b.mp4")})
+        self.assertEqual(response.status_code, 400)
+        page = response.get_data(as_text=True)
+        self.assertIn("Enter how long the break lasted in whole minutes, from 1 to 180.", page)
+        for kept in ('value="quiz"', 'value="break"', 'value="15"', 'value="half"', '<span class="activity-name">Break</span>',
+                     'aria-label="Duration of the break in minutes"'):
+            self.assertIn(kept, page)
+        self.assertFalse((self.base / "videos" / "Activity_check").exists())
+
+    def test_report_lists_the_activities_the_instructor_marked(self):
+        context = {"name": "Demo", "activities": [{"type": "quiz", "minutes": 15}, {"type": "break", "minutes": 1},
+                                                  {"type": "video", "minutes": "x"}]}   # a hand-edited row is left out
+        with mock.patch.object(Lecture, "context", return_value=context):
+            page = self.client.get("/lectures/demo_lecture").get_data(as_text=True)
+        self.assertIn("<dt>Activities</dt>", page)
+        self.assertIn("<li>Quiz or test (15 minutes)</li>", page)
+        self.assertIn("<li>Break (1 minute)</li>", page)
+        self.assertNotIn("<li>Video", page)
 
 
 class JobTests(WebTestCase):
     def test_upload_starts_the_analysis_and_progress_follows_it(self):
         response = self.client.post("/lectures", content_type="multipart/form-data", data={
             "name": "Week 5", "topic": "Recursion", "notes": "quiz at minute 20",
+            "activity_type": ["quiz", ""], "activity_minutes": ["15", ""],   # the 2nd row is empty
             "instructor_video": (io.BytesIO(b"i"), "IMG_0001.MOV"), "students_video": (io.BytesIO(b"s"), "cam2.mp4")})
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.headers["Location"].endswith("/lectures/Week_5/progress"))
@@ -170,6 +207,7 @@ class JobTests(WebTestCase):
         self.assertFalse(status["has_report"])                  # the fake pipeline writes no report
         lecture = LectureRepository(self.base).get("Week_5")
         self.assertEqual(lecture.context()["topic"], "Recursion")
+        self.assertEqual(lecture.context()["activities"], [{"type": "quiz", "minutes": 15}])
         self.assertEqual(lecture.video_path("instructor").name, "instructor.mov")
         self.assertFalse(status["use_llm"])                     # switched off for this deployment
         page = self.client.get("/lectures/Week_5/progress").get_data(as_text=True)
@@ -413,26 +451,18 @@ class ModelTests(unittest.TestCase):
             explaining = next(r for r in comparison["rows"] if r["key"] == "explaining")
             self.assertIsNotNone(explaining["cells"][0]["range"])                 # enough parts for a 95% range
 
-    def test_links_tab_and_its_rewrite(self):
+    def test_links_rewrite_command(self):
+        """The page no longer shows the links over time, but the AI step still rewrites them when it runs."""
         with tempfile.TemporaryDirectory() as directory:
             make_demo_lecture(directory)
             lecture = Lecture("demo_lecture", Path(directory))
-            shown = report_model.links(lecture)
-            self.assertTrue(shown["available"])
-            self.assertEqual((shown["window_seconds"], shown["analysed"], shown["ai"]), ("5", "04:35", False))
-            self.assertIn("what you did", shown["overview"])
-
             jobs = JobRunner(directory, Path(directory) / "events", "python", "main.py", "llm.py", links_report="report.py")
             command = jobs.links_command(lecture)
             self.assertEqual(command[2:5], ["report.py", "--lag-results", str(lecture.reports_dir / "fusion.json")])
             self.assertIn("--you", command)
             self.assertIsNone(JobRunner(directory, directory, "python", "main.py", "llm.py").links_command(lecture))
 
-            fusion = lecture.reports_dir / "fusion.json"
-            fusion.write_text(json.dumps({"error": "The two runs do not overlap in real time"}), encoding="utf-8")
-            self.assertIn("could not run", report_model.links(lecture)["reason"])
-            fusion.unlink()
-            self.assertIn("Run its analysis again", report_model.links(lecture)["reason"])
+            (lecture.reports_dir / "fusion.json").unlink()
             self.assertIsNone(jobs.links_command(lecture))                       # nothing to rewrite
 
     def test_report_source_only_trusts_checked_llm_text(self):
@@ -459,6 +489,37 @@ class ModelTests(unittest.TestCase):
             self.assertIsNone(repo.get("../lec"))
             with self.assertRaisesRegex(ValueError, "slides file"):
                 repo.create("x", FakeUpload("a.mp4"), FakeUpload("b.mp4"), slides_file=FakeUpload("s.exe"))
+            for no_title in (None, "", " \t"):
+                with self.assertRaisesRegex(ValueError, "Enter a lecture title"):
+                    repo.create(no_title, FakeUpload("a.mp4"), FakeUpload("b.mp4"))
+            self.assertEqual(second.context()["activities"], [])
+            self.assertEqual(repo.create(" Week 5 ", FakeUpload("a.mp4"), FakeUpload("b.mp4")).context()["name"], "Week 5")
+
+    def test_planned_activities_are_checked(self):
+        parse = lecture_model.parse_activities
+        # a 75-minute lecture with a 15-minute quiz and a 5-minute break: only how long each lasted, in the order given
+        self.assertEqual(parse(["quiz", "break"], ["15", " 5 "]),
+                         [{"type": "quiz", "minutes": 15}, {"type": "break", "minutes": 5}])
+        self.assertEqual(parse(["", ""], ["", " "]), [])                  # untouched rows are skipped
+        self.assertEqual(parse([], []), [])
+        self.assertEqual(parse(["break", "break"], ["10", "10"]), [{"type": "break", "minutes": 10}] * 2)
+        self.assertEqual(parse(["video"], ["180"]), [{"type": "video", "minutes": 180}])
+        for (types, durations), message in (
+                ((["quiz"], [""]), "Fill in how many minutes the quiz or test lasted, or remove it"),
+                ((["break"], ["0"]), "whole minutes, from 1 to 180"),
+                ((["break"], ["181"]), "whole minutes, from 1 to 180"),
+                ((["break"], ["-5"]), "whole minutes"),
+                ((["break"], ["7.5"]), "whole minutes"),
+                ((["break"], ["10:30"]), "whole minutes"),
+                ((["break"], ["1e1"]), "whole minutes"),
+                ((["nap"], ["15"]), "Choose what kind of activity"),
+                ((["", "quiz"], ["10", "15"]), "Choose what kind of activity"),   # the no-script row
+                ((["quiz", "group_work"], ["120", "61"]), "Together the activities last more than 180 minutes"),
+                ((["break"] * 11, ["1"] * 11), "at most 10 activities")):
+            with self.assertRaisesRegex(ValueError, message):
+                parse(types, durations)
+        self.assertEqual(lecture_model.describe_activity({"type": "group_work", "minutes": 20}),
+                         "Group or pair work (20 minutes)")
 
 
 if __name__ == "__main__":

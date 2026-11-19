@@ -5,11 +5,10 @@ except llm_output.json, which main code/llm_report.py writes when the Claude ste
     reports/final_feedback_report.txt   positive and negative points (rule-based, or Claude's checked rewrite)
     reports/evaluation_result.json      lecture facts (duration, alignment, visibility, counts)
     reports/facts.json                  the key terms (its glossary)
-    reports/fusion.json                 the team's fusion layer results (only the parts the Links tab needs)
-    reports/links/report_points.json    the links over time in plain language (rule-based, or the checked AI rewrite)
     tables/events.csv, window_features.csv
-Not shown (user decision): analysis_details.txt (indicators, linkage statistics, suggestions, limitations), which
-stays for the team.
+Not shown (user decisions): analysis_details.txt (indicators, linkage statistics, suggestions, limitations), which
+stays for the team, and the "Links over time" results (reports/fusion.json, reports/links/report_points.json; the tab
+was removed on 2026-11-19).
 """
 import json
 
@@ -17,6 +16,7 @@ import pandas as pd
 
 from web.models import stat_charts
 from web.models.charts import ensure_charts
+from web.models.lecture import describe_activity
 
 WINDOW_SECONDS = 10
 MOMENT_LABELS = {"phone_use": "Phone in view", "head_down_still": "Head down and still (30 s or more)",
@@ -88,33 +88,6 @@ def moments(tables_dir):
     return rows
 
 
-def links(lecture):
-    """The "Links over time" tab: do student changes follow what the instructor did a few seconds earlier (the team's
-    fusion layer), as positive and negative points, or why there are none for this lecture."""
-    reports = lecture.reports_dir
-    fusion_path, points_path = reports / "fusion.json", reports / "links" / "report_points.json"
-    if not fusion_path.exists():
-        return {"available": False, "reason": "This lecture was analysed before this part of the report existed. "
-                                                "Run its analysis again to add it."}
-    with open(fusion_path, encoding="utf-8") as f:
-        fusion = json.load(f)
-    if fusion.get("error") or not points_path.exists():
-        return {"available": False, "reason": "This part of the analysis could not run for this lecture, for "
-                                                "example because the two cameras overlap too little."}
-    with open(points_path, encoding="utf-8") as f:
-        points = json.load(f)
-    return {
-        "available": True,
-        "overview": points.get("overview"),
-        "positive": [p["text"] for p in points.get("positive_points", [])],
-        "negative": [p["text"] for p in points.get("negative_points", [])],
-        "note": points.get("note"),
-        "ai": points.get("source") == "llm",     # only text that passed every check is saved as "llm"
-        "window_seconds": f"{fusion['window_seconds']:g}",
-        "analysed": fmt_time(fusion["windows"] * fusion["window_seconds"]),   # the time both cameras covered
-    }
-
-
 def lecture_length(result):
     """The analysed length, shown beside the analysis date."""
     duration = result.get("alignment", {}).get("duration_s")
@@ -131,13 +104,15 @@ def build_report(lecture):
             facts = json.load(f)
     result = lecture.result() or {}
     found = moments(lecture.tables_dir)
+    context = lecture.context()
     return {
         "lecture": lecture,
-        "context": lecture.context(),
+        "context": context,
+        "activities": [describe_activity(a) for a in context.get("activities") or []
+                       if isinstance(a, dict) and isinstance(a.get("minutes"), int)],
         "analysed_at": lecture.analysed_at(),
         "source": report_source(reports),
         "feedback": feedback,
-        "links": links(lecture),
         "length": lecture_length(result),
         "timeline": stat_charts.timeline(lecture),
         "comparison": stat_charts.comparison(lecture),

@@ -19,6 +19,47 @@ REMOVE_ATTEMPTS = 8                # retries while Windows briefly keeps a file 
 VIDEO_EXTENSIONS = (".mp4", ".mov", ".avi", ".mkv")
 SLIDE_EXTENSIONS = (".pdf", ".pptx", ".ppt", ".odp", ".key")
 
+# Planned activities the instructor can mark on the upload form (optional). Stored in context.json as
+# {"type", "start", "end"} with start/end in seconds from the start of the instructor video. Not used by the analysis
+# yet: they are kept with the report for reference.
+ACTIVITY_TYPES = {"quiz": "Quiz or test", "group_work": "Group or pair work", "video": "Video", "break": "Break"}
+MAX_ACTIVITIES = 10
+MAX_ACTIVITY_MINUTES = 180         # all activities together; lectures are 55-75 minutes of teaching, recordings may run longer
+MINUTES_RE = re.compile(r"^\d{1,3}$")
+
+
+def parse_activities(types, durations):
+    """The upload form's activity rows -> [{"type", "minutes"}] in the order given. Only how long each activity lasted
+    is asked, not when it happened. Rows left completely empty are skipped. Raises ValueError with a message for the
+    instructor."""
+    rows = []
+    for n in range(max(len(types), len(durations))):
+        kind, text = ((values[n] if n < len(values) else "") or "" for values in (types, durations))
+        kind, text = kind.strip(), text.strip()
+        if not (kind or text):
+            continue
+        if kind not in ACTIVITY_TYPES:
+            raise ValueError("Choose what kind of activity each row is (quiz or test, group or pair work, video or break).")
+        name = ACTIVITY_TYPES[kind].lower()
+        if not text:
+            raise ValueError(f"Fill in how many minutes the {name} lasted, or remove it.")
+        if not MINUTES_RE.match(text) or not 1 <= int(text) <= MAX_ACTIVITY_MINUTES:
+            raise ValueError(f"Enter how long the {name} lasted in whole minutes, from 1 to {MAX_ACTIVITY_MINUTES}.")
+        rows.append({"type": kind, "minutes": int(text)})
+    if len(rows) > MAX_ACTIVITIES:
+        raise ValueError(f"Add at most {MAX_ACTIVITIES} activities.")
+    if sum(row["minutes"] for row in rows) > MAX_ACTIVITY_MINUTES:
+        raise ValueError(f"Together the activities last more than {MAX_ACTIVITY_MINUTES} minutes. Please check the "
+                         "durations.")
+    return rows
+
+
+def describe_activity(activity):
+    """{"type": "quiz", "minutes": 15} -> "Quiz or test (15 minutes)"."""
+    name = ACTIVITY_TYPES.get(activity.get("type"), "Activity")
+    minutes = int(activity["minutes"])
+    return f"{name} ({minutes} minute{'' if minutes == 1 else 's'})"
+
 
 def safe_id(name):
     """A lecture name that is safe as a folder name (the same rule as Main Code.py)."""
@@ -157,26 +198,30 @@ class LectureRepository:
             candidate, n = f"{base}_{n}", n + 1
         return candidate
 
-    def create(self, name, instructor_file, students_file, context=None, slides_file=None):
-        """Saves the two videos (and optional slides and context) for a new lecture. The file objects only need
-        .filename and .save(path), like Flask's uploads. Raises ValueError with a message for the instructor."""
+    def create(self, name, instructor_file, students_file, context=None, slides_file=None, activities=None):
+        """Saves the two videos (and optional slides, context and planned activities from parse_activities) for a
+        new lecture. The file objects only need .filename and .save(path), like Flask's uploads. Raises ValueError
+        with a message for the instructor."""
+        title = (name or "").strip()
+        if not title:
+            raise ValueError("Enter a lecture title.")
         if not instructor_file or not getattr(instructor_file, "filename", ""):
-            raise ValueError("Choose the instructor-camera video.")
+            raise ValueError("Choose the video of the instructor.")
         if not students_file or not getattr(students_file, "filename", ""):
-            raise ValueError("Choose the student-camera video.")
+            raise ValueError("Choose the video of the students.")
         extensions = {"instructor": _extension(instructor_file.filename, VIDEO_EXTENSIONS, "instructor video"),
                       "students": _extension(students_file.filename, VIDEO_EXTENSIONS, "student video")}
         slides_ext = _extension(slides_file.filename, SLIDE_EXTENSIONS, "slides file") if slides_file else None
 
-        lecture = Lecture(self.new_id(name), self.base_dir)
+        lecture = Lecture(self.new_id(title), self.base_dir)
         lecture.input_dir.mkdir(parents=True)
         instructor_file.save(str(lecture.input_dir / f"instructor{extensions['instructor']}"))
         students_file.save(str(lecture.input_dir / f"students{extensions['students']}"))
         if slides_file:
             slides_file.save(str(lecture.input_dir / f"slides{slides_ext}"))
         context = {k: (v or "").strip() for k, v in (context or {}).items()}
-        context.update(name=(name or "").strip() or lecture.id, created=time.strftime("%Y-%m-%d %H:%M"),
-                       slides=f"slides{slides_ext}" if slides_file else None,
+        context.update(name=title, created=time.strftime("%Y-%m-%d %H:%M"),
+                       slides=f"slides{slides_ext}" if slides_file else None, activities=list(activities or []),
                        original_files={"instructor": instructor_file.filename, "students": students_file.filename})
         with open(lecture.input_dir / "context.json", "w", encoding="utf-8") as f:
             json.dump(context, f, indent=2)

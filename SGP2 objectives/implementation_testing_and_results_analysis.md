@@ -24,18 +24,22 @@
 | `main code/llm_report.py` | Optional AI rewrite with checks (stage 8) |
 | `main code/validate_indicators.py` | Review sheets for human labelling, and scoring |
 | `src/analysis/events.py` | The team's event format (identical to System A) |
+| `src/analysis/fusion.py`, `lag_analysis.py` | The team's fusion layer (System A's code, unchanged), run by stage 6 |
 | `src/reporting/lag_facts.py`, `llm_text.py` | Turn fusion output into facts and checked plain-English points |
 | `web/` | Flask application: models, views, controller |
-| `tests/unit/` | 64 automated tests |
+| `scripts/make_pipeline_diagram.py` | Draws the pipeline figure of this report |
+| `tests/unit/` | 98 automated tests for System B (plus System A's 151) |
 
 ### 1.3 Key parameters
 
 | Parameter | Value | Meaning |
 |---|---|---|
 | Frame interval | 2 s | Same moments in both cameras |
-| Window | 10 s | Unit of the association analysis |
-| Lags | 1–3 windows | Student change 10–30 s after an instructor feature |
-| Minimum windows for statistics | 8 | Below this, no lag statistic is reported |
+| Window (comparisons, charts) | 10 s | Unit of the activity comparisons and the report charts |
+| Window (links over time) | 5 s | Unit of the team's fusion layer |
+| Lags | 1–6 windows of 5 s | Student change 5–30 s after an instructor feature |
+| Minimum evidence for a link | Instructor feature in ≥ 5 windows; action started ≥ 3 times | Rarer features and actions are listed as too rare to test |
+| Shift test | 500 circular shifts; q ≤ 0.05 (Benjamini–Hochberg) | A link is "unlikely to be chance" only below this |
 | Usable window | Posture readable for at least 40% of seat samples and at least 3 seats seen | Feedback uses usable windows only |
 | Keypoint confidence | ≥ 0.5 | Below this, a keypoint is ignored |
 | Hand raise | Wrist 5% of box height above the shoulder, ≥ 2 samples | About 4 s or more |
@@ -58,21 +62,22 @@ All rule thresholds are unvalidated starting values.
 
 ## 2. Testing
 
-### 2.1 Automated tests (System B): 64 tests, all passing on 17 November 2026
+### 2.1 Automated tests (System B): 98 tests, all passing on 19 November 2026
 
 | Test file | Tests | What it checks |
 |---|---|---|
-| `test_main_code_events.py` | 9 | JSONL events: one video ID and role per camera, times in each original video, real times from recording metadata, instructor and student indicators, null confidence for rule states, no silent overwrite, alignment from an offset |
+| `test_main_code_events.py` | 12 | JSONL events: one video ID and role per camera, times in each original video, real times from recording metadata, instructor and student indicators (including the ones the fusion layer reads), null confidence for rule states, no silent overwrite, alignment from an offset |
+| `test_main_code_fusion.py` | 6 | Stage 6: a planted 10 s link is found only on the shared clock when the two cameras were cut 7 s apart; features that need calibration are dropped when not measured; no recording times; the error path; report lines and points |
 | `test_seats.py` | 7 | Automatic seats: a classroom like the real one (false detections excluded, never two people in one seat, row-by-row numbering), close neighbours kept apart, a shifting student keeps one seat, standing up briefly, hidden shoulders, brief places ignored, grid mode still available |
 | `test_feedback_wording.py` | 4 | Feedback is plain English (no "window", "p =", "observable", raw seat IDs) and addresses the instructor as "you"; exact sentences for small cases |
-| `test_lag_facts.py` | 13 | Fusion output → facts: input formats, every test counted in the correction, pre-registered rows as their own family, strongest lag per pair, chance links and unknown indicators left out, weak links capped |
-| `test_llm_text.py` | 11 | AI-text checks with simulated answers: each kind of mistake caught, weak links need a hedge, numbers must come from the analysis, retry then cache, fallback to rules when the service is unreachable or two answers fail |
-| `test_web_app.py` | 20 | Pages, upload checks, progress, failed and interrupted analyses, the AI deployment setting, report contents (no developer details or removed sections), chart data, 95% ranges, safe file serving |
+| `test_lag_facts.py` | 26 | Fusion output → facts: the real fusion format (run fresh through the team's code), every test counted in the correction, strongest lag per pair, chance links and unknown indicators left out, weak links capped, the vocabulary covers every fusion feature with the same direction |
+| `test_llm_text.py` | 14 | AI-text checks with simulated answers: each kind of mistake caught, weak links need a hedge, numbers must come from the analysis, retry then cache, fallback to rules when the service is unreachable or two answers fail |
+| `test_web_app.py` | 29 | Pages, upload checks (including a required title and the activity rows: whole minutes from 1 to 180, at most 180 minutes in total, checked before any video is saved), progress, failed and interrupted analyses, delete, the AI deployment setting, report contents (no developer details or removed sections), chart data, 95% ranges, safe file serving |
 
-All tests run without network access or video, in about 23 seconds.
+All 249 tests (System B and System A) run without network access or video, in about 16 seconds.
 
-System A (the team's evidence pipeline) has its own 9 test files. The team reported 53 passing tests on 26 October
-2026. **[TODO: rerun and give the current count.]**
+System A (the team's evidence pipeline, copied into this working tree at commit ee5b6bb) has 151 tests, which pass in
+the same run.
 
 ### 2.2 End-to-end tests
 
@@ -82,8 +87,12 @@ System A (the team's evidence pipeline) has its own 9 test files. The team repor
 2. **Real two-camera lecture (17 November 2026).** A 4 min 36 s test lecture ("How much do you rely on AI in your daily
    life") with one instructor and six students. It ran end to end, including the web report. **[TODO: confirm the
    recording details and consent.]**
-3. **Visual checks of the report page** in light mode, dark mode and at phone width (screenshots in a headless
-   browser).
+3. **Second real two-camera lecture.** A 10 min 26 s test lecture ("Mixed gender classes", recorded on 3 November
+   2026) with one instructor and about six students. It ran end to end. **[TODO: confirm consent.]**
+4. **Fusion re-run (19 November 2026).** Both lectures were analysed again with the new stage 6 (the team's fusion
+   layer) in a separate folder. The lectures' saved results in the web app still show the earlier analysis until they
+   are analysed again.
+5. **Visual checks of the web pages** at desktop and phone width (screenshots in a headless browser).
 
 ### 2.3 Planned accuracy evaluation **[TODO]**
 
@@ -114,17 +123,44 @@ All values come from automatic detections that have not been checked by a person
 | Stretch without a hand raise | 01:00–03:00 (2 minutes of explanation) |
 | Processing time | About 4 minutes from detection to report (videos already converted, laptop CPU). **[TODO: time a full run from the raw videos.]** |
 
+**Second lecture ("Mixed gender classes"), from its saved run:**
+
+| Measure | Result |
+|---|---|
+| Shared lecture time | 10:26, 313 frame pairs (one every 2 s) |
+| Camera alignment | Recording-start metadata: the student camera started 2.0 s before the instructor camera |
+| Instructor visible | 100% of samples; more than one person in the teacher zone in 39% of samples |
+| Instructor facing the class | 08:56 (86% of samples) |
+| Instructor posture readable | 76% of visible samples; seated 0% |
+| Students | 5.9 per sample |
+| Heads up | 78% (average over 10-second windows) |
+| Hand raises | 11 |
+| Phone in view | 17 moments (2.4% of observed student time) |
+| Head down and still | 6 moments (8.1% of observed student time) |
+
+The 39% of samples with more than one person in the teacher zone needs a look at the video before these instructor
+figures are trusted **[TODO]**.
+
 ### 3.2 Association results
 
-- **Pre-registered hypotheses (9 tests, limit p < 0.0056):**
-  - "Instructor explaining → phone rate 10 s later": r = −0.31, p = 0.114 after controlling for the previous window.
-    Not significant.
-  - The other two hypotheses could not be tested: there was no head-down-and-still moment, and the instructor never
-    sat down.
-- **Exploratory (39 tests):**
-  - "Instructor movement → hand raises 10 s later": r = +0.74, p < 0.001. This survives the correction, but it rests on
-    only three hand-raise events in 27 windows, so it is a lead to check in more lectures, not a finding.
-  - "Instructor stationary → heads up 30 s later": r = −0.49, p = 0.030. Does not survive the correction.
+Since 19 November 2026 the links over time come from the team's fusion layer (System B's own lag analysis was
+replaced). Both lectures were analysed again with it:
+
+| Lecture | 5-second windows | What could be tested | Result |
+|---|---|---|---|
+| How much do you rely on AI (4:36) | 55 | Instructor facing the class, standing still and distance walked, against students' heads up (facing the front) and heads down: 6 links and 2 averages around action starts. Phones, hand raises and students turning away were too rare. | Nothing below p = 0.18. The smallest possible p was 1/43. |
+| Mixed gender classes (10:26) | 124 | 18 links and 6 averages around action starts | One weak lead: when the instructor stood still, more students were turned away 20 s later (r = +0.39, p = 0.009, q = 0.16). The reverse direction is almost as strong (r = +0.36), so it may be a shared trend. |
+
+No link passed the correction (q ≤ 0.05) in either lecture. This is expected for lectures this short. System B tests
+up to 24 instructor × student pairs, and the shift test's smallest p is 1/501, so one link alone can pass only in a
+lecture of about 43 minutes or more (24/501 < 0.05). The team's real lectures (55–75 minutes) are long enough. The
+team's own setting with all indicators tests about 112 pairs, where one link alone can never pass (112/501 = 0.22).
+**[TODO: discuss with the team.]**
+
+**Why the guardrails matter.** System B's earlier lag analysis had reported "instructor movement → hand raises 10 s
+later" (r = +0.74, p < 0.001) on the first lecture. It rested on only three hand raises in 27 windows. The fusion
+layer does not test actions seen fewer than 3 times or features present in fewer than 5 windows, so such a result can
+no longer appear as a finding.
 
 ### 3.3 A defect found and fixed during results analysis
 
@@ -158,7 +194,8 @@ A 10-minute edited test video from a moving camera showed why the design changed
 - The strongest association lead did not survive correction for 42 tests, and the earlier uncorrected p-values had
   been overstated.
 
-These lessons led to the two static cameras, the hypotheses fixed in advance, and the corrected statistics.
+These lessons led to the two static cameras and the corrected statistics (first three hypotheses fixed in advance,
+and since 19 November 2026 the team's fusion layer, which corrects over every pair it tests).
 
 ## 4. Analysis and discussion
 
@@ -170,8 +207,8 @@ These lessons led to the two static cameras, the hypotheses fixed in advance, an
 
 **What they do not show:**
 - Accuracy. Without human labels, precision and recall of each indicator are unknown.
-- General associations. One 4.6-minute lecture with six students, in which the instructor explained 80% of the time,
-  leaves little contrast between activities and very few events.
+- General associations. Two short lectures (4.6 and 10.4 minutes) with about six students each, in which the
+  instructor faced the class 80–86% of the time, leave little contrast between activities and few events.
 
 **Limitations:**
 - The rules use unvalidated thresholds.
@@ -181,10 +218,17 @@ These lessons led to the two static cameras, the hypotheses fixed in advance, an
 - No board region was calibrated, so board work was not measured.
 - The cameras are aligned to about 1 s.
 - The AI rewrite has not yet been tried on a real call.
+- Planned activities look like off-task behaviour: during a quiz, students writing look like "heads down". The
+  upload form now records such activities (quiz, group work, video, break) and how many minutes each lasted, but not
+  when it happened, so the analysis cannot tell which minutes to leave out. It does not use them yet.
 
 **Next steps:**
 - Label the review sheets and report precision and recall.
-- Record more lectures with consent and pool them.
+- Record full-length lectures (55–75 minutes) with consent.
+- Decide how to use the noted activities **[TODO]**. Since only their length is known, options are a note beside the
+  student figures they affect, or finding a stretch of matching length automatically (for example many heads down
+  while the instructor is not facing the class) and asking the instructor to confirm it. Once the minutes are known,
+  they can be left out of the student figures and the links, shaded on the timeline, and listed in the report.
 - Calibrate the board region.
 - Make the first real AI-rewrite call and compare it with the rule-based text.
 - Merge with System A's evidence pipeline.

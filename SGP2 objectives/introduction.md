@@ -51,14 +51,16 @@ Full wording and the benefits of the project: see `objective.md`.
 ## 1.4 Scope
 
 **In scope:**
-- Recorded (not live) lectures filmed by two static cameras.
+- Recorded (not live) lectures filmed by two static cameras; a lecture is typically 55–75 minutes of teaching.
 - Observable behaviour:
   - instructor: presence, facing the class, board work when a board region is calibrated, movement, sitting or
     standing;
   - students: heads up, head down and still, hand raises, phones and books in view.
 - Anonymous seats.
-- Associations within a lecture (pooling across lectures is not built yet).
+- Associations within a lecture (pooling across lectures is not part of the current version).
 - Plain-English feedback and a local web report.
+- Optional context from the instructor, including activities that were not teaching (stored, not yet used by the
+  analysis).
 
 **Out of scope:**
 - Recognising or naming people.

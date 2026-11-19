@@ -2,7 +2,8 @@
 {% block title %}New analysis · TeachLens{% endblock %}
 {% block content %}
 <h1>New analysis</h1>
-<p class="lead">Upload the two videos of one lecture, add what the class was about, and start the analysis.</p>
+<p class="lead">Upload two videos of the same lecture: one showing the instructor and one showing the students.
+  TeachLens then prepares a report that highlights the strengths of your lecture and recommendations for future lessons.</p>
 
 {% if error %}<p class="banner banner-bad" role="alert">{{ error }}</p>{% endif %}
 {% if running %}
@@ -13,36 +14,76 @@
 <form class="card form" method="post" action="{{ url_for('lectures.create') }}" enctype="multipart/form-data" id="new-lecture">
   <fieldset>
     <legend>Lecture</legend>
-    <label for="name">Lecture name</label>
-    <input id="name" name="name" type="text" maxlength="48" placeholder="e.g. Week 5 - Recursion" value="{{ form.get('name', '') }}">
-    <p class="hint">Shown in your list of lectures. Please don't use people's names.</p>
+    <label for="name">Lecture title <span class="req">required</span></label>
+    <input id="name" name="name" type="text" maxlength="48" placeholder="e.g. Week 5 - Recursion" value="{{ form.get('name', '') }}" required>
+    <p class="hint">A short title to find this lecture later, for example: GEIT101 section (57), week 4.</p>
   </fieldset>
 
   <fieldset>
     <legend>Videos</legend>
     <div class="two">
       <div>
-        <label for="instructor_video">Instructor camera <span class="req">required</span></label>
+        <label for="instructor_video">Video of the instructor <span class="req">required</span></label>
         <input id="instructor_video" name="instructor_video" type="file" accept="video/*,.mov,.mkv" required>
       </div>
       <div>
-        <label for="students_video">Student camera <span class="req">required</span></label>
+        <label for="students_video">Video of the students <span class="req">required</span></label>
         <input id="students_video" name="students_video" type="file" accept="video/*,.mov,.mkv" required>
       </div>
     </div>
-    <p class="hint">Use the original files from the cameras or phones: sending them through apps like WhatsApp removes
-      the recording time used to line the two cameras up. Keep both cameras still on tripods.</p>
+    <p class="hint">Both videos must be from the same lecture.</p>
   </fieldset>
 
   <fieldset>
     <legend>Additional context <span class="muted">(optional)</span></legend>
     <label for="topic">What was the class about?</label>
     <input id="topic" name="topic" type="text" maxlength="200" placeholder="e.g. Introduction to recursion" value="{{ form.get('topic', '') }}">
-    <label for="notes">Anything else worth knowing</label>
-    <textarea id="notes" name="notes" rows="3" placeholder="e.g. minutes 20-30 were a quiz; students worked in pairs at the end">{{ form.get('notes', '') }}</textarea>
     <label for="slides">Lecture slides</label>
     <input id="slides" name="slides" type="file" accept=".pdf,.pptx,.ppt,.odp,.key">
-    <p class="hint">Kept with this lecture's report for your reference.</p>
+  </fieldset>
+
+  <fieldset aria-describedby="activities-hint">
+    <legend>Activities in class <span class="muted">(optional)</span></legend>
+    <div class="activities">
+      <p class="hint" id="activities-hint">Add any part of the lecture that was not teaching, such as a quiz or group work,
+        and enter how many minutes it lasted.</p>
+      <div class="activity-add" id="activity-add" hidden>
+        {% for key, name in activity_types.items() %}
+        <button type="button" class="chip" data-activity="{{ key }}">+ {{ name }}</button>
+        {% endfor %}
+      </div>
+      <ul class="activity-rows" id="activity-rows">
+        {% for row in activity_rows %}
+        <li class="activity-row">
+          <input type="hidden" name="activity_type" value="{{ row.type }}">
+          <span class="activity-name">{{ row.name }}</span>
+          <label>Duration <input type="number" name="activity_minutes" min="1" max="{{ activity_max }}" step="1" placeholder="15" value="{{ row.minutes }}" aria-label="Duration of the {{ row.name | lower }} in minutes"> minutes</label>
+          <button type="button" class="activity-remove" aria-label="Remove {{ row.name | lower }}">Remove</button>
+        </li>
+        {% endfor %}
+      </ul>
+      <template id="activity-row">
+        <li class="activity-row">
+          <input type="hidden" name="activity_type" value="">
+          <span class="activity-name"></span>
+          <label>Duration <input type="number" name="activity_minutes" min="1" max="{{ activity_max }}" step="1" placeholder="15"> minutes</label>
+          <button type="button" class="activity-remove">Remove</button>
+        </li>
+      </template>
+      <noscript>
+        <div class="activity-row">
+          <select name="activity_type" aria-label="Activity">
+            <option value="">No activity</option>
+            {% for key, name in activity_types.items() %}<option value="{{ key }}">{{ name }}</option>{% endfor %}
+          </select>
+          <label>Duration <input type="number" name="activity_minutes" min="1" max="{{ activity_max }}" step="1" placeholder="15"> minutes</label>
+        </div>
+      </noscript>
+    </div>
+    <label for="notes">Additional information:</label>
+    <textarea id="notes" name="notes" rows="3" placeholder="e.g. first lecture after the midterm">{{ form.get('notes', '') }}</textarea>
+    <p class="hint">The additional context and activities are kept with the report for your reference and do not change
+      the analysis.</p>
   </fieldset>
 
   <button class="button button-big" type="submit" {% if running %}disabled{% endif %}>Start analysis</button>

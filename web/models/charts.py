@@ -16,10 +16,12 @@ import pandas as pd
 SEAT_MIN_SHARE = 0.10      # as in Main Code.py: a seat must be occupied in at least this share of the samples
 MIN_READABLE = 3           # samples with a readable head needed before a seat gets a percentage
 
+# file -> (title shown above the chart, description used only as the image's text alternative; the page shows no
+# caption under the heatmaps, user request 2026-11-19)
 CHARTS = {
-    "instructor_heatmap.png": ("Where you were", "Brighter = more time spent there, in the instructor camera's "
+    "instructor_heatmap.png": ("Instructor Movement", "Brighter = more time spent there, in the instructor camera's "
                                "view. The line is your path, sampled every 2 seconds."),
-    "seat_heatmap.png": ("Heads up by seat", "Each box is where one student usually sat. The percentage is the share of "
+    "seat_heatmap.png": ("Student Seats","Each box is where one student usually sat. The percentage is the share of "
                          "the time their head could be read that it was up. A posture, not a measure of attention; "
                          "writing and reading look like head down."),
 }
@@ -122,5 +124,5 @@ def ensure_charts(lecture):
         stale = not path.exists() or (tables.exists() and path.stat().st_mtime < tables.stat().st_mtime)
         if stale and tables.exists():
             draw(lecture, path)
-    return [{"file": name, "title": title, "caption": caption} for name, (title, caption) in CHARTS.items()
+    return [{"file": name, "title": title, "description": description} for name, (title, description) in CHARTS.items()
             if chart_path(lecture, name).exists()]

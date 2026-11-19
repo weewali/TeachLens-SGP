@@ -3,6 +3,7 @@ from flask import Blueprint, abort, current_app, jsonify, redirect, render_templ
 
 from web.models.charts import CHARTS, chart_path, ensure_charts
 from web.models.job import STAGES
+from web.models.lecture import ACTIVITY_TYPES, MAX_ACTIVITIES, MAX_ACTIVITY_MINUTES, parse_activities
 from web.models.report import build_report
 
 bp = Blueprint("lectures", __name__)
@@ -38,9 +39,22 @@ def index():
     return render_template("index.html", rows=rows, running=models["jobs"].running(), deleted=deleted)
 
 
+def _new_page(form, error=None, running=None, status=200):
+    """The upload form. Activity rows the instructor already added are shown again after an error."""
+    rows = []
+    if form:
+        columns = [form.getlist(key) for key in ("activity_type", "activity_minutes")]
+        for n in range(min(max(map(len, columns)), MAX_ACTIVITIES + 5)):
+            kind, minutes = (values[n] if n < len(values) else "" for values in columns)
+            if kind in ACTIVITY_TYPES:
+                rows.append({"type": kind, "name": ACTIVITY_TYPES[kind], "minutes": minutes})
+    return render_template("new.html", form=form, error=error, running=running, activity_types=ACTIVITY_TYPES,
+                           activity_rows=rows, activity_max=MAX_ACTIVITY_MINUTES), status
+
+
 @bp.get("/lectures/new")
 def new():
-    return render_template("new.html", form={}, error=None, running=_models()["jobs"].running())
+    return _new_page({}, running=_models()["jobs"].running())
 
 
 @bp.post("/lectures")
@@ -48,16 +62,18 @@ def create():
     models = _models()
     form = request.form
     if models["jobs"].running():
-        return render_template("new.html", form=form, running=models["jobs"].running(),
-                               error="Another analysis is still running. Start this one when it has finished."), 409
+        return _new_page(form, "Another analysis is still running. Start this one when it has finished.",
+                         models["jobs"].running(), 409)
     slides = request.files.get("slides")
     try:
+        activities = parse_activities(form.getlist("activity_type"),
+                                      form.getlist("activity_minutes"))   # checked before any video is saved
         lecture = models["lectures"].create(
             form.get("name"), request.files.get("instructor_video"), request.files.get("students_video"),
             context={"topic": form.get("topic"), "notes": form.get("notes")},
-            slides_file=slides if slides is not None and slides.filename else None)
+            slides_file=slides if slides is not None and slides.filename else None, activities=activities)
     except ValueError as error:
-        return render_template("new.html", form=form, error=str(error), running=None), 400
+        return _new_page(form, str(error), status=400)
     models["jobs"].start(lecture)
     return redirect(url_for("lectures.progress", lecture_id=lecture.id))
 

@@ -12,7 +12,6 @@
 {# Tabs: report.js shows one section at a time. Without scripts these are plain links and every section shows. #}
 <nav class="tabs" aria-label="Report sections">
   <a href="#feedback" class="is-active">Feedback</a>
-  <a href="#links">Links over time</a>
   <a href="#charts">Charts</a>
   <a href="#moments">Moments{% if moments %}<span class="tab-count">{{ moments | length }}</span>{% endif %}</a>
   <a href="#terms">Key terms</a>
@@ -37,44 +36,17 @@
   </div>
   {% if feedback.note %}<p class="note">{{ feedback.note }}</p>{% endif %}
 
-  {% if context.topic or context.notes or context.slides %}
+  {% if context.topic or context.notes or context.slides or activities %}
   <div class="card context">
     <h3>Context you gave</h3>
     <dl>
       {% if context.topic %}<dt>Topic</dt><dd>{{ context.topic }}</dd>{% endif %}
+      {% if activities %}<dt>Activities</dt><dd><ul class="plain-list">{% for a in activities %}<li>{{ a }}</li>{% endfor %}</ul></dd>{% endif %}
       {% if context.notes %}<dt>Notes</dt><dd>{{ context.notes }}</dd>{% endif %}
       {% if context.slides %}<dt>Slides</dt><dd>{{ context.slides }} (kept on this computer)</dd>{% endif %}
     </dl>
     <p class="hint">Kept with this report for your reference.</p>
   </div>
-  {% endif %}
-</section>
-
-<section id="links" class="tab-panel">
-  <h2 class="panel-title">Links over time</h2>
-  {% if links.available %}
-  <p class="muted">Did the students change in the half-minute after something you did? The lecture was cut into
-    {{ links.window_seconds }}-second parts ({{ links.analysed }} analysed), and each thing you did was compared with
-    how the students behaved shortly after it.{% if links.ai %} <span class="badge badge-llm">Written with AI from the
-    measured results and checked automatically</span>{% endif %}</p>
-  {% if links.overview %}<p class="lead">{{ links.overview }}</p>{% endif %}
-  <div class="two">
-    <div class="card points points-good">
-      <h3><span aria-hidden="true">✓</span> Positive points</h3>
-      {% if links.positive %}
-      <ul>{% for point in links.positive %}<li>{{ point }}</li>{% endfor %}</ul>
-      {% else %}<p class="muted">No positive link stood out in this lecture.</p>{% endif %}
-    </div>
-    <div class="card points points-bad">
-      <h3><span aria-hidden="true">✗</span> Negative points</h3>
-      {% if links.negative %}
-      <ul>{% for point in links.negative %}<li>{{ point }}</li>{% endfor %}</ul>
-      {% else %}<p class="muted">No negative link stood out in this lecture.</p>{% endif %}
-    </div>
-  </div>
-  {% if links.note %}<p class="note">{{ links.note }}</p>{% endif %}
-  {% else %}
-  <p class="muted">{{ links.reason }}</p>
   {% endif %}
 </section>
 
@@ -152,8 +124,9 @@
   <div class="charts">
     {% for chart in charts %}
     <figure class="card chart">
-      <img src="{{ url_for('lectures.chart', lecture_id=lecture.id, name=chart.file) }}" alt="{{ chart.title }}" loading="lazy">
-      <figcaption><strong>{{ chart.title }}.</strong> {{ chart.caption }}</figcaption>
+      <h3 class="chart-title">{{ chart.title }}</h3>
+      <img src="{{ url_for('lectures.chart', lecture_id=lecture.id, name=chart.file) }}"
+           alt="{{ chart.title }}. {{ chart.description }}" loading="lazy">
     </figure>
     {% endfor %}
   </div>

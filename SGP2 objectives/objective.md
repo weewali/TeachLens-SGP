@@ -28,7 +28,8 @@ causes, and never claims to measure inner states such as attention, engagement, 
    format, plus 10-second window tables, so results can be checked and reused without reprocessing the video.
 5. **Analyse instructor–student associations honestly.**
    - Compare student behaviour during each instructor activity with the rest of the lecture.
-   - Test whether changes 10–30 seconds later go with what the instructor did.
+   - Test whether student changes 5–30 seconds later go with what the instructor did (the team's fusion layer,
+     5-second windows).
    - Use statistics that allow for neighbouring moments being alike (HAC standard errors, control for the previous
      window).
    - Correct for multiple testing (Benjamini–Hochberg q-values in the team's fusion layer; Bonferroni for the
@@ -36,8 +37,10 @@ causes, and never claims to measure inner states such as attention, engagement, 
 6. **Write feedback an instructor can act on.** Produce up to three positive and three negative points in plain
    English, without statistical jargon. An optional rewrite by Claude Opus 5.5 is checked automatically against the
    measured numbers, with the rule-based text as a fallback.
-7. **Deliver it through a simple web application.** Instructors upload the two videos, follow the analysis stage by
-   stage, and read a report with charts, a list of timestamped moments, suggestions and limitations.
+7. **Deliver it through a simple web application.** Instructors give the lecture a title, upload the two videos,
+   follow the analysis stage by stage, and read a report in tabs: feedback, charts, timestamped
+   moments and key terms. Context is optional: the topic, notes, slides, and activities in class that were not teaching
+   (a quiz, group work, a video or a break, added with one click and its duration in minutes).
 8. **Protect people and state limits openly.** The design rules:
    - Processing stays local.
    - Nobody is identified.
@@ -49,19 +52,19 @@ causes, and never claims to measure inner states such as attention, engagement, 
    - Run it end to end on a real two-camera recording.
    - Prepare human-labelled checks of each detection's accuracy.
 
-### Status at the time of writing (17 November 2026)
+### Status at the time of writing (19 November 2026)
 
 | Objective | Status | Evidence |
 |---|---|---|
-| 1 Two cameras, aligned | Done | Real lecture aligned from metadata (student camera started 8.0 s earlier) |
+| 1 Two cameras, aligned | Done | Two real test lectures aligned from metadata (the student camera started 8.0 s and 2.0 s earlier) |
 | 2 Pretrained models, CPU | Done | Three YOLO26 models run locally; no downloads at run time |
-| 3 Observable indicators | Done (rules); accuracy not yet measured | Rule outputs on the real lecture; no human labels yet |
+| 3 Observable indicators | Done (rules); accuracy not yet measured | Rule outputs on the two real lectures; no human labels yet |
 | 4 Shared evidence format | Done | Two JSONL files per lecture in the team's event format |
-| 5 Association analysis | Done | Comparisons, and the team's fusion layer on System B's event files, run on the two test lectures |
-| 6 Plain-English feedback | Done (rule-based); AI rewrite implemented, first real call pending | Feedback on the real lecture; offline tests of the checks |
-| 7 Web application | Done (local) | Upload, progress, report pages; 20 automated web tests |
-| 8 Privacy and honesty | Done in design and code | Local processing, anonymous seats, word checks, limitations section |
-| 9 Verification | Partly done | 64 automated tests pass; human-labelled accuracy **[TODO]** |
+| 5 Association analysis | Done | Comparisons, and the team's fusion layer on System B's event files, run on the two test lectures; no link passed the correction (see the results chapter) |
+| 6 Plain-English feedback | Done (rule-based); AI rewrite implemented, first real call pending | Feedback on the real lectures; offline tests of the checks |
+| 7 Web application | Done (local) | Upload with optional context and activities, progress, tabbed report, delete; 29 automated web tests. Marked activities are stored but not yet used by the analysis **[TODO]** |
+| 8 Privacy and honesty | Done in design and code | Local processing, anonymous seats, word checks, limitations in the analysis details |
+| 9 Verification | Partly done | 249 automated tests pass (98 System B, 151 System A); human-labelled accuracy **[TODO]** |
 
 ## The positive side of the project
 
@@ -101,8 +104,10 @@ causes, and never claims to measure inner states such as attention, engagement, 
   chance patterns are not reported as findings.
 - **Ethical by design.** It follows the ACM and IEEE codes of ethics and the UAE Personal Data Protection Law
   (Federal Decree-Law No. 45 of 2021): local processing, consent, anonymity, and no inner-state or causal claims.
-- **Accessible report.** Plain language and charts with a table view and keyboard access. The page works in light
-  and dark mode and on a phone screen.
+- **Accessible report.** Plain language and charts with a table view and keyboard access. The page keeps a white
+  background on every computer and works on a phone screen.
+- **Little extra work for instructors.** Only a lecture title and the two videos are required; everything else is
+  optional. A form with no context gives a normal report.
 
 > Note for the report: these are intended benefits and design properties. Their effect on teaching has not been
 > measured. The accuracy of the detections will be stated once the human-labelled evaluation is done **[TODO]**.

@@ -10,7 +10,7 @@
 | NIST Privacy Framework (principles) | Identify and limit privacy risks | Data minimisation: the language model receives only anonymised numbers, never video, images, file names or names. |
 | ISO/IEC 27001 (principles; no formal certification) | Protect information assets | Recordings, frames, review images and model weights are kept out of Git. The web application listens only on the local computer. API keys are never written into code or shared in chat. |
 | ISO/IEC 25010 (quality model, as a guide) | Functional suitability, reliability, usability, maintainability | Modular stages, automated tests, clear error messages, and a fallback when the AI step fails. |
-| Accessibility practice (informed by WCAG 2.1; not formally audited) | Content usable by people with different abilities | Chart colours were checked for colour-vision deficiency and contrast. Every chart has a table view and keyboard access. The page works in light and dark mode and at phone width. |
+| Accessibility practice (informed by WCAG 2.1; not formally audited) | Content usable by people with different abilities | Chart colours were checked for colour-vision deficiency and contrast. Every chart has a table view and keyboard access. The page keeps a white background on every computer and works at phone width. |
 
 ## 2. Engineering practice
 
@@ -21,8 +21,9 @@
 - **Configuration instead of code changes:**
   - per-camera calibration files (teacher zone, board region, student region, seat mode);
   - deployment settings for the web application (`TEACHLENS_LLM`, `TEACHLENS_LLM_MODEL`, `TEACHLENS_FFMPEG_DIR`).
-- **Automated testing:** 64 unit tests (Python `unittest`). They run without network access or video and cover the
-  event format, seat finding, feedback wording, the AI-text checks and the web application.
+- **Automated testing:** 249 unit tests (Python `unittest`; 98 for System B, 151 for System A). They run without
+  network access or video and cover the event format, seat finding, feedback wording, the fusion step, the AI-text
+  checks and the web application.
 - **Reproducibility:**
   - Fixed model files that are never downloaded at run time.
   - Saved tables, events and `facts.json`.
@@ -32,11 +33,14 @@
   - Unknown values stay "unknown" and are never counted as zero.
   - The AI rewrite falls back to the rule-based text.
 - **Scientific practice:**
-  - The three main hypotheses were fixed on 16 November 2026, before any two-camera data existed.
-  - Exploratory results are labelled as leads.
+  - Three hypotheses were fixed on 16 November 2026, before any two-camera data existed. Since 19 November 2026 the
+    team's fusion layer tests every instructor × student pair and corrects over all of them (Benjamini–Hochberg), so
+    no pair is singled out after seeing the data.
+  - Weak results are labelled as leads.
   - p-values are corrected for the number of tests and for autocorrelation between neighbouring windows.
-- **Documentation:** module documentation, a code map (`CLAUDE.md`), indicator rules (`docs/main_code_events.md`) and
-  a web application guide (`web/README.md`).
+- **Documentation:** module documentation, a code map (`CLAUDE.md`), indicator rules (`docs/main_code_events.md`), a
+  web application guide (`web/README.md`), and the report chapters in `SGP2 objectives/`, updated with every change.
+  The pipeline figure is drawn by `scripts/make_pipeline_diagram.py`.
 
 ## 3. Practice constraints
 
@@ -50,6 +54,7 @@
 | **Time alignment** | The two cameras start at different times; metadata start times are whole seconds | Alignment from metadata (about ±1 s), with a manual offset option. 10-second windows make a 1 s error small. |
 | **Accuracy and validation** | Rule thresholds are starting values; no human labels yet | All results are labelled "unverified". The `validate_indicators.py` review sheets and scoring are ready **[TODO: labelling]**. |
 | **External AI service** | Cost, availability, data leaving the computer, possible errors in generated text | Optional and set by the deployment, not the instructor. About USD 0.04 per report. Anonymised numbers only. Every number is checked against the facts. One retry, then the rule-based fallback. |
+| **Instructor time** | Instructors teach 55–75-minute lectures and will not fill in long forms after each one | Only a lecture title and the two videos are required. Context is optional. An activity in class that was not teaching is added with one button and one box for its duration in minutes. A form with no context gives a normal report. |
 | **Schedule** | One semester for implementation, testing and the report | Prioritised the end-to-end pipeline and the report over a dashboard and audio analysis. PDF export deferred. |
 | **Integration** | Two implementations built in parallel | Shared JSONL event format; System B also writes the indicators the team's fusion layer reads and runs that layer itself, so both systems' results reach the same reporting layer (`lag_facts.py`) in one format. |
 | **Economic** | Student project budget | Uses existing phones or low-cost cameras and tripods (SGP1 estimate: 500–1,200 AED per camera, 100–250 AED per tripod), free open-source software, and a pay-per-use AI step. |

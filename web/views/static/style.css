@@ -108,16 +108,38 @@ code { font-size: .88em; word-break: break-all; }
 .table th { font-size: .85rem; color: var(--heading); font-weight: 700; background: var(--clr-primary-200); }
 .table tr:last-child td { border-bottom: 0; }
 
-.form fieldset { border: 0; padding: 0; margin: 0 0 1.4rem; }
-.form legend { font-weight: 700; font-size: 1.05rem; margin-bottom: .5rem; }
+.form fieldset { border: 0; padding: 0; margin: 0 0 1.8rem; min-width: 0; }
+/* section titles (Lecture, Videos, Additional context): navy heading text with a red bar and a thin rule under it.
+   float + width keeps the legend a normal full-width block instead of sitting on the fieldset's edge */
+.form legend { float: left; width: 100%; display: flex; align-items: center; gap: .55rem; padding: 0 0 .45rem;
+  margin: 0 0 .2rem; border-bottom: 2px solid var(--clr-primary-200); font-family: var(--font-heading);
+  font-size: 1.25rem; font-weight: 700; color: var(--heading); }
+.form legend::before { content: ""; flex: none; width: 4px; height: 1.1em; border-radius: 2px; background: var(--uaeu-red); }
+.form legend .muted { font-size: .9rem; font-weight: 400; }
+.form legend + * { clear: both; }
 .form label { display: block; font-weight: 600; margin: .7rem 0 .25rem; }
-.form input[type=text], .form textarea { width: 100%; padding: .55rem .7rem; border: 1px solid var(--border-strong);
-  border-radius: 4px; background: var(--surface); color: var(--text); font: inherit; }
-.form input[type=text]:focus, .form textarea:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: transparent; }
+.form input[type=text], .form input[type=number], .form textarea { width: 100%; padding: .55rem .7rem;
+  border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface); color: var(--text); font: inherit; }
+.form input[type=text]:focus, .form input[type=number]:focus, .form textarea:focus { outline: 2px solid var(--focus);
+  outline-offset: 0; border-color: transparent; }
 .form input[type=file] { width: 100%; padding: .45rem; border: 1px dashed var(--border-strong); border-radius: 4px;
   background: var(--surface); color: var(--text); font: inherit; }
 .form .check { display: flex; gap: .5rem; align-items: center; font-weight: 600; }
 .req { font-weight: 400; font-size: .8rem; color: var(--bad); }
+/* planned activities (quiz, group work, video, break): add buttons, then one row per activity with a duration box */
+.activity-add { display: flex; flex-wrap: wrap; gap: .5rem; margin: .55rem 0 0; }
+.activity-add .chip:hover { background: var(--clr-primary-100); }
+.activity-rows { list-style: none; padding: 0; margin: .4rem 0 0; }
+.activity-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .55rem .75rem;
+  margin-top: .45rem; border: 1px solid var(--border); border-radius: 4px; background: var(--clr-neutral-300); }
+.activity-name { font-weight: 600; color: var(--heading); min-width: 10.5rem; }
+.form .activity-row label { display: inline-flex; align-items: center; gap: .4rem; margin: 0; font-weight: 400; }
+.form .activity-row input[type=number] { width: 5.5rem; padding: .35rem .5rem; }
+.activity-row select { font: inherit; padding: .35rem .5rem; border: 1px solid var(--border-strong); border-radius: 4px; }
+.activity-remove { margin-left: auto; background: none; border: 0; padding: .2rem .3rem; font: inherit; font-weight: 600;
+  color: var(--bad); cursor: pointer; }
+.activity-remove:hover { color: var(--uaeu-red-hover); text-decoration: underline; }
+.plain-list { list-style: none; padding: 0; margin: 0; }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 
 .stages { list-style: none; padding: 0; margin: 1rem 0; }
@@ -169,6 +191,7 @@ code { font-size: .88em; word-break: break-all; }
 .chart figcaption { margin-top: .6rem; color: var(--muted); font-size: .9rem; }
 .charts-panel > .card.chart { margin-bottom: 1rem; }
 .chart-title { margin: 0 0 .2rem; }
+.charts .chart-title { margin-bottom: .7rem; }   /* heatmaps: a title above the image, no caption under it */
 .chart-sub { color: var(--muted); font-size: .9rem; margin: 0 0 .8rem; max-width: 52rem; }
 
 /* activity colours: the same activity has the same colour in every chart and every lecture */
