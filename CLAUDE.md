@@ -102,8 +102,10 @@ statsmodels, jinja2, anthropic, Flask 3.1.3, FFmpeg 9.0.2. Root weights yolo26m-
   `scripts/make_pipeline_diagram.py` + `python scripts/make_pipeline_diagram.py` (look at the PNG).
 - Never press Delete on the user's real lectures while testing: only made-up lectures in temporary folders.
 - On this laptop `git` is not on PATH: `%LOCALAPPDATA%\GitHubDesktop\app-3.6.6\resources\app\git\cmd\git.exe`.
-- Git history: the 3 commits after origin (82b1d39, d925aac, 352d13a) were rebuilt on 2026-11-20 without unblurred
-  real-lecture images; `.gitignore` keeps outputs/, models/, videos and report charts local. The old Video10min frames
+- Git history: on 2026-11-20 the then-unpushed commits were rebuilt twice (without unblurred real-lecture images; then
+  with the GitHub noreply email, because GitHub blocks pushes that expose the user's private email, GH007) and pushed:
+  origin/pipeline_creation = 083c440, 73d6417, b7de6c5, 90befe6, 6c845ac (+ later). This repo's `user.email` is now the
+  noreply address. `.gitignore` keeps outputs/, models/, videos and report charts local. The old Video10min frames
   stay tracked and on GitHub (user's choice).
 
 ## PDF export (2026-11-20, user request)
