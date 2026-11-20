@@ -104,6 +104,24 @@ def rerun(lecture_id):
     return redirect(url_for("lectures.progress", lecture_id=lecture.id))
 
 
+@bp.post("/lectures/<lecture_id>/rewrite")
+def rewrite(lecture_id):
+    """Runs only the report step again, so Claude tries to write the feedback once more (it costs a few cents, so
+    only the app's own pages may ask for it)."""
+    if not _from_this_site():
+        abort(403)
+    lecture = _lecture_or_404(lecture_id)
+    jobs = _models()["jobs"]
+    if not (lecture.lesson_dir and (lecture.lesson_dir / "facts.json").exists()):
+        abort(404)
+    if jobs.running():
+        return render_template("progress.html", lecture=lecture, context=lecture.context(), stages=STAGES,
+                               status=jobs.status(lecture.id), notice="Another analysis is still running. "
+                               "Try again when it has finished."), 409
+    jobs.start(lecture, report_only=True)
+    return redirect(url_for("lectures.progress", lecture_id=lecture.id))
+
+
 def _delete_page(lecture, error=None, status=200):
     return render_template("delete.html", lecture=lecture, context=lecture.context(), error=error,
                            running=_models()["jobs"].running() == lecture.id, has_report=lecture.has_report()), status
@@ -166,11 +184,13 @@ def report_pdf(lecture_id):
             if browser is None:
                 raise pdf.PdfUnavailable("No Microsoft Edge or Google Chrome was found on this computer to make "
                                          "the PDF.")
-            html = render_template("report.html", **data, **pdf.print_assets(lecture, data["charts"], data["moments"]))
+            html = render_template("report.html", **data, **pdf.print_assets(lecture, data))
             pdf.print_to_pdf(html, path, browser, runner=current_app.config.get("PDF_RUNNER") or subprocess.run)
-        except pdf.PdfUnavailable as error:
+        except Exception as error:   # shown as a page, never handed to the browser as a download
+            current_app.logger.exception("PDF export failed")
+            reason = str(error) if isinstance(error, pdf.PdfUnavailable) else                 f"Something went wrong while making the PDF ({type(error).__name__})."
             return render_template("error.html", title="The PDF could not be made",
-                                   message=f"{error} You can still save the report as a PDF from your browser: open "
+                                   message=f"{reason} You can still save the report as a PDF from your browser: open "
                                            "the report, press Ctrl+P and choose \"Save as PDF\"."), 503
     return send_file(path, mimetype="application/pdf", as_attachment=True,
                      download_name=pdf.download_name(lecture, data["context"]))

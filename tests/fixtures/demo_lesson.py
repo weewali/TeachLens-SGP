@@ -4,8 +4,9 @@ make_demo_lesson(base) writes, under base (the outputs/ root):
     uploads/<id>/instructor.mp4, students.mp4 (a few bytes), context.json
     lessons/2026-11-20_1200_<id>/  fusion/windows.csv + fusion.json, student/ and instructor/ events.jsonl,
                                    summary.json, run.json, lesson.json, facts.json
-and then runs the real report stage (src/reporting/feedback.py) with an AI call that fails as if no API key were set,
-so final_feedback_report.txt, report_status.json and tables/ are the real stage's output.
+and then runs the real report stage (src/reporting/feedback.py) with a stand-in for Claude (no network): by default it
+answers with points that pass every check, so final_feedback_report.txt, report_status.json and tables/ are the real
+stage's output; with claude_ok=False it fails as if no API key were set, so there is no feedback, only the reason.
 
 The numbers are invented and labelled as such: 60 windows of 5 s (5 minutes). The instructor faces the class in
 alternating blocks of 6 windows, and students are planted to be more on task (85% vs 60%) and less on the phone while
@@ -57,7 +58,21 @@ def windows_table():
     return pd.DataFrame(rows)
 
 
-def make_demo_lesson(base, lecture_id="demo_lecture", run_report=True):
+DEMO_ANSWER = {
+    "positive_points": [{"text": "Students raised their hands 5 times, for example at 00:05; these hand raises have "
+                                 "not been verified by a person.", "fact_ids": ["F1"], "explanation_ids": []}],
+    "negative_points": [{"text": "A phone was seen with 13% of the students in view on average, and with 22% at "
+                                 "00:30; this detection has not been verified.", "fact_ids": ["F2"],
+                         "explanation_ids": []}]}
+
+
+def fake_claude(system, user, model):
+    """Stands in for llm_report.call_claude: a checked answer and made-up token counts."""
+    from types import SimpleNamespace
+    return DEMO_ANSWER, SimpleNamespace(usage=SimpleNamespace(input_tokens=2000, output_tokens=400), model=model), None
+
+
+def make_demo_lesson(base, lecture_id="demo_lecture", run_report=True, claude_ok=True):
     """Writes the demo lesson; returns its lesson folder."""
     base = Path(base)
     upload = base / "uploads" / lecture_id
@@ -125,6 +140,6 @@ def make_demo_lesson(base, lecture_id="demo_lecture", run_report=True):
 
         def no_key(*_args, **_kwargs):
             raise llm_report.RewriteUnavailable("No Claude API key is set on this computer (ANTHROPIC_API_KEY). "
-                                                "Nothing was sent.")
-        report_lesson(lesson, caller=no_key, log=lambda _line: None)
+                                                "Nothing was sent.", llm_report.KEY_PROBLEM)
+        report_lesson(lesson, caller=fake_claude if claude_ok else no_key, log=lambda _line: None)
     return lesson

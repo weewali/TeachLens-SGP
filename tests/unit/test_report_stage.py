@@ -74,26 +74,14 @@ class FactsAndRulesTests(unittest.TestCase):
         self.assertEqual(once, twice)
         self.assertEqual([f["id"] for f in twice["facts"]], [f"F{n}" for n in range(1, len(added) + 2)])
 
-    def test_rule_points_speak_to_the_instructor_without_inner_states(self):
-        with tempfile.TemporaryDirectory() as directory:
-            lesson = make_demo_lesson(directory)
-            facts = json.loads((lesson / "facts.json").read_text(encoding="utf-8"))
-            positive, negative = feedback.rule_points(facts)
-            self.assertTrue(1 <= len(positive) <= 3 and 1 <= len(negative) <= 3)
-            self.assertTrue(positive[0].startswith("While you faced the class"))
-            self.assertIn("unlikely to be chance", positive[0])
-            for text in positive + negative:
-                self.assertIsNone(llm_report.INTERNAL_STATE_RE.search(text), text)
-                self.assertIsNone(llm_report.CAUSAL_RE.search(text), text)
-                self.assertNotIn("the instructor", text)
-        self.assertEqual(feedback.youify("the instructor had their back to the class"), "you had your back to the class")
-        self.assertEqual(feedback.youify("the instructor was seated"), "you were seated")
+    def test_the_report_step_writes_no_rule_based_text(self):
+        self.assertFalse(hasattr(feedback, "rule_points"))      # Claude writes the feedback (user decision 2026-11-20)
 
 
 class AiRewriteTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.lesson = make_demo_lesson(self.temp.name)
+        self.lesson = make_demo_lesson(self.temp.name, claude_ok=False)
         self.facts = json.loads((self.lesson / "facts.json").read_text(encoding="utf-8"))
 
     def tearDown(self):
@@ -110,12 +98,12 @@ class AiRewriteTests(unittest.TestCase):
                          "does not say so"):
             self.assertIn(expected, problems)
 
-    def test_no_key_keeps_the_rules_and_says_why(self):
+    def test_without_a_key_there_is_no_feedback_only_the_reason(self):
         status = json.loads((self.lesson / "report_status.json").read_text(encoding="utf-8"))
-        self.assertEqual(status["source"], "rules")
-        self.assertIn("No Claude API key", status["reason"])
-        report = (self.lesson / "final_feedback_report.txt").read_text(encoding="utf-8")
-        self.assertEqual(report, (self.lesson / "final_feedback_report_rules.txt").read_text(encoding="utf-8"))
+        self.assertEqual((status["source"], status["code"]), ("none", "01"))   # the web app shows only "Code=01"
+        self.assertIn("No Claude API key", status["reason"])                    # the reason stays in the file
+        self.assertFalse((self.lesson / "final_feedback_report.txt").exists())
+        self.assertFalse((self.lesson / "final_feedback_report_rules.txt").exists())
         for table in ("events.csv", "activity_comparisons.csv"):
             self.assertTrue((self.lesson / "tables" / table).exists())
 
@@ -140,11 +128,45 @@ class AiRewriteTests(unittest.TestCase):
         def claude(system, user, model):
             return response({"positive_points": [{"text": "Students were bored.", "fact_ids": ["F99"],
                                                   "explanation_ids": []}], "negative_points": []})
+        (self.lesson / "final_feedback_report.txt").write_text("an earlier run's text", encoding="utf-8")
         status = feedback.report_lesson(self.lesson, caller=claude, log=lambda _: None)
-        self.assertEqual(status["source"], "rules")
+        self.assertEqual((status["source"], status["code"]), ("none", None))    # not a key problem: no code
         self.assertIn("failed the automatic checks 2 time(s)", status["reason"])
+        self.assertFalse((self.lesson / "final_feedback_report.txt").exists())   # never an old text as if new
         record = json.loads((self.lesson / "llm_output.json").read_text(encoding="utf-8"))
         self.assertEqual(len(record["attempts"]), 2)
+
+    def test_only_api_key_problems_get_code_01(self):
+        def rejected(*_args):
+            raise llm_report.RewriteUnavailable("Claude rejected the API key.", llm_report.KEY_PROBLEM)
+
+        def offline(*_args):
+            raise llm_report.RewriteUnavailable("Could not reach the Claude API (no internet connection?).")
+        lines = []
+        status = feedback.report_lesson(self.lesson, caller=rejected, log=lines.append)
+        self.assertEqual((status["code"], status["reason"]), ("01", "Claude rejected the API key."))
+        self.assertIn("Error, Code=01", lines)                    # the log is shown on the progress page
+        self.assertFalse(any("API key" in line for line in lines))
+        status = feedback.report_lesson(self.lesson, caller=offline, log=lambda _: None)
+        self.assertEqual(status["code"], None)
+        self.assertIn("internet", status["reason"])
+
+    def test_error_statuses_are_sorted_into_codes(self):
+        def error(status, message="", kind=None, name="APIStatusError"):
+            return type(name, (Exception,), {})(message) if status is None else \
+                type(name, (Exception,), {"status_code": status, "type": kind, "message": message})(message)
+        code = lambda e: llm_report.status_problem(e).code   # noqa: E731
+        self.assertEqual(code(error(401, "invalid x-api-key", "authentication_error")), "01")
+        self.assertEqual(code(error(403, "not allowed", "permission_error")), "01")
+        self.assertEqual(code(error(400, "Your credit balance is too low to access the Anthropic API.",
+                                    "invalid_request_error")), "02")
+        self.assertEqual(code(error(402, "payment required", "billing_error")), "02")
+        self.assertEqual(code(error(429, "limit", "rate_limit_error", "EnforcedSpendLimitReachedError")), "02")
+        self.assertEqual(code(error(400, "on hold", "invalid_request_error", "OrganizationOnHoldError")), "02")
+        for plain in (error(429, "slow down", "rate_limit_error"), error(400, "bad schema", "invalid_request_error"),
+                      error(529, "overloaded", "overloaded_error")):
+            self.assertIsNone(code(plain))                      # other problems keep their plain reason
+        self.assertIn("rate-limiting", str(llm_report.status_problem(error(429, "slow down", "rate_limit_error"))))
 
 
 class ReviewSheetTests(unittest.TestCase):

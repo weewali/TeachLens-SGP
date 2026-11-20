@@ -13,12 +13,15 @@ import tempfile
 import time
 from pathlib import Path
 
+from web.models import print_charts, stat_charts
 from web.models.charts import chart_path
 
 STATIC = Path(__file__).resolve().parents[1] / "views" / "static"
 PRINT_SECONDS = 90
 REPLACE_ATTEMPTS = 5
-PDF_MOMENTS = 40          # moments listed in the PDF (the web report lists them all)
+LAYOUT_FILES = [STATIC.parent / "templates" / "report.html", STATIC.parent / "templates" / "base.html",
+                STATIC / "style.css", STATIC / "report.js", Path(__file__).parent / "print_charts.py", Path(__file__)]
+JOIN_SECONDS = 10         # in the PDF, moments of one kind and seat closer than this are one row
 BROWSER_PATHS = [   # Windows first (this project's laptops), then the usual names on other systems
     Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Microsoft/Edge/Application/msedge.exe",
     Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Microsoft/Edge/Application/msedge.exe",
@@ -62,12 +65,45 @@ def moment_summary(moments):
     return sorted(rows.values(), key=lambda r: -r["count"])
 
 
-def print_assets(lecture, charts, moments=()):
-    """What report.html needs to be self-contained: the CSS and JS text, the logo and each chart as data URIs, plus
-    the PDF's short Moments section (a summary and the first PDF_MOMENTS moments)."""
+def bytes_uri(data, mime="image/png"):
+    return f"data:{mime};base64," + base64.b64encode(data).decode("ascii") if data else None
+
+
+def joined_moments(moments, gap=JOIN_SECONDS):
+    """Every moment, with moments of the same kind on the same seat less than `gap` seconds apart joined into one row
+    (start of the first to end of the last; "Phone seen (7 times)"), so the PDF can list them all in a few pages."""
+    rows = []
+    for m in sorted(moments, key=lambda m: m["seconds"]):
+        end = m["seconds"] + m["duration"]
+        last = next((r for r in reversed(rows) if r["kind"] == m["kind"] and r["seat"] == m["seat"]), None)
+        if last and m["seconds"] - last["_end"] < gap:
+            last["_end"], last["_count"] = max(last["_end"], end), last["_count"] + 1
+        else:
+            rows.append({**m, "_end": end, "_count": 1, "_label": m["behaviour"]})
+    for row in rows:
+        row["end"] = clock(row["_end"])
+        row["duration"] = int(round(row["_end"] - row["seconds"]))
+        row["behaviour"] = row["_label"] + (f" ({row['_count']} times)" if row["_count"] > 1 else "")
+    return sorted(rows, key=lambda r: r["seconds"])
+
+
+def clock(seconds):
+    seconds = int(round(seconds))
+    return f"{seconds // 60:02d}:{seconds % 60:02d}"
+
+
+def print_assets(lecture, report):
+    """What report.html needs for the PDF: the CSS and JS text, the logo and each heatmap as data URIs, the two
+    statistical charts as static figures for paper (web/models/print_charts.py), and the short Moments section (a
+    summary, then every moment with close ones joined). `report` is build_report()'s result."""
+    charts, moments = report["charts"], report["moments"]
+    rows, _window = stat_charts.comparison_values(lecture)
     return {
+        "print_charts": {"timeline": bytes_uri(print_charts.timeline_png((report.get("timeline") or {}).get("data"))),
+                         "comparison": bytes_uri(print_charts.comparison_png(rows))},
         "pdf": True,
-        "pdf_moments": PDF_MOMENTS,
+        "pdf_moment_rows": joined_moments(moments),
+        "join_seconds": JOIN_SECONDS,
         "moment_summary": moment_summary(moments),
         "inline_css": (STATIC / "style.css").read_text(encoding="utf-8"),
         "inline_js": (STATIC / "report.js").read_text(encoding="utf-8"),
@@ -88,6 +124,7 @@ def is_current(lecture):
         return False
     sources = [lecture.lesson_dir / name for name in ("final_feedback_report.txt", "facts.json", "report_status.json")]
     sources += [lecture.input_dir / "context.json", lecture.charts_dir / "style.txt"]
+    sources += LAYOUT_FILES   # a new layout (templates, styles, figure code) makes a new PDF too
     newest = max((p.stat().st_mtime for p in sources if p.exists()), default=0)
     return path.stat().st_mtime >= newest
 

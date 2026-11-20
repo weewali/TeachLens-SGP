@@ -30,15 +30,16 @@ causes, and never claims to measure inner states such as attention, engagement, 
      q-values over 9 hypotheses fixed in advance and over exploratory pairs).
    - Compare students during each instructor activity with the rest of the lecture (HAC errors, Bonferroni).
 6. **Write feedback an instructor can act on.** Up to three positive and three negative points in plain English,
-   without statistical jargon, always rewritten by Claude Opus 5.5 and checked automatically against the measured
-   numbers; the rule-based text is kept, with the reason shown, whenever the rewrite fails.
+   without statistical jargon, written by Claude Opus 5.5 from the measured facts and checked automatically against them;
+   when Claude cannot write it, the report shows the reason (an API key problem only as "Code=01", a billing problem only as "Code=02") and a "Try again" button.
 7. **Deliver it through a simple web application.** Instructors give the lecture a title, upload the two videos,
    follow the analysis stage by stage, and read a report in tabs: feedback, charts, timestamped moments and key terms, which can be downloaded as a PDF.
    Context is optional: the topic, the slides, activities in class that were not teaching (with their duration) and
    additional information.
 8. **Protect people and state limits openly.**
    - Processing stays local.
-   - Nobody is identified: temporary track IDs and anonymous seats; faces blurred in every report picture.
+   - Nobody is identified: temporary track IDs and anonymous seats; students' faces blurred in the report's pictures (not the
+     instructor's: the report is theirs).
    - Only anonymised numbers ever reach the language model.
    - Inner states are never claimed; associations are never presented as causes.
    - Every saved report file states its limitations **[TODO: decide whether the web page should say "not verified"]**.
@@ -56,10 +57,10 @@ causes, and never claims to measure inner states such as attention, engagement, 
 | 3 Observable indicators | Done (rules); accuracy not yet measured | Rule outputs on scenario lessons and a real lecture; no human labels yet |
 | 4 Shared evidence format | Done | Lesson folders with events, summaries, windows and `facts.json` |
 | 5 Association analysis | Done | Lag analysis and "during each activity" comparisons; no lesson so far gives a confirmed link (all were short) |
-| 6 Plain-English feedback | Done (rules + always-on AI rewrite with fallback); first real AI call pending | Offline tests of the checks with simulated answers |
-| 7 Web application | Done (local) | Upload, progress by stage, tabbed report, PDF download, delete; 30 automated web tests. Activities are stored but not used **[TODO]** |
+| 6 Plain-English feedback | Done (Claude writes it, with code checks); first real call pending | Offline tests of the checks with simulated answers |
+| 7 Web application | Done (local) | Upload, progress by stage, tabbed report, PDF download, delete; 35 automated web tests. Activities are stored but not used **[TODO]** |
 | 8 Privacy and honesty | Done in design and code | Local processing, anonymous IDs and seats, blurred faces, word checks |
-| 9 Verification | Partly done | 210 automated tests pass (170 team pipeline, 40 report stage and web app); human-labelled accuracy **[TODO]** |
+| 9 Verification | Partly done | 217 automated tests pass (170 team pipeline, 47 report stage and web app); human-labelled accuracy **[TODO]** |
 
 ## The positive side of the project
 
@@ -77,7 +78,7 @@ causes, and never claims to measure inner states such as attention, engagement, 
 ### For students
 
 - **No student is identified or graded.** Students are temporary track IDs and anonymous seats, no faces are
-  stored or matched, faces are blurred in the report's pictures, and nothing is reported about any named student.
+  stored or matched, their faces are blurred in the report's pictures, and nothing is reported about any named student.
 - **Benefit from better-informed teaching.** For example, a long stretch of explanation with no hand raises is pointed
   out together with a simple suggestion: ask a short question.
 
@@ -86,7 +87,7 @@ causes, and never claims to measure inner states such as attention, engagement, 
 - **Supports teaching development.** It adds observable evidence to existing quality processes such as student
   surveys and peer observation.
 - **Low cost and practical.** Two static cameras or phones on tripods and an ordinary laptop. Pretrained models only,
-  so no costly training dataset is needed, and the AI rewrite costs about USD 0.04 per report.
+  so no costly training dataset is needed, and Claude's feedback costs about USD 0.04 per report.
 - **Reproducible and reusable.** Every result is saved as plain files (events, tables, facts), so a report can be
   rebuilt or re-checked without processing the video again. Since 20 November 2026 the team's work forms one
   modular pipeline.

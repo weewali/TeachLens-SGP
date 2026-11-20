@@ -1,7 +1,7 @@
 """Report model: everything the instructor's report page shows, gathered from a lesson folder's saved files.
 
 Nothing is recomputed from video, so the page can be rebuilt at any time. Sources (outputs/lessons/<stamp>_<id>/):
-    final_feedback_report.txt   positive and negative points (the checked AI rewrite, or the rule-based points)
+    final_feedback_report.txt   positive and negative points, written by Claude and checked (absent if it failed)
     report_status.json          who wrote them, and why the AI rewrite was not used when it failed
     facts.json                  the key terms (its glossary) and the lesson length
     fusion/windows.csv, student/events.jsonl, student/summary.json   the charts and the moments
@@ -56,14 +56,17 @@ def _json(path):
 
 
 def report_source(lesson):
-    """Who wrote the points. AI text is disclosed; when the AI rewrite was not used, the reason is shown (user
-    decision 2026-11-20: tell me if an error occurred, with why)."""
+    """Whether Claude wrote the feedback (disclosed with a label), or why there is none (user decisions 2026-11-20:
+    Claude writes the feedback, no rule-based text, and an error is shown with its reason, except an API key problem,
+    which is shown only as its code, e.g. "Code=01")."""
     status = _json(lesson / "report_status.json")
-    if status.get("source") == "llm":
-        return {"kind": "llm", "label": "Feedback written with AI from the measured results and checked automatically",
-                "problem": None}
-    return {"kind": "rules", "label": None,
-            "problem": status.get("reason") or "The AI step has not run for this lecture."}
+    if status.get("source") == "llm" and (lesson / "final_feedback_report.txt").exists():
+        return {"kind": "llm", "label": "Feedback written by Claude from the measured results and checked automatically",
+                "problem": None, "code": None}
+    if status.get("code"):
+        return {"kind": "none", "label": None, "problem": f"Code={status['code']}", "code": status["code"]}
+    return {"kind": "none", "label": None, "code": None,
+            "problem": status.get("reason") or "Claude has not written the feedback for this lecture yet."}
 
 
 def moments(lecture, windows_table=None, window=5.0):
@@ -86,7 +89,8 @@ def moments(lecture, windows_table=None, window=5.0):
 def build_report(lecture):
     """Everything report.html needs, as plain Python data."""
     lesson = lecture.lesson_dir
-    feedback = parse_feedback((lesson / "final_feedback_report.txt").read_text(encoding="utf-8"))
+    final = lesson / "final_feedback_report.txt"
+    feedback = parse_feedback(final.read_text(encoding="utf-8")) if final.exists() else         {"overview": None, "positive": [], "negative": [], "note": None}
     facts = _json(lesson / "facts.json")
     found = moments(lecture)
     context = lecture.context()
@@ -105,6 +109,48 @@ def build_report(lecture):
         "moments": found,
         "moment_kinds": [(key, label) for key, label in MOMENT_LABELS.items() if any(m["kind"] == key for m in found)],
         # the key terms: words the page uses, in plain language (keys like "evidence.strength" are left out)
-        "glossary": {term: meaning for term, meaning in facts.get("glossary", {}).items()
-                     if "." not in term and term not in DATA_TERMS},
+        "glossary": key_terms(facts),
     }
+
+
+# Words the report page and the PDF use, in plain language (user request 2026-11-20: more key terms). Observable
+# postures and objects only; none of them measures attention, understanding or sleep.
+REPORT_TERMS = {
+    "students in view": "The students the student camera could see clearly at that moment. Percentages are shares of "
+                        "them, not of everyone in the room.",
+    "facing the front": "A student whose head and face point toward the front of the room, or toward a classmate who "
+                        "is answering.",
+    "phone seen": "A phone detected in a student's hand, or a head held down long enough that a phone is likely. A "
+                  "phone can also be used for course work.",
+    "head down": "A student's head tilted down, for example to read, write or look at a phone.",
+    "dozing posture": "Eyes closed or the head resting down for a while, as the camera sees it. Someone thinking with "
+                      "their eyes closed looks the same.",
+    "hand raised": "A hand lifted with an open palm, or a wrist held clearly above the head.",
+    "facing the class": "You, the instructor, turned toward the students, as seen by the instructor camera.",
+    "at the board or screen": "You working at the board or the screen. Only measured when the room's board and screen "
+                              "areas have been marked.",
+    "out of the camera's view": "A 5-second part of the lecture in which the instructor camera saw you for less than "
+                                "half of the time: you had walked out of its view, were hidden, or could not be told "
+                                "apart from someone else.",
+    "moment": "A stretch of time in which the student camera saw a hand raised, a phone or a dozing posture, with the "
+              "seat where it happened.",
+    "seat": "An anonymous place where a student usually sat, learnt from the video. Seat numbers are not names; row 1 "
+            "is the row nearest the student camera.",
+    "30-second average": "A share averaged over 30 seconds (six 5-second parts), so short jumps do not hide the trend.",
+    "95% range": "Where the average would most likely fall if the same lecture were recorded again. A wide range means "
+                 "the average is uncertain.",
+    "unlikely to be chance": "The difference passed a statistical check that allows for neighbouring moments being "
+                             "alike and for the number of comparisons made.",
+    "could easily be chance": "The difference did not pass that check. Treat it as something to look at, not as a "
+                              "finding.",
+}
+
+
+def key_terms(facts):
+    """The analysis's own definitions (facts.json glossary: on task, off task, seated ...) followed by the words the
+    report uses (REPORT_TERMS); the data-only entries ("window", "evidence.strength" ...) are left out."""
+    terms = {term: meaning for term, meaning in facts.get("glossary", {}).items()
+             if "." not in term and term not in DATA_TERMS}
+    for term, meaning in REPORT_TERMS.items():
+        terms.setdefault(term, meaning)
+    return terms

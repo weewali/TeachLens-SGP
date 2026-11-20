@@ -14,9 +14,16 @@ pipeline (System A) and then the report stage:
    --local-config <room> --no-side-by-side`: lines the cameras up by their recording times, analyses each camera
    (YOLO26n-pose + ByteTrack, MediaPipe face and hand models, the phone/book detector), links the cameras, runs the
    fusion and lag analysis, and writes `facts.json` (docs/lesson_pipeline.md).
-2. `scripts/report_lesson.py --name <id>`: adds the "during each activity" comparisons, writes `tables/`, the
-   rule-based points, and always asks Claude to rewrite them (src/reporting/feedback.py, llm_report.py). If the
-   rewrite fails, the rule-based points are shown and the page says why.
+2. `scripts/report_lesson.py --name <id>`: adds the "during each activity" comparisons, writes `tables/`, and has
+   Claude write the positive and negative points from facts.json (src/reporting/feedback.py, llm_report.py). There
+   is no rule-based text: if Claude cannot write them, the page says why and offers "Try again" (report step only).
+   **Code=01** on the page means an API key problem (no key in `.env`, or the key was rejected or not allowed):
+   check `.env`, restart the web app, then press "Try again". **Code=02** means a billing problem of the key's
+   account (credit balance too low, spend limit reached, account on hold): add credits or raise the limit in the
+   Claude Console, then press "Try again". The full reason is in the lesson's `report_status.json`.
+
+At start-up `web/app.py` reads the private `.env` file (copy `.env.example`; never uploaded) so the API key is set
+every time, and prints whether a key was found (never the key itself).
 
 The model files must be in `models/` (pose, detection, face, hands; see AGENTS.md); nothing is ever downloaded:
 the job sets `YOLO_AUTOINSTALL=False` and `YOLO_OFFLINE=True`.
@@ -25,7 +32,7 @@ the job sets `YOLO_AUTOINSTALL=False` and `YOLO_OFFLINE=True`.
 
 | Variable | Meaning |
 |---|---|
-| `ANTHROPIC_API_KEY` | The organisation's key for the AI rewrite, which always runs: about 4 US cents per lecture with the default model. It sends only `facts.json` (numbers; never video, slides or names). Without a key the rule-based points are used and the report says so. |
+| `ANTHROPIC_API_KEY` | The API key Claude's feedback is charged to (about 4 US cents per lecture with opus); put it in `.env`. It sends only `facts.json` (numbers; never video, slides or names). Without a key the report has no written feedback and shows "Code=01". |
 | `TEACHLENS_LLM_MODEL` | `opus` (default), `sonnet` or `haiku` |
 | `TEACHLENS_ROOM_CONFIG` | Room file with the board, screen and desk areas (`configs/*.yaml`); `none` (default) = those are not measured |
 | `TEACHLENS_OUTPUTS` | Output root (default `outputs/`) |
@@ -52,7 +59,7 @@ Deleting a lecture removes exactly these.
 | Model | `web/models/report.py` | Gathers the report page's data from the lesson folder (no video is reprocessed) |
 | Model | `web/models/stat_charts.py` | The lecture timeline (students on task per 5-second window, your activity, moments) and the comparison chart, from `fusion/windows.csv` and `src/analysis/activity_comparison.py` |
 | Model | `web/models/pdf.py` | "Download PDF": a self-contained print version of the report, printed by a hidden local browser to `report.pdf` in the lesson folder (made again only when the report changes) |
-| Model | `web/models/charts.py` | Instructor Movement and Student Seats heatmaps over a frame of each video, with every head pixelated (also people the analysis did not track, found with the local pose model) |
+| Model | `web/models/charts.py` | Instructor Movement and Student Seats heatmaps over a frame of each video, with every student's head pixelated (also people the analysis did not track, found with the local pose model); the instructor is not blurred; seats used for under a minute are not drawn |
 | View | `web/views/templates/`, `static/` | Pages: lecture list, upload form, progress, report (Feedback, Charts, Moments, Key terms), delete confirmation |
 | Controller | `web/controllers/lectures.py` | Routes; refuses a delete sent from another website |
 

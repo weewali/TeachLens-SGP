@@ -46,18 +46,21 @@ os.makedirs(lesson, exist_ok=True)
 open(os.path.join(lesson, "facts.json"), "w").write("{}")
 """
 
-# Stands in for scripts/report_lesson.py. FAKE_AI=llm in the environment = the AI rewrite passed its checks.
+# Stands in for scripts/report_lesson.py. FAKE_AI=llm in the environment = Claude wrote the feedback; otherwise it
+# failed as if no API key were set (no feedback, only the reason).
 FAKE_REPORT = """
 import glob, json, os, sys
 args = sys.argv[1:]
 name, out = args[args.index("--name") + 1], args[args.index("--output-dir") + 1]
 lesson = sorted(glob.glob(os.path.join(out, "lessons", "*_" + name)))[-1]
-print("[6/7] Writing the report", flush=True)
-print("[7/7] Plain-language rewrite (AI)", flush=True)
-open(os.path.join(lesson, "final_feedback_report.txt"), "w").write(
-    "positive points:\\n\\n- Made up.\\n\\nnegative points:\\n\\n- Also made up.\\n")
+print("[6/7] Preparing the facts and comparisons", flush=True)
+print("[7/7] Writing the feedback with Claude", flush=True)
+if os.environ.get("FAKE_AI") == "llm":
+    open(os.path.join(lesson, "final_feedback_report.txt"), "w").write(
+        "positive points:\\n\\n- Made up.\\n\\nnegative points:\\n\\n- Also made up.\\n")
 status = {"source": "llm", "reason": None} if os.environ.get("FAKE_AI") == "llm" else \\
-    {"source": "rules", "reason": "No Claude API key is set on this computer (ANTHROPIC_API_KEY). Nothing was sent."}
+    {"source": "none", "reason": "No Claude API key is set on this computer (ANTHROPIC_API_KEY). Nothing was sent.",
+     "code": "01"}
 json.dump(status, open(os.path.join(lesson, "report_status.json"), "w"))
 """
 
@@ -138,17 +141,18 @@ class PageTests(WebTestCase):
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
         self.assertNotIn("<footer", page)
-        for expected in ("Positive points", "Negative points", "While you faced the class", "Phone seen",
+        for expected in ("Positive points", "Negative points", "Students raised their hands 5 times", "Phone seen",
                          "Dozing posture", "Hand raised", '<h3 class="chart-title">Instructor Movement</h3>',
                          '<h3 class="chart-title">Student Seats</h3>', "What the words in this report mean",
                          '<a href="#terms">Key terms</a>', '<section id="terms" class="tab-panel terms-panel">',
-                         "<dt>on task</dt>", "05:00 of lecture", "✗", '<nav class="tabs"',
+                         "<dt>on task</dt>", "<dt>dozing posture</dt>", "<dt>95% range</dt>",
+                         "<dt>unlikely to be chance</dt>", "05:00 of lecture", "✗", '<nav class="tabs"',
                          '<section id="feedback" class="tab-panel is-active">',
                          '<section id="charts" class="tab-panel charts-panel">', '<section id="moments" class="tab-panel">',
                          '<span class="tab-count">', "uaeu-logo.svg", "Over the lecture", 'class="chart-data"',
                          "Show the numbers", "Students during each of your activities", "compare-bar act-explaining",
                          # the AI rewrite always runs; when it fails, the page says why (user decision 2026-11-20)
-                         "The AI rewrite was not used", "No Claude API key is set on this computer"):
+                         "Feedback written by Claude from the measured results"):
             self.assertIn(expected, page)
         for developer_detail in (".jsonl", "evidence.strength", "fusion.json", "T_facing_class", "S_on_task", "q-value",
                                  "Links over time", 'href="#links"', "<figcaption><strong>", 'class="note"',
@@ -226,6 +230,7 @@ class PageTests(WebTestCase):
             page = self.client.get("/lectures/demo_lecture").get_data(as_text=True)
             self.assertIn('href="/lectures/demo_lecture/report.pdf"', page)
             self.assertIn("Download PDF", page)
+            self.assertNotIn(" download>", page)      # an error must show as a page, never be saved as a file
             response = self.client.get("/lectures/demo_lecture/report.pdf")
             self.assertEqual((response.status_code, response.mimetype), (200, "application/pdf"))
             self.assertIn('filename="TeachLens report - Demo lecture (made-up data).pdf"',
@@ -234,9 +239,12 @@ class PageTests(WebTestCase):
             response.close()
             html = printed[0]
             for embedded in ("<style>", "data:image/png;base64,", "data:image/svg+xml;base64,", 'class="pdf"',
-                             "<th>Seats (times)</th>", "While you faced the class"):
+                             "<th>Seats (times)</th>", "Students raised their hands 5 times",
+                             'class="card chart print-chart"',
+                             "(a 30-second average", " moments are listed below."):
                 self.assertIn(embedded, html)
-            for external in ('src="/static', 'href="/static', "/charts/", "Download PDF"):
+            for external in ('src="/static', 'href="/static', "/charts/", "Download PDF",
+                             "Show the numbers", "Point at the chart", 'class="timeline-plot"'):   # nothing to click on paper
                 self.assertNotIn(external, html)      # self-contained: the browser loads nothing from the server
             self.client.get("/lectures/demo_lecture/report.pdf").close()
             self.assertEqual(len(printed), 1)         # unchanged report: the saved PDF is served again
@@ -247,8 +255,36 @@ class PageTests(WebTestCase):
             response = self.client.get("/lectures/demo_lecture/report.pdf")
             self.assertEqual(response.status_code, 503)
             self.assertIn("Save as PDF", response.get_data(as_text=True))
+            config["PDF_BROWSER"] = sys.executable
+            with mock.patch("web.controllers.lectures.render_template", side_effect=[RuntimeError("template"), "x"]):
+                response = self.client.get("/lectures/demo_lecture/report.pdf")   # any failure: a readable page
+            self.assertEqual(response.status_code, 503)
         finally:
             config.update(PDF_BROWSER=None, PDF_RUNNER=None)
+
+    def test_every_moment_is_in_the_pdf(self):
+        from web.models import pdf
+        moments = [{"kind": "phone_use", "seat": "seat 1", "seconds": s, "duration": 1, "behaviour": "Phone seen",
+                    "time": "", "end": "", "activity": "facing the class"} for s in (5, 7, 30)]
+        moments.append({"kind": "phone_use", "seat": "seat 2", "seconds": 6, "duration": 2, "behaviour": "Phone seen",
+                        "time": "", "end": "", "activity": "facing the class"})
+        rows = pdf.joined_moments(moments)
+        self.assertEqual([(r["seat"], r["_count"], r["seconds"], r["end"]) for r in rows],
+                         [("seat 1", 2, 5, "00:08"), ("seat 2", 1, 6, "00:08"), ("seat 1", 1, 30, "00:31")])
+        self.assertEqual(rows[0]["behaviour"], "Phone seen (2 times)")
+        self.assertEqual(sum(r["_count"] for r in rows), len(moments))   # nothing is left out
+
+    def test_paper_figures(self):
+        from web.models import print_charts
+        with tempfile.TemporaryDirectory() as directory:
+            make_demo_lesson(directory)
+            lecture = Lecture("demo_lecture", Path(directory))
+            timeline = print_charts.timeline_png(stat_charts.timeline(lecture)["data"])
+            bars = print_charts.comparison_png(stat_charts.comparison_values(lecture)[0])
+            for png in (timeline, bars):
+                self.assertEqual(png[1:4], b"PNG")
+        self.assertIsNone(print_charts.timeline_png(None))
+        self.assertIsNone(print_charts.comparison_png([]))
 
     def test_report_lists_the_activities_the_instructor_marked(self):
         context = {"name": "Demo", "activities": [{"type": "quiz", "minutes": 15}, {"type": "break", "minutes": 1},
@@ -272,10 +308,27 @@ class JobTests(WebTestCase):
         self.jobs.wait(30)
         status = self.client.get("/lectures/Week_5/status").get_json()
         self.assertEqual((status["state"], status["stage"]), ("done", 7))
-        self.assertIn("[7/7] Plain-language rewrite (AI)", status["log"])
+        self.assertIn("[7/7] Writing the feedback with Claude", status["log"])
         self.assertTrue(status["has_report"])
         self.assertIs(status["llm_ok"], False)
-        self.assertIn("Reason: No Claude API key is set", status["llm_result"])   # the user is told why
+        self.assertEqual(status["llm_result"], "Error, Code=01")   # an API key problem: only its code (progress page)
+        page = self.client.get("/lectures/Week_5").get_data(as_text=True)          # charts etc., but no points
+        self.assertIn("<p>Error, Code=01</p>", page)                  # the short banner (user request 2026-11-20)
+        self.assertIn("No analysis done yet.", page)
+        self.assertNotIn("API key", page)
+        self.assertIn('action="/lectures/Week_5/rewrite"', page)
+        self.assertNotIn("Positive points", page)
+        with mock.patch.dict("os.environ", {"FAKE_AI": "llm"}):                   # Try again: only the report step
+            self.assertEqual(self.client.post("/lectures/Week_5/rewrite").status_code, 302)
+            self.jobs.wait(30)
+        status = self.client.get("/lectures/Week_5/status").get_json()
+        self.assertEqual((status["state"], status["llm_ok"]), ("done", True))
+        self.assertFalse(any("student_view: analyzing" in line for line in status["log"]))   # videos not re-analysed
+        page = self.client.get("/lectures/Week_5").get_data(as_text=True)
+        self.assertIn("Made up.", page)
+        self.assertNotIn("Claude could not write the feedback", page)
+        self.assertEqual(self.client.post("/lectures/Week_5/rewrite", headers={"Sec-Fetch-Site": "cross-site"}).status_code,
+                         403)                                                       # it costs money: own pages only
         lecture = LectureRepository(self.base).get("Week_5")
         self.assertEqual(lecture.context()["topic"], "Recursion")
         self.assertEqual(lecture.context()["activities"], [{"type": "quiz", "minutes": 15}])
@@ -283,7 +336,7 @@ class JobTests(WebTestCase):
         self.assertEqual(lecture.lesson_dir.name, "2026-11-20_1300_Week_5")
         page = self.client.get("/lectures/Week_5/progress").get_data(as_text=True)
         for stage in ("Analysing the student camera", "Lagged analysis: linking instructor actions to student behaviour",
-                      "Writing the feedback in plain language (AI)"):
+                      "Claude writes the feedback"):
             self.assertIn(stage, page)
 
     def test_a_passing_ai_rewrite_is_reported(self):
@@ -458,6 +511,27 @@ class DeleteTests(WebTestCase):
 
 
 class ModelTests(unittest.TestCase):
+    def test_claude_is_set_up_from_the_private_env_file(self):
+        from web import app as app_module
+        with tempfile.TemporaryDirectory() as directory:
+            env_file = Path(directory) / ".env"
+            env_file.write_text("# private\nANTHROPIC_API_KEY=made-up-key-123\nexport TEACHLENS_LLM_MODEL='haiku'\n"
+                                "OTHER_SECRET=not-read\n", encoding="utf-8")
+            environ = {"TEACHLENS_ROOM_CONFIG": "set-in-terminal"}
+            self.assertEqual(app_module.load_env_file(env_file, environ), ["ANTHROPIC_API_KEY", "TEACHLENS_LLM_MODEL"])
+            self.assertEqual((environ["ANTHROPIC_API_KEY"], environ["TEACHLENS_LLM_MODEL"]), ("made-up-key-123", "haiku"))
+            self.assertNotIn("OTHER_SECRET", environ)                       # only the app's own settings
+            env_file.write_text("TEACHLENS_ROOM_CONFIG=from-file\n", encoding="utf-8")
+            app_module.load_env_file(env_file, environ)
+            self.assertEqual(environ["TEACHLENS_ROOM_CONFIG"], "set-in-terminal")   # the terminal wins
+            message = app_module.claude_status(environ)
+            self.assertIn("API key found", message)
+            self.assertNotIn("made-up-key-123", message)                    # the key is never shown
+            self.assertIn("NO API key", app_module.claude_status({}))
+            self.assertEqual(app_module.load_env_file(Path(directory) / "missing.env", {}), [])
+            example = ROOT / ".env.example"                              # a plain copy of the example sets no key
+            self.assertEqual(app_module.load_env_file(example, {}), ["TEACHLENS_LLM_MODEL"])
+
     def test_feedback_text_is_parsed(self):
         parsed = report_model.parse_feedback("An overview.\n\npositive points:\n\n- Good one.\n\nnegative points:\n\n"
                                              "- No clear negative point was found in this analysis.\n\nNote: careful.")
@@ -466,10 +540,18 @@ class ModelTests(unittest.TestCase):
     def test_report_source_shows_why_the_ai_was_not_used(self):
         with tempfile.TemporaryDirectory() as directory:
             lesson = Path(directory)
-            self.assertEqual(report_model.report_source(lesson)["problem"], "The AI step has not run for this lecture.")
-            (lesson / "report_status.json").write_text(json.dumps({"source": "rules", "reason": "No network."}))
-            self.assertEqual(report_model.report_source(lesson), {"kind": "rules", "label": None, "problem": "No network."})
+            self.assertIn("has not written the feedback", report_model.report_source(lesson)["problem"])
+            (lesson / "report_status.json").write_text(json.dumps({"source": "none", "reason": "No network."}))
+            self.assertEqual(report_model.report_source(lesson),
+                             {"kind": "none", "label": None, "problem": "No network.", "code": None})
+            (lesson / "report_status.json").write_text(json.dumps({"source": "none", "code": "01",
+                                                                   "reason": "Claude rejected the API key."}))
+            self.assertEqual(report_model.report_source(lesson)["problem"], "Code=01")   # never the key reason
+            (lesson / "report_status.json").write_text(json.dumps({"source": "none", "code": "02",
+                                                                   "reason": "Your credit balance is too low."}))
+            self.assertEqual(report_model.report_source(lesson)["problem"], "Code=02")   # never the billing reason
             (lesson / "report_status.json").write_text(json.dumps({"source": "llm", "reason": None}))
+            (lesson / "final_feedback_report.txt").write_text("positive points:\n\n- A point.\n")
             source = report_model.report_source(lesson)
             self.assertEqual((source["kind"], source["problem"]), ("llm", None))
 
@@ -561,6 +643,29 @@ class FaceBlurTests(unittest.TestCase):
         head = out[60:120, 90:190]
         self.assertLessEqual(len(np.unique(head.reshape(-1, 3), axis=0)), 49)   # a few flat blocks, not the face
         self.assertTrue((charts.pixelate(image, []) == image).all())
+
+    def test_seats_used_only_briefly_are_not_drawn(self):
+        summary = {"analyzed_duration_seconds": 600, "seats": {"seats": [
+            {"seat_id": "seat_01", "occupied_seconds": 590}, {"seat_id": "seat_07", "occupied_seconds": 3},   # someone passing
+            {"seat_id": "seat_08", "occupied_seconds": 59}, {"seat_id": "seat_09"}]}}                  # no time given: kept
+        self.assertEqual([s["seat_id"] for s in charts.real_seats(summary)], ["seat_01", "seat_09"])
+
+    def test_the_instructor_is_not_blurred_but_everyone_else_is(self):
+        frame = np.zeros((90, 160, 3), dtype=np.uint8)
+        teacher_box, student_box = (0.25, 0.3, 0.35, 0.9), (0.6, 0.7, 0.8, 1.0)   # the demo instructor's box
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(charts, "grab_frame", return_value=(frame, 0.0)) as grab, \
+                mock.patch.object(charts, "people_in", return_value=[teacher_box, student_box]), \
+                mock.patch.object(charts, "pixelate", wraps=charts.pixelate) as blurred:
+            lesson = make_demo_lesson(directory, run_report=False)
+            charts.blurred_background(lesson, "instructor", blur_teacher=False)
+            areas = blurred.call_args.args[1]
+            self.assertEqual(areas, charts.head_areas([student_box]))          # the student only
+            self.assertEqual(grab.call_args.args[2], 0.0)                     # the frame of the instructor's first sample
+            charts.blurred_background(lesson, "instructor")                   # the default blurs everyone
+            areas = blurred.call_args.args[1]
+            self.assertIn(charts.head_areas([teacher_box])[0], areas)
+            self.assertIn(charts.head_areas([student_box])[0], areas)
 
     def test_a_failure_never_shows_the_unblurred_frame(self):
         frame = np.zeros((90, 160, 3), dtype=np.uint8)

@@ -21,15 +21,16 @@ and web application sit on it. The system:
    (HAC test, Bonferroni correction).
 5. Writes up to three positive and three negative points by rule, then always has Claude Opus 5.5 rewrite them. The
    model sees only anonymised numbers, and code checks every answer: numbers must match the measurements, and causal
-   or inner-state wording is rejected. If the rewrite fails, the rule-based points are shown together with the reason.
+   or inner-state wording is rejected. Claude writes the feedback; there is no rule-based text. If Claude cannot
+   write it (no key, no network, failed checks), the report shows the reason (an API key problem only as "Code=01", a billing problem only as "Code=02") and a "Try again" button.
 
 TeachLens is a hybrid system: pretrained deep-learning models for perception, transparent rules for behaviour,
 statistics for the links, and a language model for the wording. No model was trained by the team.
 
 A local Flask web application lets the instructor upload the videos (with an optional topic, slides, activities in
 class and their duration, and other information), follow the analysis stage by stage, and read the report in tabs:
-feedback, charts, timestamped moments and key terms, and download it as a PDF. Faces are blurred in every picture
-the report shows.
+feedback, charts, timestamped moments and key terms, and download it as a PDF. Students' faces are blurred in the
+report's pictures; the instructor, whose report it is, stays visible.
 
 **Results so far.**
 - The team's pipeline ran start to finish on seven scripted two-camera scenario lessons (1–10 minutes each) with no
@@ -39,7 +40,7 @@ the report shows.
   for 6 students) still need a human check.
 - Run time on this laptop's CPU is about 2.2 minutes of computing per lecture minute (more on battery power), so a
   one-hour lecture takes roughly two hours or more.
-- 210 automated tests pass (170 for the team's pipeline, 40 for the report stage and the web application).
+- 217 automated tests pass (170 for the team's pipeline, 47 for the report stage and the web application).
 
 **Limitations.** The detections have not been checked against human labels, so no accuracy figure can be claimed.
 All results so far come from short lessons; real lectures last 55–75 minutes. With many instructor–student pairs a
@@ -51,7 +52,7 @@ model has been made yet. Board and desk areas must be marked once per classroom 
 - Human labelling with the built-in review sheets, then tuning the behaviour-rule thresholds against those labels
   (checked on lectures not used for tuning); the statistical settings stay fixed.
 - Full-length recorded lectures (55–75 minutes), with consent.
-- The first real AI rewrite.
+- The first real Claude report (the key goes into the private `.env` file the web app reads at start-up).
 - Marking the board, screen and desk areas of the classroom.
 - Deciding how to use the activities instructors note **[TODO]**.
 

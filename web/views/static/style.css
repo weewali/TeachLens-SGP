@@ -285,4 +285,23 @@ code { font-size: .88em; word-break: break-all; }
 /* the PDF (web/models/pdf.py): every section from the start, so the charts are drawn at full width before printing */
 .pdf .tab-panel { display: block !important; }
 .pdf .tabs, .pdf .topbar nav, .pdf .filters { display: none; }
-@media print { .no-print { display: none !important; } }
+@media print {
+  .no-print { display: none !important; }
+  /* a printed / PDF report reads like a document: A4, report-sized type (every rem size follows the root size) */
+  @page { size: A4; margin: 14mm 13mm 16mm; }
+  html { font-size: 9.5pt; }
+  body { font-size: 9.5pt; line-height: 1.4; }
+  .page { max-width: none; padding: 0; }
+  .brand-logo { height: 30px; width: auto; }
+  .card { padding: .8rem 1rem; margin-bottom: .8rem; }
+  .points li { margin-bottom: .35rem; }
+  .table th, .table td { padding: .25rem .45rem; }
+  /* never split a card, a chart or a table row across pages, and never end a page with a heading */
+  .card, figure, .chart, .points, .compare-row, .table tr, .glossary dt, .glossary dd, .banner { break-inside: avoid; }
+  h1, h2, h3, .panel-title, .chart-title, .chart-sub, .legend { break-after: avoid; }
+  .charts { display: block; }
+  .charts > .chart { display: inline-block; vertical-align: top; width: 49%; }
+  .charts > .chart + .chart { margin-left: 1.5%; }
+  .chart img { max-height: 70mm; object-fit: contain; }
+  .print-chart img { width: 100%; max-height: 100mm; }
+}

@@ -6,8 +6,11 @@ tables or any name: it only gets facts.json. Everything it writes is checked in 
 number must come from a cited fact, the right direction, no causal or inner-state wording, hedges for weak
 evidence and for detections nobody has checked). One retry with the failures listed.
 
-The rewrite always runs (user decision 2026-11-20), but a failure never stops the report: `rewrite()` returns
-the reason (no API key, no network, rejected text, ...) and the rule-based points stay in place.
+Claude writes the feedback for every lecture (user decisions 2026-11-20: always on, and no rule-based text). A
+failure never crashes the stage: `rewrite()` returns the reason (no API key, no network, rejected text, ...), no
+feedback is written, and the web app shows the reason with a "Try again" button. A problem with the API key (missing,
+rejected, not allowed) is shown only as "Code=01", a billing problem of the key's account (credit balance too low,
+spend limit, on hold) only as "Code=02" (user requests 2026-11-20); the reason stays in the lesson's files.
 """
 import hashlib
 import json
@@ -117,8 +120,38 @@ NO_POSITIVE = "No clear positive point was found in this analysis."
 NO_NEGATIVE = "No clear negative point was found in this analysis."
 
 
+# Problems the web app shows only as a code, never with the reason (user requests 2026-11-20):
+KEY_PROBLEM = "01"       # the API key: missing, rejected, not allowed, or the sign-in could not be loaded
+BILLING_PROBLEM = "02"   # the account behind the key: credit balance too low, billing, spend limit, on hold
+BILLING_ERRORS = {"EnforcedSpendLimitReachedError", "OrganizationOnHoldError"}   # anthropic SDK 2.x classes
+BILLING_WORDS = ("credit balance", "billing", "spend limit")
+
+
 class RewriteUnavailable(Exception):
-    """The rewrite could not run (no key, no network, a refused request ...); the message says why."""
+    """The rewrite could not run (no key, no network, a refused request ...); the message says why. `code` is set
+    only for a problem with the API key (KEY_PROBLEM) or the account's billing (BILLING_PROBLEM)."""
+
+    def __init__(self, message: str, code: str | None = None):
+        super().__init__(message)
+        self.code = code
+
+
+def status_problem(error: Any) -> RewriteUnavailable:
+    """Plain words, and a code for key and billing problems, for an error status returned by the Claude API."""
+    status, kind = getattr(error, "status_code", None), getattr(error, "type", None)
+    message = str(getattr(error, "message", None) or error)
+    if status == 401 or kind == "authentication_error":
+        return RewriteUnavailable("Claude rejected the API key.", KEY_PROBLEM)
+    if status == 402 or kind == "billing_error" or type(error).__name__ in BILLING_ERRORS or \
+            any(word in message.lower() for word in BILLING_WORDS):
+        return RewriteUnavailable(f"A billing problem with the API key's account: {message}", BILLING_PROBLEM)
+    if status == 403 or kind == "permission_error":
+        return RewriteUnavailable(f"The API key may not make this request: {message}", KEY_PROBLEM)
+    if status == 429:
+        return RewriteUnavailable("Claude is rate-limiting requests; try again in a minute.")
+    if status == 400:
+        return RewriteUnavailable(f"Claude rejected the request: {message}")
+    return RewriteUnavailable(f"Claude API error {status}: {message}")
 
 
 def unverified(fact: dict[str, Any], facts: dict[str, Any]) -> list[str]:
@@ -228,10 +261,10 @@ def call_claude(system: str, user: str, model: str = DEFAULT_MODEL) -> tuple[Any
     except ImportError as error:
         raise RewriteUnavailable("The anthropic package is not installed on this computer.") from error
     model_id, _, _, fallbacks = MODELS[model]
-    client = anthropic.Anthropic()
     request = dict(model=model_id, max_tokens=16000, system=system, messages=[{"role": "user", "content": user}],
                    output_config={"effort": EFFORT, "format": {"type": "json_schema", "schema": OUTPUT_SCHEMA}})
     try:
+        client = anthropic.Anthropic()   # inside: a sign-in profile that cannot be read fails here (CredentialsError)
         if fallbacks:   # if a safety classifier declines, retry on Anthropic's recommended model
             response = client.beta.messages.create(betas=["server-side-fallback-2026-07-01"], fallbacks="default",
                                                    **request)
@@ -240,16 +273,13 @@ def call_claude(system: str, user: str, model: str = DEFAULT_MODEL) -> tuple[Any
     except TypeError as error:   # raised locally, before any network traffic, when no credentials are set
         if "authentication method" in str(error):
             raise RewriteUnavailable("No Claude API key is set on this computer (ANTHROPIC_API_KEY). "
-                                     "Nothing was sent.") from error
+                                     "Nothing was sent.", KEY_PROBLEM) from error
         raise
-    except anthropic.AuthenticationError as error:
-        raise RewriteUnavailable("Claude rejected the API key.") from error
-    except anthropic.RateLimitError as error:
-        raise RewriteUnavailable("Claude is rate-limiting requests; try again in a minute.") from error
-    except anthropic.BadRequestError as error:
-        raise RewriteUnavailable(f"Claude rejected the request: {error.message}") from error
-    except anthropic.APIStatusError as error:
-        raise RewriteUnavailable(f"Claude API error {error.status_code}: {error.message}") from error
+    except getattr(anthropic, "CredentialsError", ()) as error:   # SDK 2.x: a sign-in profile that cannot be read
+        raise RewriteUnavailable(f"The Claude sign-in on this computer could not be loaded: {error}. Nothing was "
+                                 "sent.", KEY_PROBLEM) from error
+    except anthropic.APIStatusError as error:   # 401/403 key, 402/credit/spend limit billing, 429, 400, others
+        raise status_problem(error) from error
     except anthropic.APIConnectionError as error:
         raise RewriteUnavailable("Could not reach the Claude API (no internet connection?).") from error
     if response.stop_reason == "refusal":
@@ -270,15 +300,15 @@ def cache_key(facts: dict[str, Any], model: str) -> str:
 
 def rewrite(facts: dict[str, Any], folder: Path, *, model: str = DEFAULT_MODEL, fake_response: dict | None = None,
             use_cache: bool = True, caller=call_claude) -> dict[str, Any]:
-    """Rewrites the points with Claude and checks them. Returns {"source": "llm" | "rules", "reason", "text", ...}:
-    with "llm" the checked text is in "text"; with "rules" the rule-based report stays and "reason" says why.
+    """Has Claude write the points and checks them. Returns {"source": "llm" | "none", "reason", "text", ...}:
+    with "llm" the checked text is in "text"; with "none" no feedback was written and "reason" says why.
     Writes llm_output.json (every attempt, its cost and problems) and caches a passing answer by its input."""
     folder = Path(folder)
     key = cache_key(facts, model)
     cache_path = folder / "llm_cache" / f"{key}.json"
     record: dict[str, Any] = {"model": MODELS[model][0], "prompt_version": PROMPT_VERSION, "facts_hash": key,
                               "attempts": []}
-    output, problems, reason = None, [], None
+    output, problems, reason, code = None, [], None, None
     user = build_user_message(facts)
     if fake_response is not None:
         output = fake_response
@@ -305,16 +335,16 @@ def rewrite(facts: dict[str, Any], folder: Path, *, model: str = DEFAULT_MODEL, 
                 extra = "\n\nYour previous answer failed these checks. Fix them and answer again:\n- " + \
                         "\n- ".join(problems)
         except RewriteUnavailable as error:
-            reason = str(error)
+            reason, code = str(error), error.code
     record["output"] = output
     if reason is None and (problems or output is None):
-        reason = (f"The AI text failed the automatic checks {len(record['attempts'])} time(s), so the rule-based "
-                  "points were kept. First problem: " + (problems[0] if problems else "no answer."))
-    record["result"] = {"source": "rules" if reason else "llm", "reason": reason}
+        reason = (f"Claude's text failed the automatic checks {len(record['attempts'])} time(s), so it was not "
+                  "used. First problem: " + (problems[0] if problems else "no answer."))
+    record["result"] = {"source": "none" if reason else "llm", "reason": reason, "code": code}
     (folder / "llm_output.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
     if reason:
-        return {"source": "rules", "reason": reason, "problems": problems}
+        return {"source": "none", "reason": reason, "code": code, "problems": problems}
     if fake_response is None and not cache_path.exists():
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         cache_path.write_text(json.dumps(record, indent=2), encoding="utf-8")
-    return {"source": "llm", "reason": None, "text": render(output, facts)}
+    return {"source": "llm", "reason": None, "code": None, "text": render(output, facts)}

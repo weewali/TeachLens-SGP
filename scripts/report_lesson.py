@@ -1,9 +1,9 @@
 """Write the instructor report of an analysed lesson (after scripts/analyze_lesson.py).
 
 Adds the "during each activity" comparisons to the lesson's facts.json, writes tables/ (events.csv,
-activity_comparisons.csv) and the rule-based points, then always asks Claude to rewrite the points
-(src/reporting/feedback.py, src/reporting/llm_report.py). If the rewrite fails (no API key, no network, text
-that fails the checks), the rule-based points are kept and report_status.json says why.
+activity_comparisons.csv), then has Claude write the positive and negative points from the facts
+(src/reporting/feedback.py, src/reporting/llm_report.py). If Claude cannot (no API key, no network, text that
+fails the checks), no feedback is written and report_status.json says why.
 
 A real rewrite sends the lesson's facts.json (numbers only: no video, images or names) to Anthropic and costs
 about 4 US cents with the default model.
@@ -47,7 +47,8 @@ def main() -> int:
     fake = json.loads(args.fake_response.read_text(encoding="utf-8")) if args.fake_response else None
     status = report_lesson(lesson, model=args.model, fake_response=fake, use_cache=not args.no_cache,
                            log=lambda line: print(line, flush=True))
-    print(f"Report: {lesson / 'final_feedback_report.txt'} (written by {'the AI' if status['source'] == 'llm' else 'the rules'})")
+    if status["source"] == "llm":
+        print(f"Report: {lesson / 'final_feedback_report.txt'} (written by Claude, checked)")
     return 0
 
 

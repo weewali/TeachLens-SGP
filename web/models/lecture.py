@@ -146,11 +146,12 @@ class Lecture:
             return json.load(f)
 
     def has_report(self):
+        """True once the report step has run (facts and its status), whether or not Claude wrote the feedback."""
         lesson = self.lesson_dir
-        return bool(lesson and (lesson / "final_feedback_report.txt").exists() and (lesson / "facts.json").exists())
+        return bool(lesson and (lesson / "report_status.json").exists() and (lesson / "facts.json").exists())
 
     def analysed_at(self):
-        path = self.lesson_dir / "final_feedback_report.txt" if self.lesson_dir else None
+        path = self.lesson_dir / "report_status.json" if self.lesson_dir else None
         if path is None or not path.exists():
             return None
         return time.strftime("%Y-%m-%d %H:%M", time.localtime(path.stat().st_mtime))
@@ -194,7 +195,7 @@ class LectureRepository:
         def newest(lec):
             paths = [lec.input_dir / "context.json"]
             if lec.lesson_dir:
-                paths.append(lec.lesson_dir / "final_feedback_report.txt")
+                paths.append(lec.lesson_dir / "report_status.json")
             return max((p.stat().st_mtime for p in paths if p.exists()), default=0)
         return sorted(lectures, key=newest, reverse=True)
 

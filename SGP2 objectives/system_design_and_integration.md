@@ -17,7 +17,7 @@ application shows the result. Drawn by `scripts/make_pipeline_diagram.py`.*
 3. **Unknown is not zero.** Hidden or unreadable behaviour stays unknown and is left out of shares.
 4. **Associations, not causes.** Statistics allow for neighbouring moments being alike and for multiple testing.
 5. **Local and anonymous.** Video never leaves the computer. People are temporary track IDs and anonymous seats;
-   faces are blurred in every picture the report shows. Only anonymised numbers reach the language model.
+   students' faces are blurred in the report's pictures. Only anonymised numbers reach the language model.
 6. **Rebuildable.** Every report can be regenerated from the saved lesson folder without processing the video again.
 
 ## 2. Architecture
@@ -33,8 +33,8 @@ removed.
 | 3. Instructor camera | Instructor video | One frame per second; YOLO26n-pose at 1280 px + ByteTrack; the camera's single person is the instructor; rules | `instructor/` (same files) |
 | 4. Link the cameras | Both runs | Students who walk to the front, and the instructor walking into the student view, matched by time | `cross_camera.json` |
 | 5. Lagged analysis | Both event files | 5-second windows on real time; lag correlation (5–30 s) with a circular-shift test; Benjamini–Hochberg over 9 fixed hypotheses and over exploratory pairs; comparisons with HAC; lagged models; peri-event averages; `facts.json` for the report | `fusion/fusion.json`, `windows.csv`, `links.csv`, `facts.json` |
-| 6. Write the report | Windows, facts, events | Students during each instructor activity vs the rest (HAC, Bonferroni) added to `facts.json`; rule-based positive and negative points addressed to the instructor as "you"; CSV tables | `final_feedback_report_rules.txt`, `tables/events.csv`, `tables/activity_comparisons.csv` |
-| 7. AI rewrite (always) | `facts.json` | Claude Opus 5.5 rewrites the points; code checks numbers and wording; one retry; on any failure the rule-based points are kept and the reason is recorded | `final_feedback_report.txt`, `report_status.json`, `llm_output.json` |
+| 6. Write the report | Windows, facts, events | Students during each instructor activity vs the rest (HAC, Bonferroni) added to `facts.json`; CSV tables | `facts.json`, `tables/events.csv`, `tables/activity_comparisons.csv` |
+| 7. Claude writes the feedback | `facts.json` | Claude Opus 5.5 writes the positive and negative points for the instructor ("you"); code checks numbers and wording; one retry; on any failure no feedback is written and the reason is recorded (no rule-based text) | `final_feedback_report.txt`, `report_status.json`, `llm_output.json` |
 | Web application | Two videos and optional context | Upload, progress by stage, tabbed report, delete | `outputs/uploads/<lecture>/`, `outputs/web_jobs/` |
 | Human review (offline) | Lesson folder | Review sheets from the review videos; scoring | `outputs/validation/<lecture>/`, `facts.json` updated |
 
@@ -78,16 +78,20 @@ proxies, not measures of attention.
 - **Upload form:** required: a lecture title and the two videos. Optional: "Additional context" (topic, slides) and
   "Activities in class" (quiz or test, group or pair work, video, break, each with its duration in minutes) followed
   by additional information. The optional context is stored and shown, not yet used by the analysis **[TODO]**.
-- **Report page tabs:** Feedback (with a notice when the AI rewrite was not used, and why); Charts (the lecture
+- **Report page tabs:** Feedback (Claude's points, or the reason they are missing, shown as "Code=01" for an API key problem and "Code=02" for a billing problem, with a "Try again" button); Charts (the lecture
   timeline of students on task per 5 seconds, students during each of your activities with 95% ranges, Instructor
   Movement, Student Seats); Moments (hand raises, phones, dozing postures, with the seat and what you were doing);
   Key terms. A "Download PDF" button saves the whole report (all tabs, the blurred charts, a summary of the
-  moments and the first 40 of them) as `report.pdf`, printed by a hidden local browser (Edge or Chrome) from a
+  moments and the first 40 of them) as a document-style A4 `report.pdf` (report-sized type; no chart or table row is
+  split across pages; the two statistical charts are redrawn for paper as a simple line chart and a grouped bar
+  chart with values, and nothing that needs pointing or clicking is shown), printed by a hidden local browser (Edge or Chrome) from a
   self-contained copy of the page; nothing is downloaded or sent out, and the file is only made again when the
   report changes.
-- **Privacy in the pictures:** both heatmaps are drawn on a frame of the uploaded video with every head pixelated:
-  the people the analysis tracked, each seat's usual position, and anyone else the pose model finds in that frame.
-  If this fails, the chart is drawn without the frame, never over the unblurred picture.
+- **Privacy in the pictures:** both heatmaps are drawn on a frame of the uploaded video with every student's head
+  pixelated: the people the analysis tracked, each seat's usual position, and anyone else the pose model finds in
+  that frame. The instructor is not blurred (the report is theirs). If this fails, the chart is drawn without the
+  frame, never over the unblurred picture. Seats used for less than a minute (someone passing the camera) are not
+  drawn.
 - **Security:** the server listens only on 127.0.0.1; chart files are served by exact name; a delete sent from
   another website is refused; instructors never handle API keys.
 
@@ -111,7 +115,7 @@ proxies, not measures of attention.
 | Pretrained models with transparent rules | Training action models | No labelled classroom dataset; rules can be explained and tested. |
 | One frame per second, 5-second windows | Every frame | CPU time on a laptop; the cameras are only aligned to about 1 s anyway. |
 | Comparisons during each activity next to the lag analysis | The lag analysis alone | With many pairs in one lecture the lag analysis rarely passes its correction; the simpler comparison still gives the instructor checked, hedged points. |
-| AI rewrite always on, with code checks and a rule-based fallback | Optional AI, or free AI text | Readable feedback by default, while every number stays traceable and a failure never leaves the instructor without a report. |
+| Claude writes the feedback, checked in code; no rule-based text (20 November 2026) | Rule-based text, or free AI text | Readable feedback that still traces every number to the facts; a failure is shown honestly with its reason and can be retried. |
 | Fixed statistical settings; behaviour thresholds tuned later from human labels | Tuning everything on each lecture | Without labels there is no correct answer to tune towards; tuning the statistics on the data would produce false findings. |
 | Blurred faces in every report picture | The raw frame, or no picture | The instructor still sees the room and the seats, but nobody can be recognised. |
 | Local web application | Cloud hosting | Videos show real people. |

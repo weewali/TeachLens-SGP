@@ -29,23 +29,42 @@ Pipeline (one lecture):
 2. `scripts/report_lesson.py` (new 2026-11-20, `src/reporting/feedback.py`): adds "during each activity" comparisons
    (`src/analysis/activity_comparison.py`: teacher feature >= 0.5 of a window vs other windows, HAC p, Bonferroni,
    >= 5 windows each side) to facts.json as kind `activity_comparison` (idempotent, ids renumbered); writes
-   `tables/events.csv`, `tables/activity_comparisons.csv`, rule-based points (`final_feedback_report_rules.txt`, spoken
-   as "you"); then ALWAYS calls Claude (`src/reporting/llm_report.py`, moved from `main code/llm_report.py`, prompt
-   version 4, same checks: numbers from cited facts, direction, no causal/inner-state words, hedges, "not verified"
-   for unchecked detections via KIND_INDICATORS -> indicator_validation keys; one retry; cache by hash). On any
-   failure (no key, network, refusal, failed checks) the rules text is kept and `report_status.json` records
-   `{"source": "rules", "reason": ...}` (user: "tell me if an error occurred with why"); the web app shows the reason.
+   `tables/events.csv`, `tables/activity_comparisons.csv`; then Claude WRITES the feedback (`src/reporting/llm_report.py`,
+   moved from `main code/llm_report.py`, prompt version 4, same checks: numbers from cited facts, direction, no
+   causal/inner-state words, hedges, "not verified" for unchecked detections via KIND_INDICATORS -> indicator_validation
+   keys; one retry; cache by hash). **No rule-based text since 2026-11-20 (user: "no rule-based for report
+   generation")**: on any failure (no key, network, refusal, failed checks) no final_feedback_report.txt is written (a
+   stale one is deleted) and `report_status.json` = `{"source": "none", "reason": ..., "code": ...}`; the Feedback tab shows
+   the reason + a "Try again" button (POST /lectures/<id>/rewrite, own-site only, runs report_lesson only:
+   `JobRunner.start(report_only=True)`). **Shown only as a code** (user requests 2026-11-20: never mention the key
+   or the account on the page, the PDF, the progress page or its log): **Code=01** = API key problem (missing, 401,
+   403, unreadable sign-in profile `CredentialsError`); **Code=02** = billing of the key's account (402
+   billing_error, "credit balance", spend limit `EnforcedSpendLimitReachedError`, `OrganizationOnHoldError`); see
+   `llm_report.status_problem`. The banner then reads only "Error, Code=NN" with the Try again button and the hint
+   "No analysis done yet." (user wording 2026-11-20); the progress page and its log also say only "Error, Code=NN". The reason stays in report_status.json / llm_output.json. Other failures (network,
+   rate limit, failed checks) keep their plain reason. `Lecture.has_report` = facts.json + report_status.json.
+   **API key at start-up:** `web/app.py` (`__main__` only) reads the private `.env` (gitignored; template
+   `.env.example`; its placeholder `paste-the-key-here` is ignored; `.env` was created from it on 2026-11-20 and waits
+   for the user to paste the key): ANTHROPIC_API_KEY and TEACHLENS_* (terminal values win), prints "Claude: API key found" or how to
+   add it, never the key. Billed per call to the key's Console organization (~4 US cents/report with opus, ~0.1 cent
+   with haiku; estimates until the first real call, whose cost llm_output.json records). **Never write in the project
+   whose account pays** (user request 2026-11-20). Keys are made at platform.claude.com/settings/keys.
 3. Web app (`web/`, Flask MVC, design unchanged): job runs 1 then 2; stages 1-7 parsed from System A's log lines
-   (`STAGE_PATTERNS` in web/models/job.py) and report_lesson's `[6/7]`/`[7/7]`. Storage under `outputs/` (ignored):
-   `uploads/<id>/`, `lessons/<stamp>_<id>/`, `web_jobs/<id>.json`, `validation/<id>/`. Report tabs: Feedback (with an
-   "AI rewrite was not used ... Reason:" banner when it failed) | Charts | Moments | Key terms. Charts:
+   (`STAGE_PATTERNS` in web/models/job.py) and report_lesson's `[6/7]`/`[7/7]` (6 "Preparing the facts and
+   comparisons", 7 "Claude writes the feedback"). Storage under `outputs/` (ignored): `uploads/<id>/`,
+   `lessons/<stamp>_<id>/`, `web_jobs/<id>.json`, `validation/<id>/`. Report tabs: Feedback | Charts | Moments | Key
+   terms (18 terms: facts.json glossary + `REPORT_TERMS` in web/models/report.py). Charts:
    `stat_charts.py` (timeline of S_on_task per 5 s window + activity strip explaining/board/not_facing/out_of_view +
    moment lanes hand_raise/phone_use/dozing; comparison of On task / Phone / Head down per activity with 95% HAC
    ranges) and `charts.py` (Instructor Movement from teacher hip_center positions; Student Seats from summary.json
    seats, % facing the front = on_target/(on_target+off_target)). Both heatmaps sit on a frame of the uploaded video
    with every head pixelated: position boxes of the first 5 samples, each seat's median box, plus people found by
    the local pose model on that frame (catches untracked students in the instructor view); a box touching the
-   bottom edge is blurred whole; any failure = no background, never the raw frame.
+   bottom edge is blurred as tall as it is wide; any failure = no background, never the raw frame. **The instructor
+   is NOT blurred** (user request 2026-11-20): the instructor chart's frame is taken at the instructor's first
+   sample, the tracks ever labelled teacher are left out, and found people overlapping them (IoU >= 0.3) too.
+   Seats occupied < 60 s or < 10% of the lecture are not drawn (`real_seats`; on the real lecture 2 ghost seats at
+   the right edge, 3-4 s each, from someone passing close to the camera). CHART_STYLE 5.
 4. `scripts/review_sheets.py make|score` (`src/reporting/review_sheets.py`, moved from validate_indicators.py):
    frames from review.mp4 + sheet.csv to fill in; score -> precision with Wilson interval per indicator ->
    facts.json indicator_validation updated (then re-run report_lesson.py).
@@ -88,8 +107,8 @@ statsmodels, jinja2, anthropic, Flask 3.1.3, FFmpeg 9.0.2. Root weights yolo26m-
   camera ~13 min), 124 windows, 0 fusion findings, 10 facts (2 weak activity comparisons), AI fallback with reason.
   Lesson `outputs/lessons/2026-11-20_1714_Mixed_gender_classes`, upload linked (hard links) in
   `outputs/uploads/Mixed_gender_classes/`. To check by eye: 30 hand raises for 6 students; 8 seats for 6 students.
-- Tests: `python -m unittest discover -s tests/unit` -> **210 tests** (170 System A, 10 `test_report_stage.py`,
-  30 `test_web_app.py`), no network, no video.
+- Tests: `python -m unittest discover -s tests/unit` -> **217 tests** (170 System A, 12 `test_report_stage.py`,
+  35 `test_web_app.py`), no network, no video.
 
 ## Working agreements with this user (follow these)
 - **Ask before downloading anything** and **before anything that spends money or sends data out**. The AI rewrite in
@@ -114,7 +133,15 @@ statsmodels, jinja2, anthropic, Flask 3.1.3, FFmpeg 9.0.2. Root weights yolo26m-
 per kind with seats + the first 40), printed by hidden Edge/Chrome (`--headless=new --print-to-pdf`, temp profile,
 `--virtual-time-budget` so the SVG charts draw), saved as `<lesson>/report.pdf`, rebuilt only when the report files,
 context or chart style changed. No browser -> 503 page suggesting Ctrl+P "Save as PDF". Setting
-`TEACHLENS_PDF_BROWSER`. Real lecture: 7 pages, 0.9 MB, about 3 s. The Read tool cannot show PDF pages here
+`TEACHLENS_PDF_BROWSER`. Print styles (style.css `@media print`, user request 2026-11-20 "professional report"):
+A4, 9.5 pt type, compact cards and tables, cards/charts/rows never split, headings never left at a page end, the
+two heatmaps side by side as unbreakable inline blocks (a chart title can no longer sit on another page than its
+picture). Paper figures (user request 2026-11-20, web/models/print_charts.py, PDF only): "Over the lecture" = one
+line of students on task as complete 30-second averages (the same stretches as facts.py, so Highest/Lowest match
+the feedback: 94% / 42% on the real lecture), activities shaded, hand raises as red ticks; "Students during each of
+your activities" = grouped bars (On task / Phone / Head down) with values and 95% ranges. No "Show the numbers"
+or pointing instructions in the PDF. A change to the templates, style.css, report.js, print_charts.py or pdf.py
+makes a new PDF (LAYOUT_FILES). Real lecture: 4 pages, 1.0 MB, about 5 s. The Read tool cannot show PDF pages here
 (no poppler); check the print HTML with a headless Edge screenshot instead.
 
 ## Web app details still valid (from the earlier sessions)
@@ -128,6 +155,8 @@ and "Student Seats", no captions (alt text only). The lead sentence promises "re
 the report has positive/negative points only (raised with the user, not decided).
 
 ## Open, in order
+0. **Remind the user** (they asked "tell me later to remember", 2026-11-20): decide whether to drop the 10% part of
+   `real_seats` (keep only the 60 s minimum) so a late arrival's seat still shows in long lectures.
 1. Re-run the user's real lectures through the web app (Mixed gender classes was started 2026-11-20 as a check;
    How_much_..._2 has no videos on disk any more).
 2. Human labelling with `scripts/review_sheets.py`, then re-run the report.

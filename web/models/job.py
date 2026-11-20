@@ -28,8 +28,8 @@ STAGES = [
     (3, "Analysing the instructor camera"),
     (4, "Linking the two cameras"),
     (5, "Lagged analysis: linking instructor actions to student behaviour"),
-    (6, "Writing the report"),
-    (7, "Writing the feedback in plain language (AI)"),
+    (6, "Preparing the facts and comparisons"),
+    (7, "Claude writes the feedback"),
 ]
 # Lines of the two programs' output that start a stage (the lesson pipeline logs, report_lesson.py prints [6/7] ...).
 STAGE_PATTERNS = [
@@ -190,9 +190,11 @@ class JobRunner:
         return [self.python, "-u", self.report, "--name", lecture.id, "--output-dir", str(self.base_dir),
                 "--model", self.llm_model]
 
-    def start(self, lecture, overwrite=False):
-        """Starts the analysis in the background. overwrite=True replaces the lecture's earlier results (a rerun)."""
-        status = {"lecture_id": lecture.id, "state": "running", "stage": 0, "stage_name": "Starting",
+    def start(self, lecture, overwrite=False, report_only=False):
+        """Starts the analysis in the background. overwrite=True replaces the lecture's earlier results (a rerun);
+        report_only=True runs only the report step again (Claude writes the feedback; "Try again" on the report)."""
+        status = {"lecture_id": lecture.id, "state": "running", "stage": 5 if report_only else 0,
+                  "stage_name": "Starting", "report_only": report_only,
                   "llm_result": None, "llm_ok": None, "error": None, "log": [],
                   "started": time.strftime("%Y-%m-%d %H:%M:%S"), "finished": None}
         with self._lock:
@@ -200,7 +202,7 @@ class JobRunner:
                 raise RuntimeError(f"An analysis is already running ({self._running}). Wait for it to finish.")
             self._running, self._live, self._cancel = lecture.id, status, False
         self._save(status, force=True)
-        self._thread = threading.Thread(target=self._run, args=(lecture, overwrite, status), daemon=True)
+        self._thread = threading.Thread(target=self._run, args=(lecture, overwrite, status, report_only), daemon=True)
         self._thread.start()
 
     def _set(self, status, **changes):
@@ -240,9 +242,10 @@ class JobRunner:
             self._set(status, state="cancelled", stage_name="Stopped", error=None)
         return self._cancel
 
-    def _run(self, lecture, overwrite, status):
+    def _run(self, lecture, overwrite, status, report_only=False):
         try:
-            for command in (self.analysis_command(lecture, overwrite), self.report_command(lecture)):
+            commands = [self.report_command(lecture)] if report_only else                 [self.analysis_command(lecture, overwrite), self.report_command(lecture)]
+            for command in commands:
                 code = self._stream(command, status)
                 if self._stopped(status):
                     return
@@ -250,14 +253,17 @@ class JobRunner:
                     self._set(status, state="failed", error=f"The analysis stopped with an error (exit code {code}). "
                                                             "The technical log below shows where.")
                     return
-            # a failed AI rewrite is not a failed analysis: the rule-based feedback is complete on its own
+            # the charts, moments and key terms are complete even when Claude could not write the feedback
             report = read_report_status(lecture)
             if report.get("source") == "llm":
-                self._set(status, llm_ok=True, llm_result="The feedback was written in plain language by the AI and "
-                                                          "passed every automatic check.")
+                self._set(status, llm_ok=True, llm_result="Claude wrote the feedback and it passed every automatic "
+                                                          "check.")
+            elif report.get("code"):   # key or billing problem: only the code (user requests 2026-11-20)
+                self._set(status, llm_ok=False, llm_result=f"Error, Code={report['code']}")
             else:
-                self._set(status, llm_ok=False, llm_result="The AI rewrite was not used, so the rule-based feedback "
-                          f"is shown. Reason: {report.get('reason') or 'unknown (no report_status.json).'}")
+                self._set(status, llm_ok=False, llm_result="Claude could not write the feedback, so the report has "
+                          "none yet; use \"Try again\" on the report. Reason: "
+                          f"{report.get('reason') or 'unknown (no report_status.json).'}")
             self._set(status, state="done", stage_name="Finished")
         except Exception as error:   # shown on the progress page instead of disappearing in a background thread
             with self._lock:

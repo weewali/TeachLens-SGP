@@ -55,3 +55,6 @@ classroom_project/sessions/*/reports/timeline.png
 # System files
 .DS_Store
 Thumbs.db
+
+# private settings (the Claude API key): never upload
+.env

@@ -7,8 +7,8 @@
     {% if context.topic %}<p class="lead">{{ context.topic }}</p>{% endif %}
     <p class="muted small">Analysed {{ analysed_at }}{% if length %} · {{ length }} of lecture{% endif %}{% if source.label %} · <span class="badge badge-{{ source.kind }}">{{ source.label }}</span>{% endif %}</p>
   </div>
-  {% if not pdf %}<a class="button no-print" href="{{ url_for('lectures.report_pdf', lecture_id=lecture.id) }}"
-     download>Download PDF</a>{% endif %}
+  {% if not pdf %}<a class="button no-print"
+     href="{{ url_for('lectures.report_pdf', lecture_id=lecture.id) }}">Download PDF</a>{% endif %}
 </header>
 
 {# Tabs: report.js shows one section at a time. Without scripts these are plain links and every section shows. #}
@@ -21,8 +21,15 @@
 
 <section id="feedback" class="tab-panel is-active">
   <h2 class="panel-title">Feedback</h2>
-  {% if source.problem %}<p class="banner" role="status">The AI rewrite was not used, so these points were written by
-    the rules. Reason: {{ source.problem }}</p>{% endif %}
+  {% if source.problem %}
+  <div class="banner" role="status">
+    <p>{% if source.code %}Error, Code={{ source.code }}{% else %}Claude could not write the feedback for this lecture, so there are no points yet. Reason: {{ source.problem }}{% endif %}</p>
+    {% if not pdf %}<form method="post" action="{{ url_for('lectures.rewrite', lecture_id=lecture.id) }}" class="no-print">
+      <button class="button" type="submit">Try again</button>
+      <span class="hint">No analysis done yet.</span>
+    </form>{% endif %}
+  </div>
+  {% else %}
   {% if feedback.overview %}<p class="lead">{{ feedback.overview }}</p>{% endif %}
   <div class="two">
     <div class="card points points-good">
@@ -38,6 +45,7 @@
       {% else %}<p class="muted">No clear negative point was found in this analysis.</p>{% endif %}
     </div>
   </div>
+  {% endif %}
 
   {% if context.topic or context.notes or context.slides or activities %}
   <div class="card context">
@@ -55,7 +63,14 @@
 
 <section id="charts" class="tab-panel charts-panel">
   <h2 class="panel-title">Charts</h2>
-  {% if timeline %}
+  {% if timeline and pdf %}
+  <figure class="card chart print-chart">
+    <h3 class="chart-title">Over the lecture</h3>
+    <p class="chart-sub">The share of the students in view who were on task (a 30-second average, red line). The
+      coloured strip on top shows what you were doing; purple ticks along the bottom mark hand raises.</p>
+    {% if print_charts is defined and print_charts.timeline %}<img src="{{ print_charts.timeline }}" alt="Line chart of the share of students on task over the lecture, with your activities shaded behind it">{% endif %}
+  </figure>
+  {% elif timeline %}
   <figure class="card chart timeline" id="timeline">
     <h3 class="chart-title">Over the lecture</h3>
     <p class="chart-sub">The share of the students in view who were on task in each 5-second part, what you were
@@ -84,7 +99,15 @@
   </figure>
   {% endif %}
 
-  {% if comparison %}
+  {% if comparison and pdf %}
+  <figure class="card chart print-chart">
+    <h3 class="chart-title">Students during each of your activities</h3>
+    <p class="chart-sub">The average share of the time the students in view were on task, had a phone, or had their
+      heads down while you were doing each thing. The thin lines show the 95% range of each average; a bar
+      without one rests on too few parts of the lecture for a range.</p>
+    {% if print_charts is defined and print_charts.comparison %}<img src="{{ print_charts.comparison }}" alt="Bar chart of student behaviour during each of your activities">{% endif %}
+  </figure>
+  {% elif comparison %}
   <figure class="card chart compare-chart" id="compare">
     <h3 class="chart-title">Students during each of your activities</h3>
     <p class="chart-sub">Average share of the time the students in view did each thing, over the 5-second parts of the
@@ -144,8 +167,8 @@
     <thead><tr><th>What was seen</th><th>Times</th><th>Seats (times)</th></tr></thead>
     <tbody>{% for row in moment_summary %}<tr><td>{{ row.behaviour }}</td><td>{{ row.count }}</td><td>{{ row.seats }}</td></tr>{% endfor %}</tbody>
   </table>
-  {% if moments | length > pdf_moments %}<p class="hint">The first {{ pdf_moments }} of {{ moments | length }} moments are
-    listed below; the web report has them all.</p>{% endif %}
+  <p class="hint">All {{ moments | length }} moments are listed below. Moments of the same kind on the same seat less
+    than {{ join_seconds }} seconds apart are shown as one row, with how many moments it holds.</p>
   {% endif %}
   {% if moments %}
   <div class="filters" role="group" aria-label="Show moments of one kind">
@@ -158,7 +181,7 @@
   <table class="table" id="moments-table">
     <thead><tr><th>Time</th><th>Seat</th><th>What was seen</th><th>Length</th><th>You were…</th></tr></thead>
     <tbody>
-    {% for m in (moments[:pdf_moments] if pdf else moments) %}
+    {% for m in (pdf_moment_rows if pdf else moments) %}
       <tr data-kind="{{ m.kind }}">
         <td>{{ m.time }}–{{ m.end }}</td><td>{{ m.seat }}</td><td>{{ m.behaviour }}</td>
         <td>{{ m.duration }} s</td><td>{{ m.activity }}</td>

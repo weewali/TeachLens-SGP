@@ -42,8 +42,8 @@ never causes or inner states. The specific objectives are:
    seats.
 4. Store timestamped evidence in the team's shared event format.
 5. Analyse instructor–student associations with statistics that allow for autocorrelation and multiple testing.
-6. Produce up to three positive and three negative points in plain English, always rewritten by an AI model under
-   automatic checks, with the rule-based text as a fallback.
+6. Produce up to three positive and three negative points in plain English, written by an AI model (Claude)
+   from the measured facts, under automatic checks.
 7. Deliver the analysis through a local web application.
 8. Protect privacy and state the limits of every result.
 9. Verify the software and evaluate it on real recordings.
@@ -82,7 +82,7 @@ Full wording and the benefits of the project: see `objective.md`.
 | Seat regions for student identity | Temporary ByteTrack IDs, and seats learnt from where students sat | A fixed grid did not match real seating. |
 | Emotion recognition | Dropped | It cannot be measured reliably and would claim inner states. |
 | Cross-correlation and lagged regression | Kept, as the team's fusion layer: a circular-shift test, Benjamini–Hochberg q-values, lagged models with HAC errors, and averages around the moments an action started | Neighbouring windows are alike, so naive p-values overstated certainty. |
-| Report template, with an LLM filling placeholders | Rule-based feedback, always rewritten by Claude Opus 5.5 and checked in code (rules kept on failure); local web application | Keeps every sentence traceable to a measured number. |
+| Report template, with an LLM filling placeholders | Feedback written by Claude Opus 5.5 from the measured facts and checked in code; local web application | Keeps every sentence traceable to a measured number. |
 
 ## 1.6 Structure of this report
 

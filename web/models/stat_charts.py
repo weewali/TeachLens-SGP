@@ -21,6 +21,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from src.analysis.activity_comparison import (ACTIVITIES, MEASURES, activity_of, mean_range,  # noqa: E402
                                               student_known)
+from web.models.charts import real_seats  # noqa: E402
 
 LABELS = {key: label for key, label, _, _ in ACTIVITIES}
 YOU = {key: you for key, _, you, _ in ACTIVITIES}
@@ -76,7 +77,7 @@ def moments(lecture):
     fusion = _json(lesson / "fusion" / "fusion.json")
     start = _seconds(fusion.get("start_real_time"))
     seats = {}
-    for seat in (_json(lesson / "student" / "summary.json").get("seats") or {}).get("seats", []):
+    for seat in real_seats(_json(lesson / "student" / "summary.json")):   # not someone passing close to the camera
         for track in seat.get("tracks", []):
             seats[track] = seat.get("seat_id")
     found = []
@@ -135,15 +136,16 @@ def _scale_max(column, cells):
     return next((m for m in NICE_MAXIMA if m >= top), 100)
 
 
-def comparison(lecture):
-    """Rows (one per instructor activity) of averages with their 95% ranges, or None when there is nothing to compare."""
+def comparison_values(lecture):
+    """(rows, window seconds): one row per instructor activity with each student measure's average (0-1), its 95% range
+    and the windows it rests on; ([], 5) when there is nothing to compare. Shared by the web chart and the PDF chart."""
     table, window = windows(lecture)
     if table is None or table.empty:
-        return None
+        return [], window
     activities = table.apply(lambda row: activity_of(row.to_dict(), window), axis=1)
     usable = student_known(table)
     if usable.sum() < 2:
-        return None
+        return [], window
     raw = []
     for key, label, you, _ in ACTIVITIES:
         group = table[usable & (activities == key)]
@@ -159,6 +161,12 @@ def comparison(lecture):
                                 "parts": int(len(values))}
         raw.append({"key": key, "label": label, "you": you, "parts": int(len(group)),
                     "share": int(round(100 * float((activities == key).mean()))), "measures": measures})
+    return raw, window
+
+
+def comparison(lecture):
+    """Rows (one per instructor activity) of averages with their 95% ranges, or None when there is nothing to compare."""
+    raw, window = comparison_values(lecture)
     if not raw:
         return None
     measures = []

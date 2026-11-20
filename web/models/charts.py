@@ -6,10 +6,11 @@
                         its student faced the front (an observed posture, not attention), over a frame of the student
                         video
 
-Privacy (user requests 2026-11-19 and 2026-11-20): in both background frames every head the pipeline located is
-pixelated: everyone detected in the first ANON_FIRST_SAMPLES samples (any role), plus where each seat's student
-usually was. If anything goes wrong, the chart is drawn without a background, never over the unblurred frame. Only
-these pictures are changed; the videos and the analysis are not.
+Privacy (user requests 2026-11-19 and 2026-11-20): in both background frames every head is pixelated (everyone
+detected in the first ANON_FIRST_SAMPLES samples, where each seat's student usually was, and anyone else the pose
+model finds), except the instructor's: the report is the instructor's own. If anything goes wrong, the chart is drawn
+without a background, never over the unblurred frame. Only these pictures are changed; the videos and the analysis
+are not. Seats used only briefly (someone passing close to the camera) are not drawn (real_seats).
 
 The lecture timeline and the activity comparison are drawn in the page itself (web/models/stat_charts.py).
 """
@@ -22,7 +23,10 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
 POSE_MODEL = Path(__file__).resolve().parents[2] / "models" / "pose" / "yolo26n-pose.pt"   # local, never downloaded
-CHART_STYLE = "3"         # saved charts drawn in an older style are redrawn (3: lesson pipeline data, both blurred)
+CHART_STYLE = "5"          # saved charts in an older style are redrawn (5: instructor unblurred, brief seats hidden)
+SEAT_MIN_SECONDS = 60      # a seat must be occupied this long ...
+SEAT_MIN_SHARE = 0.10      # ... and for this share of the analysed time, else it is someone passing (not drawn)
+TEACHER_OVERLAP = 0.3      # a person found in the instructor frame overlapping the instructor's box this much is them
 MIN_KNOWN_SECONDS = 3      # a seat needs this much facing-front / facing-away time before it gets a percentage
 ANON_FIRST_SAMPLES = 5     # heads of everyone found in the first 5 samples (5 s at 1 sample/s) are blurred
 HEAD_SHARE = 0.35          # head area: the top 35% of a person box (at most one box width tall), full box width
@@ -66,8 +70,8 @@ def head_areas(boxes):
         if not (np.isfinite([x1, y1, x2, y2]).all() and x2 > x1 and y2 > y1):
             continue
         height = min(HEAD_SHARE * (y2 - y1), x2 - x1)
-        if y2 >= 0.97:   # cut off by the bottom edge (someone close to the camera): the box is mostly head
-            height = y2 - y1
+        if y2 >= 0.97:   # cut off by the bottom edge (someone close to the camera): the head is the top part, as
+            height = min(y2 - y1, x2 - x1)   # tall as the box is wide (never the whole tall box)
         pad_x, pad_y = HEAD_PAD * (x2 - x1), HEAD_PAD * height
         areas.append((max(0.0, x1 - pad_x), max(0.0, y1 - pad_y), min(1.0, x2 + pad_x), min(1.0, y1 + height + pad_y)))
     return areas
@@ -91,14 +95,14 @@ def pixelate(image, areas, blocks=PIXEL_BLOCKS):
     return out
 
 
-def grab_frame(lesson, camera):
-    """The frame at the first analysed sample of a camera's source video (RGB), or None."""
+def grab_frame(lesson, camera, at=None):
+    """The frame at `at` seconds (default: the first analysed sample) of a camera's source video (RGB), or None."""
     run = _json(lesson / camera / "run.json")
     source = run.get("video")
     if not source or not Path(source).exists():
         return None, None
     import cv2
-    first = float(run.get("first_sample_seconds") or run.get("analyzed_start_seconds") or 0.0)
+    first = float(at if at is not None else run.get("first_sample_seconds") or run.get("analyzed_start_seconds") or 0.0)
     capture = cv2.VideoCapture(str(source))
     try:
         capture.set(cv2.CAP_PROP_POS_MSEC, first * 1000)
@@ -121,18 +125,37 @@ def people_in(image):
     return [tuple(float(v) for v in box) for box in result.boxes.xyxyn.tolist()]
 
 
-def blurred_background(lesson, camera, extra_boxes=()):
-    """The camera's first analysed frame with every located head pixelated, or None (never the raw frame)."""
+def overlap(a, b):
+    """Intersection over union of two boxes (x1, y1, x2, y2)."""
+    w = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    h = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - w * h
+    return w * h / union if union > 0 else 0.0
+
+
+def blurred_background(lesson, camera, extra_boxes=(), blur_teacher=True):
+    """The camera's first analysed frame with every located head pixelated, or None (never the raw frame). With
+    blur_teacher=False the instructor stays visible (user request 2026-11-20: the report is the instructor's own);
+    everyone else, tracked or not, is still blurred."""
     try:
-        image, first = grab_frame(lesson, camera)
+        positions = [p for p in _events(lesson, camera, "position")
+                     if isinstance(p.get("value"), dict) and "box_xyxy" in p["value"]]
+        # the instructor's track(s): a track counts as the instructor's if it is ever labelled teacher
+        teacher_tracks = {p.get("track_id") for p in positions if p.get("role") == "teacher"}
+        at = None
+        if not blur_teacher and teacher_tracks:   # the frame of the instructor's first sample, so their box fits it
+            at = min(float(p["start_time"]) for p in positions if p.get("track_id") in teacher_tracks)
+        image, first = grab_frame(lesson, camera, at)
         if image is None:
             return None
-        positions = _events(lesson, camera, "position")
-        times = sorted({float(p["start_time"]) for p in positions})
-        early = set(times[:ANON_FIRST_SAMPLES])
-        boxes = [p["value"]["box_xyxy"] for p in positions
-                 if float(p["start_time"]) in early and isinstance(p.get("value"), dict) and "box_xyxy" in p["value"]]
-        return pixelate(image, head_areas(list(boxes) + list(extra_boxes) + people_in(image)))
+        times = sorted({float(p["start_time"]) for p in positions if at is None or float(p["start_time"]) >= at})
+        early = [p for p in positions if float(p["start_time"]) in set(times[:ANON_FIRST_SAMPLES])]
+        is_teacher = [p.get("track_id") in teacher_tracks for p in early]
+        teacher = [p["value"]["box_xyxy"] for p, yes in zip(early, is_teacher) if yes]
+        boxes = [p["value"]["box_xyxy"] for p, yes in zip(early, is_teacher) if blur_teacher or not yes]
+        found = [box for box in people_in(image)
+                 if blur_teacher or not any(overlap(box, t) >= TEACHER_OVERLAP for t in teacher)]
+        return pixelate(image, head_areas(list(boxes) + list(extra_boxes) + found))
     except Exception:
         return None
 
@@ -165,7 +188,7 @@ def draw_instructor_heatmap(lecture, out_path):
     if not points:
         return False
     xs, ys = np.array([p[0] for _, p in points]), np.array([p[1] for _, p in points])
-    fig, ax = _figure(blurred_background(lesson, "instructor"))
+    fig, ax = _figure(blurred_background(lesson, "instructor", blur_teacher=False))
     counts, _, _ = np.histogram2d(ys, xs, bins=(12, 20), range=[[0, 1], [0, 1]])
     shown = np.where(counts > 0, counts, np.nan)   # empty cells stay see-through
     image = ax.imshow(shown, extent=[0, 1, 1, 0], cmap="inferno", alpha=0.8, interpolation="nearest", aspect="auto",
@@ -178,9 +201,19 @@ def draw_instructor_heatmap(lecture, out_path):
     return True
 
 
+def real_seats(summary):
+    """The seats of student/summary.json that someone really sat in: occupied for at least SEAT_MIN_SECONDS and
+    SEAT_MIN_SHARE of the analysed time. A person who stops close to the camera for a few seconds (someone walking
+    past) is otherwise learnt as a "seat"."""
+    seats = (summary.get("seats") or {}).get("seats", [])
+    duration = float(summary.get("analyzed_duration_seconds") or 0)
+    least = max(SEAT_MIN_SECONDS, SEAT_MIN_SHARE * duration)
+    return [s for s in seats if s.get("occupied_seconds") is None or float(s["occupied_seconds"]) >= least]
+
+
 def seat_boxes(lesson):
-    """{seat_id: (seat entry, median person box of its tracks)} for the seats in student/summary.json."""
-    seats = (_json(lesson / "student" / "summary.json").get("seats") or {}).get("seats", [])
+    """{seat_id: (seat entry, median person box of its tracks)} for the real seats in student/summary.json."""
+    seats = real_seats(_json(lesson / "student" / "summary.json"))
     boxes = {}
     for event in _events(lesson, "student", "position"):
         value = event.get("value")

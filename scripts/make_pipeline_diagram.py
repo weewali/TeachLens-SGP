@@ -65,17 +65,17 @@ STAGES = [
                  "the rest of the lecture."),
         ("badges", [("stats", "HAC test · Bonferroni")]),
     ], "facts.json (added),\ntables/*.csv", False),
-    (7, "Write the report", [
-        ("text", "Up to 3 positive and 3 negative points in plain English, addressed to the instructor as \"you\"."),
-        ("text", "facts.json: anonymised numbers only."),
-        ("badges", [("tool", "Rules")]),
-    ], "final_feedback_report_rules.txt", False),
-    (8, "AI rewrite (always)", [
-        ("text", "Rewrites the points in plain language."),
-        ("text", "Code checks every number and word; if it fails, the rule-based text is kept and the report "
-                 "says why."),
+    (7, "Claude writes the feedback", [
+        ("text", "Reads the facts (numbers only) and writes up to 3 positive and 3 negative points in plain English, "
+                 "addressed to the instructor as \"you\"."),
         ("badges", [("ai", "Claude Opus 5.5")]),
-    ], "final_feedback_report.txt,\nreport_status.json", False),
+    ], "final_feedback_report.txt", False),
+    (8, "Check the text", [
+        ("text", "Code checks every number and word against the facts; one retry."),
+        ("text", "No rule-based text: if Claude fails, the report shows why (key or billing problems only as "
+                 "Code=01 / Code=02), with a \"Try again\" button."),
+        ("badges", [("tool", "Automatic checks")]),
+    ], "report_status.json,\nllm_output.json", False),
 ]
 
 COL_X = [380, 890, 1400, 1910]         # left edge of the four stage columns
@@ -213,7 +213,7 @@ def draw(out):
     box(ax, lx, ly, 44, 34, "#ffffff", MUTED, radius=8, lw=1.5, dashed=True)
     text(ax, lx + 58, ly + 6, "Optional", size=14)
     notes = ("The YOLO26 and MediaPipe models are pretrained and used without retraining. Only anonymised numbers, never "
-             "video, images or names, go to Claude. Faces are blurred in every picture the report shows.\n"
+             "video, images or names, go to Claude. Students' faces are blurred in the report's pictures.\n"
              "Since 20 November 2026 one pipeline: the team's processing (steps 1-5) with the report stage and web app "
              "on top. Accuracy has not been checked against human labels yet.")
     text(ax, 60, ly + 70, notes, size=12, color=MUTED)
