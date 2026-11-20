@@ -4,6 +4,10 @@ Looked at 2026-11-19, branch `origin/pipeline_creation`, last commit 1bf2c49
 ("Add LLM report, validation, sessions and pooling", 2026-11-11). Recheck the
 branch before relying on this; it may have moved on.
 
+The step-by-step plan for building the LLM feedback and report stages on
+this branch (which files the LLM reads, the facts.json fields, suggestions,
+the report layout, tests, cost and key rules) is AGENTS.md section 17.
+
 ## What the branch contains
 
 - `Downloaded from prototype/llm_report.py`: the LLM stage. Reads one
@@ -94,7 +98,8 @@ holds classroom footage; the UI should read it locally, not upload it.
 1. Do not merge `pipeline_creation` as it is: it starts before this branch's
    code, and it commits extracted classroom frames and outputs, which the
    team docs say stay out of Git.
-2. Bring over only the LLM stage: `llm_report.py` (and `validate_indicators.py`
+2. Bring over only the LLM stage (detailed in AGENTS.md section 17.3, with
+   suggestions added as a third checked list): `llm_report.py` (and `validate_indicators.py`
    if wanted) as `src/reporting/llm_report.py` with a thin
    `scripts/llm_report.py`, logic unchanged, reading a lesson folder's
    facts.json and writing the report into the same folder. Then

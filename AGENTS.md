@@ -1,22 +1,29 @@
 # TeachLens: instructions and project handoff for AI agents
 
-Last verified: **2026-10-26**. Applies repository-wide. Portable handoff from code, docs, local outputs, and earlier TeachLens conversations. Recheck changeable details; distinguish implementation, experiments, and plans.
+Last verified: **2026-11-20** (sections 16-18 added: work history, the LLM and report stages to build next, continuing on another computer). Applies repository-wide. Portable handoff from code, docs, local outputs, and earlier TeachLens conversations. Recheck changeable details; distinguish implementation, experiments, and plans.
 
 ## 1. Read this first
 
-TeachLens is a **Senior Graduation Project (SGP)** for classroom teaching analytics. Its eventual purpose is to turn recorded classroom observations into useful, human-reviewable teaching feedback, including strengths, areas for improvement, and practical suggestions. The current implementation is much narrower: a **local, video-only physical-indicator pipeline** that saves timestamped JSONL evidence, a JSON summary, and an annotated review MP4, with an optional live preview window.
+TeachLens is a **Senior Graduation Project (SGP)** for classroom teaching analytics. Its eventual purpose is to turn recorded classroom observations into useful, human-reviewable teaching feedback, including strengths, areas for improvement, and practical suggestions. The current implementation is a **local, video-only physical-indicator pipeline** for a lesson filmed by two fixed cameras (students, instructor): per-camera evidence, a fused lag analysis of teacher actions and later student changes, and `facts.json` ready for an LLM. **The LLM feedback and report-generation stages are not built yet** (section 17).
 
-The current executable path is:
+**New agent or new computer: read section 16 (what was built, when, why), section 17 (how to build the LLM and report stages, and which files to use), and section 18 (setup, what is not in Git, the user's working agreements) first.**
+
+The current executable path (`python scripts/analyze_lesson.py ...`, all in `src/pipeline.py`):
 
 ```text
-recorded video
-  -> sampled OpenCV frames with source timestamps
-  -> local YOLO26 Pose checkpoint + ByteTrack
-  -> model-independent person boxes, anonymous IDs, COCO-17 keypoints
-  -> conservative geometry and temporal rules
-  -> outputs/runs/<YYYY-MM-DD_HHMM>_<video_id>/events.jsonl, summary.json, review.mp4, run.json
-     (a lesson's two runs: outputs/lessons/<stamp>_<lesson>/student/ and instructor/; docs/outputs_guide.md)
+student video + instructor video
+  -> lined up by real recording time; only the stretch both cameras recorded (src/preprocessing/alignment.py)
+  -> per camera: sampled frames (1/s; GPU decoding) -> YOLO26 pose + ByteTrack (+ face, hand, object models
+     on the student camera) -> conservative rules (Lists A, B, C, facial actions)
+     -> outputs/lessons/<YYYY-MM-DD_HHMM>_<lesson>/student|instructor/ events.jsonl, summary.json, review.mp4, run.json
+  -> cross_camera.json (timing links)
+  -> fusion/ windows.csv, fusion.json (hypotheses, lag tests, comparisons, models), links.csv, timeline.png
+  -> facts.json (input for the LLM stage), side_by_side.mp4, lesson.json (index of everything)
+  -> several lessons: outputs/pooled/<stamp>_<name>/ pooled.json, facts.json
+  -> NEXT: LLM feedback (strong points, weak points, suggestions) and the HTML/PDF report (section 17)
 ```
+
+Single-camera runs (`scripts/analyze.py`, `scripts/run_scenarios.py`) go to `outputs/runs/<stamp>_<run>/`. Every output file and JSON symbol: docs/outputs_guide.md.
 
 The most important decisions are:
 
@@ -34,7 +41,7 @@ The most important decisions are:
 
 ## 2. Working with the user and existing work
 
-The user wants practical progress and plain explanations of files, commands, logs, and results. Preserve uncertainty and avoid overstating prototype progress. This handoff supports switching agents when usage runs low: use focused reads, saved evidence, and small checks instead of unnecessary downloads/training/full-video runs.
+The user wants practical progress and plain explanations of files, commands, logs, and results. The full list of working agreements from earlier sessions is in section 18; apply it. Preserve uncertainty and avoid overstating prototype progress. This handoff supports switching agents when usage runs low: use focused reads, saved evidence, and small checks instead of unnecessary downloads/training/full-video runs.
 
 - Inspect Git status first. Preserve unrelated edits, untracked implementation, intentional deletions, and existing outputs; do not reset/clean/restore to tidy the tree.
 - Current user instructions override historical plans. Do requested work, not every roadmap item.
@@ -85,7 +92,7 @@ The event layer is the boundary: observations -> rules/events -> aggregates -> p
 | Implemented file | Responsibility |
 | --- | --- |
 | scripts/analyze.py | Thin argparse/logging CLI calling pipeline.analyze_video(). |
-| src/pipeline.py | Input/ID/output validation, settings/zones/switches, lifecycle and output orchestration; AnalysisStopped for a live-preview stop. |
+| src/pipeline.py | analyze_video() and detect_objects() (one camera: input/ID/output validation, settings/zones/switches, models per switch, run folder with run.json), analyze_lesson() (a whole lesson; see the lesson-part row below), pool_lessons(), link_runs(), fuse_and_write(), review_timing(); AnalysisStopped for a live-preview stop. |
 | src/preprocessing/video.py | VideoInfo/frames(): metadata, sampling, timestamps, optional start/end segment (seek + full-run grid), capture cleanup. |
 | src/preprocessing/camera_motion.py | CameraMotionEstimator: ORB background matching (people masked), similarity fit, per-shot chaining, new shot on cut/zoom jump/few inliers; CameraMotion, Affine helpers (apply_affine/compose/invert, normalized coords). |
 | src/inference/pose.py | Keypoint/PosePerson, adapt_result(), YoloPoseTracker; local weights and Ultralytics/ByteTrack adapter. |
@@ -101,8 +108,8 @@ The event layer is the boundary: observations -> rules/events -> aggregates -> p
 | src/analysis/teacher_indicators.py | List B rules on the same keypoints for the teacher track: facing (from visible face keypoints), head-orientation target, board/screen interaction, writing on board, pointing + target, gestures/expansiveness, raised hand, torso lean/tilt, stationary episodes; TeacherBehavior holds per-track state and is called by FoundationAnalyzer on teacher cameras. |
 | src/analysis/events.py | Frozen validated Event, rounding, atomic JSONL; with_real_time() adds wall-clock start/end_real_time. |
 | src/analysis/aggregates.py | summarize_list_a() reads saved evidence. |
-| src/analysis/fusion.py | Feature/FEATURES (teacher T_ and student S_ window features with desirable direction), load_events() (real times -> epoch t0/t1), overlap_range(), build_windows() (shares of known time, counts, teacher path; NaN when evidence is thin), onsets(). |
-| src/analysis/lag_analysis.py | cross_correlation(), shift_test() (circular shifts, exact when rotations <= permutations), benjamini_hochberg(), lagged_model() (statsmodels OLS, HAC), peri_event(), analyze() (activity guardrail, links, models, findings). |
+| src/analysis/fusion.py | Feature/FEATURES (teacher T_ and student S_ window features with desirable direction, incl. T_seated, T_at_desk, T_reading_notes, T_back_to_class, S_on_task, S_off_task), student_state() (per-student on/off task per second), load_events() (real times -> epoch t0/t1), overlap_range(), build_windows() (shares of known time, counts, teacher path; NaN when evidence is thin), onsets(), fuse_runs() (table + report), TEACHER_EVENTS, LIMITATIONS. |
+| src/analysis/lag_analysis.py | cross_correlation(), shift_test() (circular shifts, exact when rotations <= permutations), benjamini_hochberg(), comparison() (outcome after the feature vs otherwise, Newey-West p, optional per-lesson intercepts), lagged_model() (statsmodels OLS, HAC), peri_event(), analyze() (hypotheses first, variation guardrail, exploratory links, models, peri-event, findings), between_lessons(), pooled_analyze(). |
 | src/preprocessing/alignment.py | CameraRun, read_manifest (shared with run_scenarios), recording_window/shared_range/limit_range (real-time alignment), plan_from_videos/plan_from_manifest (picks the take with both cameras). |
 | src/pipeline.py (lesson part), scripts/analyze_lesson.py | analyze_lesson(): both camera runs into lessons/<stamp>_<lesson>/student|instructor (or --reuse saved runs, --redo one camera), link_runs, fuse_and_write (fusion/ + facts.json), review_timing + side_by_side.mp4, lesson.json; outputs checked before analyzing. pool_lessons(): pooled/<stamp>_<name>/pooled.json + facts.json. The CLI takes two videos + --name or --scenario/--all-scenarios + --tag, --start/--end in shared seconds, --pool NAME. |
 | src/utils/output_layout.py | Folder names (<YYYY-MM-DD_HHMM>_<name>), RUN_FILES/LESSON_FILES, find_run (runs/ or a lesson's run.json), find_lesson, run_folder, new_folder, events_file. |
@@ -121,11 +128,13 @@ The event layer is the boundary: observations -> rules/events -> aggregates -> p
 | scripts/trim_video.py | Lossless ffmpeg cut (video + first audio, -c copy, starts at the keyframe at/before --start) that stamps the cut's real start (original start + offset) as Apple creationdate and creation_time; location/other metadata dropped. Editors (Windows re-export, FilmCraft) lose the recording time, so use this instead. |
 | src/preprocessing/recording_time.py, scripts/recording_time.py | Recording start/end in HH:MM:SS, duration, frame rate, and clock time at positions (`--at`) from container tags via external ffprobe; start differences for several videos. GPS tags are detected but never printed. |
 
-Implemented packages have __init__.py. Planned responsibilities: preprocessing/dataset.py for audits/splits; inference/detection.py and tracking.py only if needed; analysis/interaction_indicators.py and quality.py for later rules/quality; reporting/charts.py, renderer.py, templates/report.html.j2 and report.css; training/train_detector.py and evaluate_detector.py; utils/logging.py; thin scripts/train.py and report.py. Reporting holds only annotated_video.py; training/integration/fixture directories are scaffolds. Speech modules/models/audio remain future-only.
+Implemented packages have __init__.py. Planned responsibilities: preprocessing/dataset.py for audits/splits; inference/detection.py only if needed; analysis/quality.py for media/evidence quality; reporting/llm_report.py (LLM feedback), renderer.py, templates/report.html.j2 and report.css (section 17); training/train_detector.py and evaluate_detector.py; utils/logging.py; thin scripts/llm_report.py, report.py, train.py. Reporting holds annotated_video.py, side_by_side.py, charts.py, and facts.py; training/integration/fixture directories are scaffolds. The full current tree: docs/project_structure.md. Speech modules/models/audio remain future-only.
 
 Create modules with real behavior/tests, not empty files to fill a tree. Keep any later JS/TS dashboard in a separate web/ app.
 
 ## 5. Environment and commands
+
+Hardware of the main computer (2026-11-19): Intel Core i7-1355U, Intel Iris Xe (the only GPU; video decoding runs on it through D3D11), no CUDA (torch 2.12.1+cpu). Not installed in TeachLens on 2026-11-19: anthropic, openvino, onnxruntime. Setting up another computer: section 18.
 
 Unpinned requirements: ultralytics, opencv-python, numpy, pandas, matplotlib, pyyaml, scipy, statsmodels, jinja2. Torch is installed but not explicitly listed. FFmpeg is available externally, not required by the OpenCV loop. statsmodels 0.14.5 (+ patsy) was installed into TeachLens on 2026-11-18 (user-approved; listed in requirements but had been missing) for the fusion stage's lagged models; nothing else changed. mediapipe 1.2.2 was installed into TeachLens on 2026-11-17 (user-approved) with `pip install --no-deps mediapipe==1.2.2` plus absl-py, flatbuffers, sounddevice: its declared opencv-contrib-python dependency would sit beside opencv-python and can break cv2, so it was deliberately left out (pip check reports it; ultralytics' missing psutil predates this). Never reinstall mediapipe with dependencies. Its face model is models/face/face_landmarker.task (3.8 MB, Google float16 bundle, ignored), used by src/inference/face_mesh.py when a `faces:` switch is on for a student camera (never the teacher, user decision 2026-11-17); FaceLandmarker refuses to run without the file. models/hands/gesture_recognizer.task (8.4 MB, Google float16 bundle, Apache 2.0, downloaded 2026-11-17 with the user's approval, ignored) is used by src/inference/hands.py for List C. FaceLandmarker.estimate_crops() and preprocessing.video.frames_with_subsamples() give 5 faces per second (faces.frames_per_second) for talking/nods; the extra frames are decoded anyway, so they cost only the face model.
 
@@ -289,7 +298,7 @@ Paths (user-requested 2026-10-26 for later teaching-effectiveness work): `--path
 
 Still not implemented: snapshot/MP4 rendering **from saved JSONL** without rerunning pose (seek original frames by evidence timestamps, match intervals/instant positions deliberately; line numbers are not time), entry/exit markers (emitted only at track retirement, after the frame), and a thin scripts/report.py. Put such rendering in reporting with a thin CLI. The old demo's MP4 is separate. Review media does not prove whole-video accuracy.
 
-Future reports show observation + denominator + confidence/validation evidence + limitation with reviewable source moments. Charts/heatmaps/HTML/PDF/feedback generation remain unimplemented; Jinja2 dependency does not prove rendering works.
+Future reports show observation + denominator + confidence/validation evidence + limitation with reviewable source moments. Implemented since: the fusion timeline chart, facts.json for the LLM, and side_by_side.mp4. Still unimplemented: LLM feedback, HTML/PDF reports, heatmaps (section 17 says how to build the first two); the Jinja2 dependency does not prove rendering works.
 
 ## 10. Datasets, annotation, and training
 
@@ -355,7 +364,7 @@ Report observable proxies with valid denominators, not internal states/protected
 
 ## 12. Tests and validation
 
-Verified 2026-10-26: 53 unittest tests pass in TeachLens (test_recording_time.py adds tag parsing, iPhone/UTC/missing-tag cases, and formatting; ffprobe-shaped JSON, no video needed. test_events.py adds real times = start + video seconds, null without a start, and both fields in JSONL; test_aggregates.py adds the recording-start fields and limitation lines; test_config.py checks the 1 s default and rejects sampling sparser than the track gap).
+Verified 2026-11-20: 170 unittest tests in 20 files pass in TeachLens (`python -m unittest discover -s tests/unit`; no video, model, network, or GPU needed). The 2026-11-19 additions: test_lesson.py (alignment, manifest takes, output layout, the lesson pipeline with mocked models, reuse, pooling) and test_lesson_outputs.py (desk posture, on/off-task states, hypotheses with a planted effect, no-variation guard, comparisons, pooling, facts.json schema and wording, side-by-side timing). History: on 2026-10-26, 53 unittest tests passed in TeachLens (test_recording_time.py adds tag parsing, iPhone/UTC/missing-tag cases, and formatting; ffprobe-shaped JSON, no video needed. test_events.py adds real times = start + video seconds, null without a start, and both fields in JSONL; test_aggregates.py adds the recording-start fields and limitation lines; test_config.py checks the 1 s default and rejects sampling sparser than the track gap).
 
 ```powershell
 python -m unittest discover -s tests/unit -v
@@ -371,7 +380,7 @@ For accuracy, label held-out clips from both cameras: missed/duplicate people, k
 
 ## 13. Continuation priorities and gaps
 
-Context, not an automatic queue: validate List A/camera assumptions/tracks/thresholds (the review MP4/live window now supports this visually); snapshots/MP4 rendered from saved JSONL without rerunning pose; role-separated summaries and valid/unknown coverage; run provenance (source/video metadata, effective config, model hash/version, calibration/schema IDs); graceful stop/partial semantics/cleanup/resume/progress (--start/--end now covers reviewing part of a long video, but a q-stop still saves nothing); dataset repair before training; charts/HTML from saved evidence.
+As of 2026-11-20 the next work is the LLM feedback and report stages (section 17), then validation of the indicators the facts rest on against human labels of the scenario videos, more and longer lessons (real lectures, second takes), and optional OpenVINO inference on the Iris Xe. Older context, not an automatic queue: validate List A/camera assumptions/tracks/thresholds (the review MP4/live window now supports this visually); snapshots/MP4 rendered from saved JSONL without rerunning pose; role-separated summaries and valid/unknown coverage; run provenance (source/video metadata, effective config, model hash/version, calibration/schema IDs); graceful stop/partial semantics/cleanup/resume/progress (--start/--end now covers reviewing part of a long video, but a q-stop still saves nothing); dataset repair before training; charts/HTML from saved evidence.
 
 Expand physical indicators deliberately: hand raises, orientation, paths/heatmaps, stationary/out-of-seat/proximity/grouping/object observations. Audio/transcript/semantic interaction stays deferred.
 
@@ -385,12 +394,330 @@ Keep null/empty/zero/unknown distinct; no invented rule confidence. Preserve eve
 
 ## 15. Repository snapshot
 
-Observed remote: https://github.com/weewali/TeachLens-SGP.git; branch scripting-frame-extraction. Follow current branch/user conventions (Codex new-branch default codex/), not this snapshot blindly.
+Observed remote: https://github.com/weewali/TeachLens-SGP.git. The work lives on branch `scripting-frame-extraction` (latest bc092bd, 2026-11-20; history in section 16). Other remote branches: `main`, `pipeline_creation` (the teammate's LLM work, based on the old commit aa0d107; section 17, docs/llm_integration.md), `Script`, `Nahyan's-Codespace`. Follow current branch/user conventions, not this snapshot blindly. On the main computer the agent may run in a Git worktree under `.claude/worktrees/`; the user wants edits in the main checkout (section 18).
 
-Last inspected commits: ea24b3e (audio/recording future work), dea3be3 (one-class camera roles), 8d4d4ba (architecture guide).
+Older inspected commits: ea24b3e (audio/recording future work), dea3be3 (one-class camera roles), 8d4d4ba (architecture guide).
 
 Before this file there were 412 status entries: modified docs/configs/data.yaml; untracked List A source/tests/run guide/combined dataset YAML; historical dataset/config deletions. Working List A code was local, not represented by these commits. Preserve it; a fresh clone at that commit lacks the full implementation.
 
 OneDrive sync conflict (found 2026-10-26): the repository lives in OneDrive, and an older cloud copy of 12 files (Oct 14-22 versions of pipeline, visual_indicators, config, video, aggregates, analyze.py, default.yaml, two tests, list_a_pose.md, project_structure.md, AGENTS.md) took the normal names while this machine's newer edits were renamed `*-MrWolf.*`. The newer copies were restored to the normal names; the stale ones are backed up under ignored `outputs/onedrive_conflict_backup_2026-10-26/`. If `*-<computer name>.*` files reappear, compare before trusting either copy, and avoid editing the folder from two machines at once.
 
 Writing this handoff changed no existing implementation/data. This snapshot predates its commit; inspect current status. Maintain the handoff after meaningful scope/architecture/environment/contracts/validated behavior changes; retire stale details.
+
+## 16. Work history: what was built, when, and why (2026-10-26 to 2026-11-20)
+
+Chats with Claude are stored per computer and do not travel (section 18), so
+this section is the shared memory of the work on branch
+`scripting-frame-extraction` (owner weewali). Commits are listed for each
+step; details live in the docs named.
+
+**2026-10-26: List A pipeline** (773840c, 8b82b1d). YOLO26 pose + ByteTrack,
+List A rules, JSONL evidence, JSON summary, annotated review MP4, live
+window, segments (--start/--end), static cameras by default (user decision),
+1 analyzed frame per second (5/s was too slow), real wall-clock times from
+the recording-start tags (cameras line up to about +/-1 s), joint groups per
+camera (students: no legs), upper-leg posture, camera-motion compensation for
+the downloaded web samples, recording-time tool, the filming booklet
+docs/test_recording_scenarios.pdf. Docs: list_a_pose.md.
+
+**2026-11-16: test set and test tools** (65aa0d7, 2cf59a7). The user filmed
+the scripted scenarios A1-A6 and B1 (two iPhones: student camera at the
+front, instructor camera at the back). They are the test set, lined up by
+real recording time (manifest `data/manifests/sgp_scenario_videos.csv`, sync
+windows, corrected starts for clips trimmed on the iPhone). Indicators are
+tested one at a time (`--indicators`). Tools: run_scenarios.py,
+show_indicator.py, trim_video.py. Docs: scenario_test_videos.md.
+
+**2026-11-17: robustness, List B, objects, faces** (5b37bd6 ... 29f5f57).
+Keep the teacher role on the tracked instructor; ignore student heads at the
+bottom of the instructor camera and people inside the screen; one detection
+per body (desks split students into two boxes); stop --overwrite early when a
+file is open; model input 1280 px and looser tracking (back-row and
+head-down students were missed at 640); List B teacher indicators with room
+zones/targets (data/calibration/sgp_room_instructor_view.yaml); more
+sensitive gestures; isolated COCO object detection; MediaPipe face landmarks
+and rule-based facial actions on students only (user: never on the teacher).
+Facial-expression training data is blocked by licensing (an ECNU data-use
+agreement); nothing was trained. Docs: list_b_teacher.md, object_detection.md,
+facial_actions.md.
+
+**2026-11-18: List C, device use, fusion, one command, GPU decoding**
+(7ca1a91 ... f597de1). List C: the 19 student indicators the user listed
+(hand raises, seats, out of seat, head down, alertness, device use,
+note-taking, reading, response gestures, head targets, orientation proxy,
+hand-raise outcomes ...), track stitching, cross-camera links, the MediaPipe
+gesture model (downloaded with approval). Device use was reworked twice from
+the user's corrections: an A2 student on a phone was labelled asleep, and A4
+students using phones under the desk were missed; now device use = a phone
+seen in hand (detector at 1920 px) or the head held down for a sustained time
+(`phone_likely`), and sleep needs a resting head or hidden face. Then the
+fusion stage from the SGP1 proposal (FR 6: windows on real time,
+cross-correlation over lags, lagged OLS `Y_t = b0 + b X_(t-k) + a Y_(t-1)`)
+with guardrails (circular-shift test, q-values, Newey-West errors);
+statsmodels installed. One command per lesson (analyze_lesson.py). Video
+decoding on the GPU (D3D11; 4K HEVC about 20x faster, identical pose
+results). All seven scenario lessons ran (about 4.3 h): no lag finding; the
+"on target" measure counted note-taking as looking away. Docs:
+list_c_students.md, fusion_lag_analysis.md, lesson_pipeline.md.
+
+**2026-11-19: tweaks after "results not promising"** (0c562fc). Read with the
+booklet's scripted teacher and student outcomes:
+- Outputs reorganized into dated folders (outputs/lessons/<stamp>_<lesson>/,
+  outputs/runs/<stamp>_<run>/, pooled/, logs/; scripts/organize_outputs.py
+  moved the old files; src/utils/output_layout.py).
+- The whole lesson pipeline in src/pipeline.py (analyze_lesson,
+  pool_lessons); alignment in src/preprocessing/alignment.py.
+- Teacher seated behind the desk: posture from the shoulders' height above
+  the desk target (seated A3/A4 teacher 0.56-0.77 shoulder widths; standing
+  about 1.75 by body proportions, not filmed yet). A3 and A4 were "unknown"
+  for whole lessons before; now "sitting".
+- New teacher features T_seated, T_at_desk, T_reading_notes, T_back_to_class;
+  per-student on-task / off-task states (note-taking counts as on task).
+- Nine hypotheses fixed in advance from the booklet codes (T-STAND, T-GEST,
+  T-WALK, T-ASK, T-SIT, T-READ, T-WRITE), tested first; plain comparisons
+  ("X% off task after the teacher sat, Y% otherwise"); a variation guardrail;
+  pooling within lessons and a between-lessons comparison.
+- facts.json for the LLM stage in the schema of the teammate's
+  `llm_report.py` (branch pipeline_creation), checked offline with his code.
+- side_by_side.mp4 (both cameras lined up by real time), a small translucent
+  grey HUD on the review videos, the GPU check (Intel Iris Xe, decoding
+  already on it), docs/outputs_guide.md, docs/llm_integration.md.
+
+Results (docs/lesson_pipeline.md, "Revised analysis"): A3 rerun in full
+(10.3 min; teacher seated 242 of 245 s; gesturing -> 87% vs 76% on task,
+q 0.36). Within one scripted lesson the teacher rarely varies enough to test
+(0-4 of 9 hypotheses). Pooled over A1, A2, A3 (v2), A4, A5, A6, B1: teacher
+at the desk -> more students off task (within A5/A6 r +0.61 at 15 s, +28
+points; between lessons 42% vs 30%), seated lessons 42% vs 32% off task,
+gesturing -> slightly more on task; facing the class came out opposite
+(reading notes counts as facing). Nothing passes q <= 0.05: the lessons are
+short and scripted, and A3 (seated teacher, attentive class by design) and
+A4 (seated teacher, inattentive class) are crossed on purpose.
+
+**2026-11-20** (bc092bd): pushed; removed the historical
+`data/student_instructor_imported` dataset; `outputs/archive/` was deleted on
+disk outside the agent's session (its content was never in Git).
+
+Lesson folders on the user's main computer (local, not in Git):
+`outputs/lessons/2026-11-18_1825_sgp_A1_full`, `..._2016_sgp_A2_lesson`,
+`2026-11-19_1327_sgp_A3_v2` (current A3), `2026-11-18_1856_sgp_A3_lesson`
+(old A3, no desk rule), `..._1810_sgp_A4_t1_lesson` (instructor redone with
+the desk rule), `..._1824_sgp_A4_t1_hw`, `..._1932_sgp_A5_lesson`,
+`..._2059_sgp_A6_lesson`, `..._2243_sgp_B1_lesson`; pooled:
+`outputs/pooled/2026-11-19_1337_scenarios_A1-B1`.
+
+## 17. Next stages: LLM feedback and report generation (for the next agent)
+
+The goal (user, 2026-11-18/19): after the lag analysis, an LLM turns the
+results into a human-readable explanation with reasoning: the instructor's
+strong points, weak points, and practical suggestions; then a report the
+instructor reads. A teammate started this on branch `origin/pipeline_creation`
+(commit 1bf2c49, 2026-11-11: `Downloaded from prototype/llm_report.py`, his
+own CLAUDE.md, no UI yet). This branch produces everything the LLM needs.
+Read docs/llm_integration.md and docs/outputs_guide.md before coding.
+
+### 17.1 Which files the LLM reads, and which it must not
+
+| File (in `outputs/lessons/<stamp>_<lesson>/`) | Use |
+| --- | --- |
+| **`facts.json`** | **The only input the LLM sees.** Pre-computed, anonymous facts with ids, direction, evidence strength, glossary, cautions, alternative explanations. Every number the LLM may write is in it. |
+| `lesson.json` | Not for the LLM. For the report and UI: lesson name, run IDs, real start/end, timings, hypotheses (one line each), findings, every output path, `next_step`. |
+| `fusion/fusion.json` | Not for the LLM (too detailed, many numbers). For the report's statistics appendix and for a reviewer. |
+| `fusion/timeline.png` | Report figure (teacher and class timelines). |
+| `side_by_side.mp4` | Report link: open it at a fact's mm:ss (lesson time) to see the moment. Local only (classroom footage). |
+| `student/summary.json`, `instructor/summary.json` | Report: lesson-level totals (visibility, posture, hand raises, seats). facts.json already carries what the LLM needs from them. |
+| `student/events.jsonl`, `instructor/events.jsonl`, `review.mp4` | Never send to the LLM. Evidence for checks and labelling. |
+| `outputs/pooled/<stamp>_<name>/facts.json` | The same schema over several lessons (within- and between-lesson comparisons) for a course-level report. |
+
+Never send video, images, names, or raw events to the LLM; it gets facts only
+(the project's privacy rule and the teammate's design).
+
+### 17.2 facts.json (schema_version 1), field by field
+
+Top level: `schema_version` 1; `lecture` (lesson, videos, duration mm:ss,
+start_real_time, sampling_seconds 1, window_seconds 5, windows);
+`data_quality` (mode, instructor_visible_pct, students_visible_median,
+windows_with_student_state, limitations[]); `indicator_validation` (for
+instructor_role, head_up_posture, hand_raise, phone_use, instructor_seated,
+student_on_task_state, instructor_facing, instructor_gestures:
+`checked_against_human_labels` false until someone labels clips; add
+`precision` when they do); `glossary`; `alternative_explanations` E1-E5;
+`facts`; `report_note`. Times are mm:ss from the start of the stretch both
+cameras recorded.
+
+Every fact: `id` (F1 ...), `direction` (favourable / unfavourable: a positive
+point may cite only favourable facts, a negative point only unfavourable),
+`kind`, numbers, `evidence` {`strength`: suggestive (unlikely to be chance
+after the lag and multiple-testing checks) / weak (could easily be chance) /
+descriptive (a share, count, or stretch, not a test), `test_p`, `notes`[]}.
+
+| kind | Fields | Meaning |
+| --- | --- | --- |
+| comparison | instructor_activity, student_measure, measured ("5 to 10 seconds later"), windows, seconds, other_windows, pct_after, pct_other_windows, gap_points (counts: per_window_after / per_window_other); pooled: lessons | One hypothesis: the class right after the behaviour vs. the other windows. |
+| instructor_behaviour_share | instructor_activity, share_of_lesson_pct | A behaviour filling much of the lesson (facing class >= 60%, gesturing >= 30%, walking >= 15% favourable; seated >= 50%, reading notes >= 30%, back to class >= 30% unfavourable; thresholds in src/reporting/facts.py TEACHER_PROFILE). |
+| highest_on_task_stretch / lowest_on_task_stretch | span (mm:ss-mm:ss), stretch_seconds 30, students_on_task_pct, instructor_activity | The best / worst 30 s and what the teacher was mostly doing. |
+| hand_raises | count, answered_likely, example_times | Participation. |
+| no_participation_stretch | span, stretch_seconds, missing | The longest stretch (>= 60 s) without a hand raise. |
+| phone_use | students_with_phone_pct, peak_window, peak_pct | Phone seen or likely (>= 5% of student time). |
+| lesson_comparison (pooled only) | instructor_activity ("... for most of the lesson"), student_measure, lessons_with, lessons, pct_in_those_lessons, pct_in_other_lessons, gap_points | Lessons compared with each other (weak with few lessons). |
+
+Definitions the wording must follow: "on task" = facing the focus (the
+front, or a classmate who answers), writing, or reading, and not off task;
+"off task" = phone seen or likely, dozing, talking toward a neighbour, or
+facing away. Both are observable proxies, not attention.
+
+### 17.3 Build the LLM stage this way
+
+1. Bring the teammate's `llm_report.py` into this branch as
+   `src/reporting/llm_report.py` (logic: system prompt, output schema,
+   `validate()`, retry, cache, cost table) with a thin `scripts/llm_report.py`
+   (`--lesson NAME` or `--facts PATH`, `--dry-run`, `--fake-response`,
+   `--model haiku|sonnet|opus`). Read the facts from the lesson folder via
+   `src/utils/output_layout.find_lesson()` and write into the same folder:
+   `llm_output.json` (answer + checks + attempts), `feedback.md` or
+   `final_feedback_report.txt`, and `llm_cache/`. Add these names to
+   `LESSON_FILES` in output_layout.py and to docs/outputs_guide.md. Keep his
+   checks: numbers only from cited facts, direction match, no causal words,
+   no internal-state words (attention, engaged, bored ...), no judgement of
+   the person, hedges for weak / descriptive facts, "not verified" for
+   unverified detections, at most 3 points per list, one retry, rule-based
+   fallback.
+2. Adapt three things: (a) the prompt's "focused" rule -> "use the measures
+   only as the glossary defines them"; (b) extend `KIND_INDICATORS` with this
+   branch's kinds (`instructor_behaviour_share`: instructor_seated,
+   instructor_facing, instructor_gestures; `highest_on_task_stretch` /
+   `lowest_on_task_stretch` / `lesson_comparison`: student_on_task_state;
+   `comparison`: student_on_task_state, instructor_role) so unverified
+   detections are always flagged; (c) add **suggestions** (the user wants
+   them): a third list `suggestions` [{text, fact_ids, explanation_ids}],
+   each tied to the facts it answers, phrased as an option ("you could ..."),
+   validated like the points (numbers from cited facts, no causal claims, at
+   most 3). Ground them in the booklet's effective-teaching codes:
+
+   | Fact pattern | Suggestion direction (booklet code) |
+   | --- | --- |
+   | instructor seated / at the desk for much of the lesson, or comparisons after seated windows unfavourable | Teach part of the lesson standing at the front and move toward the students (T-STAND, T-WALK) |
+   | reading notes | Look up from the notes and face the class while explaining (T-READ -> T-STAND) |
+   | back to the class / board writing | Write in short bursts and turn back to the class to explain (T-WRITE -> T-GEST) |
+   | few gestures, or gestures followed by more on task | Use open gestures while explaining (T-GEST) |
+   | no-participation stretch, few hand raises | Ask a question, wait 3-5 s, pick a student who raised a hand (T-ASK) |
+   | phone use, lowest on-task stretch | Check in with the class at that point; review that moment in side_by_side.mp4 |
+
+3. Add an `llm:` section to configs/default.yaml (model, max_points,
+   cache on/off) validated in src/utils/config.py; later an
+   `analyze_lesson.py --llm` flag that runs the stage after asking.
+4. Tests (no network, no key): validation of good and bad fake answers on a
+   facts.json built by src/reporting/facts.py, the retry path with a fake
+   client, the rule-based fallback, suggestions validation, cache hits.
+   Real calls only with the user's approval.
+
+Cost and keys: a real call costs money (about $0.04 per lesson with Opus,
+less with Haiku, by the teammate's table); ask the user before any real call
+and before installing the `anthropic` package (not installed in TeachLens on
+2026-11-19). Never ask for or accept an API key in chat; the user exports
+`ANTHROPIC_API_KEY` themselves. Check the current model ids and prices
+before relying on the table in his file.
+
+### 17.4 Build the report stage this way
+
+`src/reporting/renderer.py` + `src/reporting/templates/report.html.j2` +
+`report.css` + thin `scripts/report.py --lesson NAME`, writing
+`report.html` (later PDF) into the lesson folder. It reads saved files only:
+
+1. Header: lesson name, date and real start/end (lesson.json), duration,
+   cameras, run IDs.
+2. Summary for the instructor: the LLM's strong points, weak points, and
+   suggestions (llm_output.json; the rule-based text when the LLM's answer
+   failed the checks), each with its evidence strength in words.
+3. Evidence: each fact as a sentence with its numbers, strength, and a
+   "watch this moment" link (side_by_side.mp4 at the fact's mm:ss; spans of
+   stretches; comparison facts have no single moment).
+4. Figures: fusion/timeline.png; optional per-lesson tables from
+   summary.json (teacher time seated / facing / at the board; hand raises).
+5. Data quality and limitations: data_quality.limitations, the unverified
+   detections, report_note, "associations, not causes".
+6. Appendix (optional): hypotheses table from lesson.json / fusion.json
+   (r, lag, q, matches_expectation) for a technical reader.
+
+Show observation + denominator + evidence strength + limitation together;
+never a bare score. Keep everything local (the report embeds or links
+classroom footage). A UI (the teammate's) can list
+`outputs/lessons/*/lesson.json` and show the same pieces.
+
+### 17.5 Acceptance checks for the next agent
+
+- `python -m unittest discover -s tests/unit` passes (170 tests on
+  2026-11-20 plus the new ones).
+- `python scripts/llm_report.py --lesson sgp_A3_v2 --dry-run` builds the
+  prompt from the lesson's facts.json without a network call.
+- A fake good answer passes and a fake bad answer fails with readable
+  problems; the report renders from saved files alone (no models, no video
+  decoding).
+- New output files are documented in docs/outputs_guide.md and named in
+  output_layout.py; AGENTS.md sections 16-17 updated.
+
+## 18. Continuing on another computer
+
+Chats with Claude Code (desktop app or CLI) and its memory are stored on each
+computer under `%USERPROFILE%\.claude\projects\<folder key>\` and are not
+synced, so a new computer starts without them. This file, the docs, and the
+Git history are the shared memory: update sections 16-17 at the end of every
+session. (Copying that folder to the same path on the other computer may let
+`claude --resume` find old CLI sessions; the desktop app's session list is
+not guaranteed to show them. Do not rely on it.)
+
+**What is in Git** (branch `scripting-frame-extraction`): code, configs,
+calibration, the scenario manifest, docs, tests. **What is not** (copy by
+hand, or let OneDrive sync it): the recordings
+(`data/raw_student_videos/`, `data/raw_instructor_videos/`, `data/raw_videos/`),
+the four model files (`models/pose/yolo26n-pose.pt`,
+`models/detection/yolo26n.pt`, `models/face/face_landmarker.task`,
+`models/hands/gesture_recognizer.task`), and `outputs/` (needed for `--reuse`
+and pooling; otherwise rerun). The repository lives in OneDrive on the main
+computer: if both computers sync the same folder, do not edit on both at once
+(section 15 records a sync conflict) and let Git, not OneDrive, carry code.
+
+Setup on a new computer (Windows, PowerShell, repository root):
+
+```powershell
+git fetch origin
+git checkout scripting-frame-extraction
+git pull
+conda create -n TeachLens python=3.10
+conda activate TeachLens
+python -m pip install -r requirements.txt
+python -m pip install --no-deps mediapipe==1.2.2
+python -m pip install absl-py flatbuffers sounddevice
+python -m pip install statsmodels==0.14.5
+python -m unittest discover -s tests/unit
+python scripts/analyze_lesson.py --all-scenarios --tag v2 --dry-run
+```
+
+Also install FFmpeg (ffprobe on PATH; recording times and trims need it).
+Ask the user before each download (packages, models). Never install mediapipe
+with its dependencies (its opencv-contrib-python breaks cv2). The models are
+never downloaded by the code: copy them. Hardware on the main computer: Intel
+Core i7-1355U, Intel Iris Xe (decoding runs on it through D3D11), no CUDA;
+the student camera costs about 2-9 minutes of computing per minute of 4K
+video depending on the power mode. A proposal to run the YOLO models on the
+Iris Xe through OpenVINO exists (not installed, not done).
+
+**Working agreements with the user** (from earlier sessions; apply them):
+- Practical progress and plain explanations; explain new output files and
+  symbols. Keep the setup simple and flexible; the pipeline must cope with
+  real-room obstacles instead of demanding a perfect setup.
+- Edit the main checkout, not a Git worktree (the main computer's agent
+  copies worktree edits into the main folder when a hook forces a worktree).
+- Test on the own scenario recordings; when testing one indicator, turn on
+  only that indicator (`--indicators`).
+- Ask before any download (name, source, size) and before any paid API call;
+  install only into the TeachLens environment.
+- The face model runs on students only, never on the teacher.
+- Commit finished work with clear messages; push only when the user says so
+  in that conversation ("push it"), and never force-push.
+- Outputs go into dated folders (section 16); never loose files.
+- Privacy: recordings, frames, outputs, and weights stay local; never print
+  GPS tags; no names; no face recognition or identity matching;
+  `data/raw_videos/clock_test_02.MOV` is private.
+- Never sign agreements or data-use agreements, create accounts, or accept
+  terms for the user.
