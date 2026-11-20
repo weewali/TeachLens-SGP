@@ -1,6 +1,0 @@
-ultralytics
-opencv-python-headless
-pillow
-matplotlib
-numpy
-pandas

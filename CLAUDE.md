@@ -253,10 +253,13 @@ evidence is thin; never pad).
   lecture's numbers, web form and report tabs, planned activities).
 
 ## Code map
-The working scripts moved from `Downloaded from prototype/` to `main code/` on 2026-11-17 (user request). Both folder
-names contain a space; always quote paths.
-- `Downloaded from prototype/classroom_analytics.py`: the team's ORIGINAL prototype (with its `requirements.txt`).
-  Leave untouched.
+The working scripts moved from `Downloaded from prototype/` to `main code/` on 2026-11-17 (user request). The folder
+name contains a space; always quote paths.
+- The team's ORIGINAL single-camera prototype (`Downloaded from prototype/classroom_analytics.py` + `requirements.txt`)
+  was deleted from the working tree on 2026-11-20 (user: "we don't want that ... implementation because we have
+  switched to System B"); not committed yet; recoverable from commit 6a035be. The user chose to KEEP the old
+  Video10min outputs (frames, yolo_outputs, sessions/validation Video10min, old reports/tables/pooled) and to leave the
+  GitHub history as it is (no force-push).
 - `main code/Main Code.py`: the real pipeline, two cameras (renamed by the user from `classroom_analytics copy.py`;
   keep the name). Since 2026-11-17 it also writes one JSONL per camera in the team's event format
   (`outputs/events/<session>_instructor_view.jsonl`, `..._student_view.jsonl`) using `src/analysis/events.py`, an exact
@@ -373,5 +376,9 @@ Open, in order:
 5. Update `docs/SGP2_report_context.md` for the two-camera System B; decide with the team how A and B merge.
 6. Frame interval is 2 s. If changed to 1 s, double `HAND_RAISE_MIN_FRAMES` and `OFFTASK_MIN_FRAMES`;
    `STILL_DOWN_MIN_FRAMES` follows automatically; `STATIONARY_MOVE` and `STILL_SHIFT` change meaning.
-7. Git: `.gitignore` now keeps new videos, frames, standardized videos, previews and review images local. The old
-   `Video10min` frames are still tracked; untracking them (`git rm --cached`) needs the user's OK.
+7. Git: `.gitignore` now keeps new videos, frames, standardized videos, previews, review images and (since
+   2026-11-20) `sessions/*/reports/charts/` + `reports/timeline.png` local. The old `Video10min` frames are still
+   tracked and already on GitHub; the user chose to keep them and not rewrite GitHub history (2026-11-20).
+   On 2026-11-20 (user OK) the 3 then-unpushed commits were rebuilt without the unblurred heatmaps/timeline of
+   Mixed_gender_classes and How_much_..._2 (same messages, authors, dates; nothing else changed): 1ed154b/4839b1d/
+   ada0428 -> 82b1d39/d925aac/352d13a. The old ones stay reachable locally via the reflog. The images stay on disk.

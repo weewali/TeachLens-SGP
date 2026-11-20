@@ -40,6 +40,9 @@ classroom_project/sessions/*/standardized/
 classroom_project/sessions/*/yolo_outputs/
 classroom_project/validation/*/images/
 classroom_project/jobs/
+# report charts and timelines are drawn on real camera frames (the web app redraws them from the saved tables)
+classroom_project/sessions/*/reports/charts/
+classroom_project/sessions/*/reports/timeline.png
 
 # IDE
 .vscode/
