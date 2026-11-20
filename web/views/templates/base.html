@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"{% if pdf %} class="pdf"{% endif %}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}TeachLens{% endblock %}</title>
+  {% if pdf %}<style>{{ inline_css | safe }}</style>{% else %}<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">{% endif %}
+  <script>document.documentElement.classList.add("js");</script>{# lets the CSS hide inactive tabs before the first paint #}
+</head>
+<body>
+  {# UAEU brand guidelines (2025): the logo is used whole and unchanged, with clear space around it; another name may
+     not be merged into it, so TeachLens stands beside it after a divider. Logo file from uaeu.ac.ae. #}
+  <header class="topbar">
+    <div class="brand">
+      <img class="brand-logo" src="{{ logo_src if pdf else url_for('static', filename='uaeu-logo.svg') }}" alt="United Arab Emirates University (UAEU)" width="296" height="52">
+      <span class="brand-divider" aria-hidden="true"></span>
+      <a class="brand-name" href="{{ url_for('lectures.index') }}">TeachLens</a>
+    </div>
+    <nav aria-label="Main">
+      <a href="{{ url_for('lectures.index') }}">Lectures</a>
+      <a class="button" href="{{ url_for('lectures.new') }}">New analysis</a>
+    </nav>
+  </header>
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

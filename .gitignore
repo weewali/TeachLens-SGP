@@ -49,3 +49,6 @@ configs/*.local.yaml
 # System files
 .DS_Store
 Thumbs.db
+
+# private settings (the Claude API key): never upload
+.env

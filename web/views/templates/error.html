@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ title or "Not found" }} · TeachLens{% endblock %}
+{% block content %}
+<div class="card empty">
+  <h1>{{ title or "Not found" }}</h1>
+  <p>{{ message }}</p>
+  <p><a class="button" href="{{ url_for('lectures.index') }}">Back to lectures</a></p>
+</div>
+{% endblock %}

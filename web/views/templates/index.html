@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Lectures · TeachLens{% endblock %}
+{% block content %}
+<h1>Lectures</h1>
+{# shown for 5 seconds, then it fades out (lectures.js) #}
+{% if deleted %}<p class="banner banner-ok" role="status" data-autohide="5000">“{{ deleted }}” was deleted.</p>{% endif %}
+{% if running %}
+<p class="banner">An analysis is running:
+  <a href="{{ url_for('lectures.progress', lecture_id=running) }}">follow {{ running }}</a>.</p>
+{% endif %}
+
+{% if rows %}
+<div class="table-wrap">
+<table class="table">
+  <thead>
+    <tr><th>Lecture</th><th>Topic</th><th>Status</th><th><span class="visually-hidden">Actions</span></th></tr>
+  </thead>
+  <tbody>
+  {% for row in rows %}
+    {% set name = row.context.name or row.lecture.id %}
+    <tr>
+      <td><strong>{{ name }}</strong><div class="muted small">{{ row.lecture.id }}</div></td>
+      <td>{{ row.context.topic or "—" }}</td>
+      <td>
+        {% if row.status and row.status.state == "running" %}
+          <span class="tag tag-run">Running · stage {{ row.status.stage }} of 7</span>
+        {% elif row.has_report %}
+          <span class="tag tag-ok">Report ready</span> <span class="muted small">{{ row.analysed_at }}</span>
+        {% elif row.status and row.status.state == "failed" %}
+          <span class="tag tag-bad">Stopped with an error</span>
+        {% elif row.status and row.status.state == "interrupted" %}
+          <span class="tag tag-bad">Interrupted</span>
+        {% else %}
+          <span class="tag">Videos uploaded</span>
+        {% endif %}
+      </td>
+      <td class="right actions">
+        {% if row.has_report %}
+          <a class="button" href="{{ url_for('lectures.report', lecture_id=row.lecture.id) }}">Open report</a>
+        {% else %}
+          <a href="{{ url_for('lectures.progress', lecture_id=row.lecture.id) }}">Progress</a>
+        {% endif %}
+        <a class="link-delete" href="{{ url_for('lectures.confirm_delete', lecture_id=row.lecture.id) }}"
+           aria-label="Delete {{ name }}">Delete</a>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="empty card">
+  <p>No lectures yet.</p>
+  <p><a class="button" href="{{ url_for('lectures.new') }}">Start a new analysis</a></p>
+  <p class="muted">You need two videos of the same lecture: one from the instructor camera and one from the student camera.</p>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% if deleted %}<script src="{{ url_for('static', filename='lectures.js') }}"></script>{% endif %}{% endblock %}

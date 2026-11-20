@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Delete lecture · TeachLens{% endblock %}
+{% block content %}
+{% set name = context.name or lecture.id %}
+<h1>Delete this lecture?</h1>
+<div class="card confirm">
+  <p class="confirm-name"><strong>{{ name }}</strong> <span class="muted small">{{ lecture.id }}</span></p>
+  {% if error %}<p class="banner banner-bad" role="alert">{{ error }}</p>{% endif %}
+  {% if running %}<p class="banner">This lecture is being analysed right now. Deleting it stops the analysis.</p>{% endif %}
+  <p>This removes everything TeachLens keeps on this computer for this lecture:</p>
+  <ul>
+    <li>the two uploaded videos{% if context.slides %} and the slides{% endif %}</li>
+    {% if has_report %}<li>the report and its charts</li>{% endif %}
+    <li>everything the analysis produced{% if not has_report %} so far{% endif %}</li>
+  </ul>
+  <p><strong>This cannot be undone.</strong></p>
+  <form class="confirm-actions" method="post" action="{{ url_for('lectures.delete', lecture_id=lecture.id) }}">
+    <button class="button" type="submit">Delete lecture</button>
+    <a class="button button-secondary" href="{{ url_for('lectures.index') }}">Cancel</a>
+  </form>
+</div>
+{% endblock %}
