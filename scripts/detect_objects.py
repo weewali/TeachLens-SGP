@@ -1,9 +1,9 @@
 """Detect classroom objects in one video with the COCO YOLO26 detector (no poses).
 
 Runs on its own, separate from the pose pipeline (scripts/analyze.py), on the
-same sampled frames (video.sample_every_seconds). Writes
-outputs/events/<id>.objects.jsonl, outputs/reports/<id>.objects.json, and the
-review video outputs/debug/<id>.objects.mp4 with the boxes drawn.
+same sampled frames (video.sample_every_seconds). Writes objects.jsonl,
+objects_summary.json, objects_run.json, and the review video
+objects_review.mp4 (boxes drawn) to outputs/runs/<YYYY-MM-DD_HHMM>_<id>/.
 
 Examples (repository root, TeachLens environment):
     python scripts/detect_objects.py --video data/raw_student_videos/sgp_A2_student.MOV --video-id a2_student_objects --camera student_view

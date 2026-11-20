@@ -1,7 +1,8 @@
 """Print one List A indicator from a saved run as a readable table.
 
-Reads outputs/events/<video_id>.list_a.jsonl, or <video_id>.objects.jsonl
-from scripts/detect_objects.py (no video or model needed), and
+Reads a saved run by its ID (outputs/runs/<stamp>_<id>/events.jsonl, or a
+lesson's student/ or instructor/ folder; objects.jsonl for a run of
+scripts/detect_objects.py; no video or model needed), and
 lists that indicator's events in time order, optionally filtered by track,
 role, value, coverage, and a time range. Interval indicators also get a total
 per value at the end.
@@ -23,6 +24,7 @@ from typing import Any
 # Allow direct `python scripts/show_indicator.py` from any working directory.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from src.utils.output_layout import events_file  # noqa: E402
 from src.utils.paths import project_path  # noqa: E402
 
 
@@ -112,12 +114,11 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, default=project_path("outputs"))
     args = parser.parse_args()
 
-    path = args.output_dir / "events" / f"{args.video_id}.list_a.jsonl"
-    if not path.is_file():  # an object-detection run (scripts/detect_objects.py)
-        path = path.with_name(f"{args.video_id}.objects.jsonl")
-    if not path.is_file():
-        print(f"No events file: {path.with_name(f'{args.video_id}.list_a.jsonl')} "
-              "or .objects.jsonl", file=sys.stderr)
+    # The run's folder: outputs/runs/<stamp>_<id>/ or a lesson's student/ or
+    # instructor/ folder; an object-detection run reads objects.jsonl.
+    path = events_file(args.output_dir, args.video_id)
+    if path is None:
+        print(f"No saved run {args.video_id} under {args.output_dir} (runs/ or lessons/)", file=sys.stderr)
         return 1
     with open(path, encoding="utf-8") as handle:
         events = [json.loads(line) for line in handle if line.strip()]

@@ -1,9 +1,13 @@
-"""Lecture controller: list lectures, start a new analysis, follow its progress, show the report, delete a lecture."""
+"""Lecture controller: list lectures, start a new analysis, follow its progress, show the report (and its PDF),
+delete a lecture."""
+import subprocess
+
 from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, send_file, url_for
 
 from web.models.charts import CHARTS, chart_path, ensure_charts
 from web.models.job import STAGES
 from web.models.lecture import ACTIVITY_TYPES, MAX_ACTIVITIES, MAX_ACTIVITY_MINUTES, parse_activities
+from web.models import pdf
 from web.models.report import build_report
 
 bp = Blueprint("lectures", __name__)
@@ -145,6 +149,31 @@ def report(lecture_id):
     if not lecture.has_report():
         return redirect(url_for("lectures.progress", lecture_id=lecture.id))
     return render_template("report.html", **build_report(lecture))
+
+
+@bp.get("/lectures/<lecture_id>/report.pdf")
+def report_pdf(lecture_id):
+    """The report as a PDF file: made by a hidden local browser from a self-contained copy of the page, kept in the
+    lesson folder and made again only when the report has changed."""
+    lecture = _lecture_or_404(lecture_id)
+    if not lecture.has_report():
+        abort(404)
+    data = build_report(lecture)
+    path = pdf.pdf_path(lecture)
+    if not pdf.is_current(lecture):
+        browser = pdf.find_browser(current_app.config.get("PDF_BROWSER"))
+        try:
+            if browser is None:
+                raise pdf.PdfUnavailable("No Microsoft Edge or Google Chrome was found on this computer to make "
+                                         "the PDF.")
+            html = render_template("report.html", **data, **pdf.print_assets(lecture, data["charts"], data["moments"]))
+            pdf.print_to_pdf(html, path, browser, runner=current_app.config.get("PDF_RUNNER") or subprocess.run)
+        except pdf.PdfUnavailable as error:
+            return render_template("error.html", title="The PDF could not be made",
+                                   message=f"{error} You can still save the report as a PDF from your browser: open "
+                                           "the report, press Ctrl+P and choose \"Save as PDF\"."), 503
+    return send_file(path, mimetype="application/pdf", as_attachment=True,
+                     download_name=pdf.download_name(lecture, data["context"]))
 
 
 @bp.get("/lectures/<lecture_id>/charts/<name>")

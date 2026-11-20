@@ -1,9 +1,10 @@
 """Lecture model: where one lecture's inputs and results are stored, and which lectures exist.
 
-Inputs:  <BASE_DIR>/videos/<id>/instructor.<ext>, students.<ext>, optional slides.<ext>, context.json
-Results: <BASE_DIR>/sessions/<id>/ (written by main code/Main Code.py), <BASE_DIR>/jobs/<id>.json (the analysis status),
-         <EVENTS_DIR>/<id>_instructor_view.jsonl + <id>_student_view.jsonl, <BASE_DIR>/validation/<id>/ (review sheets)
-Deleting a lecture removes exactly these. Shared files (calibration, pooled results of several lectures) stay.
+Everything lives under BASE_DIR, the lesson pipeline's output root (outputs/, ignored by Git):
+Inputs:  <BASE_DIR>/uploads/<id>/instructor.<ext>, students.<ext>, optional slides.<ext>, context.json
+Results: <BASE_DIR>/lessons/<YYYY-MM-DD_HHMM>_<id>/ (scripts/analyze_lesson.py, then scripts/report_lesson.py),
+         <BASE_DIR>/web_jobs/<id>.json (the analysis status), <BASE_DIR>/validation/<id>/ (review sheets)
+Deleting a lecture removes exactly these.
 """
 import json
 import re
@@ -13,9 +14,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+LESSON_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{4}_(?P<id>[A-Za-z0-9_-]{1,64})$")   # output_layout's folder names
 CAMERAS = ("instructor", "students")
-EVENT_VIEWS = ("instructor_view", "student_view")   # the team's camera IDs, as in Main Code.py's CAMERA_VIEWS
-REMOVE_ATTEMPTS = 8                # retries while Windows briefly keeps a file open (antivirus scan, OneDrive)
+REMOVE_ATTEMPTS = 8               # retries while Windows briefly keeps a file open (antivirus scan, OneDrive)
 VIDEO_EXTENSIONS = (".mp4", ".mov", ".avi", ".mkv")
 SLIDE_EXTENSIONS = (".pdf", ".pptx", ".ppt", ".odp", ".key")
 
@@ -62,7 +63,7 @@ def describe_activity(activity):
 
 
 def safe_id(name):
-    """A lecture name that is safe as a folder name (the same rule as Main Code.py)."""
+    """A lecture name that is safe as a folder name and as the lesson pipeline's --name."""
     return re.sub(r"[^A-Za-z0-9_-]+", "_", name or "").strip("_")[:48] or "lecture"
 
 
@@ -97,23 +98,30 @@ class Lecture:
 
     @property
     def input_dir(self):
-        return self.base_dir / "videos" / self.id
+        return self.base_dir / "uploads" / self.id
+
+    def lesson_dirs(self):
+        """Every lesson folder made for this lecture (one per analysis with a new date), oldest first."""
+        root = self.base_dir / "lessons"
+        if not root.exists():
+            return []
+        return sorted(p for p in root.iterdir()
+                      if p.is_dir() and (m := LESSON_DIR_RE.match(p.name)) and m.group("id") == self.id)
 
     @property
-    def session_dir(self):
-        return self.base_dir / "sessions" / self.id
-
-    @property
-    def reports_dir(self):
-        return self.session_dir / "reports"
+    def lesson_dir(self):
+        """The newest lesson folder, or None before the first analysis."""
+        found = self.lesson_dirs()
+        return found[-1] if found else None
 
     @property
     def tables_dir(self):
-        return self.session_dir / "tables"
+        return self.lesson_dir / "tables" if self.lesson_dir else self.input_dir / "no_tables"
 
     @property
     def charts_dir(self):
-        return self.reports_dir / "charts"
+        """The report page's heatmaps (drawn by web/models/charts.py), kept with the lesson."""
+        return self.lesson_dir / "web_charts" if self.lesson_dir else self.input_dir / "no_charts"
 
     def video_path(self, camera):
         for ext in VIDEO_EXTENSIONS:
@@ -130,71 +138,70 @@ class Lecture:
             return json.load(f)
 
     def result(self):
-        """The pipeline's evaluation_result.json, or None. Results of the older single-camera pipeline are ignored."""
-        path = self.reports_dir / "evaluation_result.json"
-        if not path.exists():
+        """The lesson pipeline's lesson.json (what ran, ranges, findings), or None before the first analysis."""
+        path = self.lesson_dir / "lesson.json" if self.lesson_dir else None
+        if path is None or not path.exists():
             return None
         with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-        return data if "alignment" in data else None
+            return json.load(f)
 
     def has_report(self):
-        return (self.reports_dir / "final_feedback_report.txt").exists() and self.result() is not None
+        lesson = self.lesson_dir
+        return bool(lesson and (lesson / "final_feedback_report.txt").exists() and (lesson / "facts.json").exists())
 
     def analysed_at(self):
-        path = self.reports_dir / "evaluation_result.json"
-        return time.strftime("%Y-%m-%d %H:%M", time.localtime(path.stat().st_mtime)) if path.exists() else None
+        path = self.lesson_dir / "final_feedback_report.txt" if self.lesson_dir else None
+        if path is None or not path.exists():
+            return None
+        return time.strftime("%Y-%m-%d %H:%M", time.localtime(path.stat().st_mtime))
 
-    def stored_paths(self, events_dir=None):
-        """Everything kept on this computer for this lecture alone: uploads, results, analysis status, the two event
-        files and any review sheets."""
-        jobs = self.base_dir / "jobs"
-        paths = [self.input_dir, self.session_dir, jobs / f"{self.id}.json", jobs / f"{self.id}.tmp",
-                 self.base_dir / "validation" / self.id]
-        if events_dir is not None:
-            paths += [Path(events_dir) / f"{self.id}_{view}.jsonl" for view in EVENT_VIEWS]
-        return paths
+    def stored_paths(self):
+        """Everything kept on this computer for this lecture alone: uploads, lesson folders, analysis status and any
+        review sheets."""
+        jobs = self.base_dir / "web_jobs"
+        return [self.input_dir, *self.lesson_dirs(), jobs / f"{self.id}.json", jobs / f"{self.id}.tmp",
+                self.base_dir / "validation" / self.id]
 
 
 class LectureRepository:
-    """Finds, lists, creates and deletes lectures under one base folder."""
+    """Finds, lists, creates and deletes lectures under one base folder (the lesson pipeline's outputs/)."""
 
-    def __init__(self, base_dir, events_dir=None):
+    def __init__(self, base_dir):
         self.base_dir = Path(base_dir)
-        self.events_dir = Path(events_dir) if events_dir is not None else None
 
     def delete(self, lecture):
         """Removes the lecture and everything stored for it (stop its analysis first). Returns the paths that could
         not be removed, e.g. a video that another program still has open; empty when everything is gone."""
         if not ID_RE.match(lecture.id):   # never build a path from anything but a plain lecture ID
             raise ValueError(f"Not a lecture ID: {lecture.id!r}")
-        return [path for path in lecture.stored_paths(self.events_dir) if not _remove(path)]
+        return [path for path in lecture.stored_paths() if not _remove(path)]
 
     def get(self, lecture_id):
         if not lecture_id or not ID_RE.match(lecture_id):
             return None
         lecture = Lecture(lecture_id, self.base_dir)
-        return lecture if lecture.input_dir.exists() or lecture.session_dir.exists() else None
+        return lecture if lecture.input_dir.exists() or lecture.lesson_dir else None
 
     def all(self):
-        """Every lecture with uploaded videos or two-camera results, newest first."""
-        ids = set()
-        for folder in ("videos", "sessions"):
-            root = self.base_dir / folder
-            if root.exists():
-                ids |= {p.name for p in root.iterdir() if p.is_dir() and ID_RE.match(p.name)}
-        lectures = [Lecture(i, self.base_dir) for i in ids]
-        lectures = [lec for lec in lectures if lec.video_path("instructor") or lec.result() is not None]
+        """Every lecture uploaded through the web app, newest first. Lessons analysed from the command line without
+        an upload are not listed (their videos are not here to re-run)."""
+        root = self.base_dir / "uploads"
+        if not root.exists():
+            return []
+        lectures = [Lecture(p.name, self.base_dir) for p in root.iterdir() if p.is_dir() and ID_RE.match(p.name)]
+        lectures = [lec for lec in lectures if lec.video_path("instructor")]
 
         def newest(lec):
-            paths = [lec.reports_dir / "evaluation_result.json", lec.input_dir / "context.json"]
+            paths = [lec.input_dir / "context.json"]
+            if lec.lesson_dir:
+                paths.append(lec.lesson_dir / "final_feedback_report.txt")
             return max((p.stat().st_mtime for p in paths if p.exists()), default=0)
         return sorted(lectures, key=newest, reverse=True)
 
     def new_id(self, name):
         base = safe_id(name)
         candidate, n = base, 2
-        while (self.base_dir / "videos" / candidate).exists() or (self.base_dir / "sessions" / candidate).exists():
+        while Lecture(candidate, self.base_dir).input_dir.exists() or Lecture(candidate, self.base_dir).lesson_dir:
             candidate, n = f"{base}_{n}", n + 1
         return candidate
 

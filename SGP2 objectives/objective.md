@@ -13,61 +13,53 @@ causes, and never claims to measure inner states such as attention, engagement, 
 1. **Capture both sides of the classroom.** Accept two recordings of the same lecture: one static camera facing the
    instructor and one facing the students. Line them up on one timeline from the recording-start time in each video's
    metadata, to within about one second.
-2. **Detect people and objects with proven models.** Use pretrained Ultralytics YOLO26 models:
-   - YOLO26n-pose for the instructor;
-   - YOLO26m-pose for the students;
-   - YOLO26s for phones and books.
-
-   Process everything locally on an ordinary laptop CPU.
+2. **Detect people, faces, hands and objects with proven models.** Use pretrained models on a laptop CPU, one frame per
+   second: YOLO26n-pose with ByteTrack for people and anonymous track IDs on both cameras; MediaPipe face landmarks and
+   hand gestures, and a YOLO26n detector for phones, laptops and books, on the student camera.
 3. **Turn detections into observable indicators with transparent rules.**
-   - Instructor: visible, facing the class, at the board, moving, seated.
-   - Students: heads up, head down and still for 30 s or more, hand raised, phone in view, book in view.
+   - Instructor: visible, facing the class, at the board or screen, pointing, gesturing, walking, seated, at the desk,
+     reading notes.
+   - Students: on task / off task, facing the front, phone, laptop, writing, reading, talking, dozing posture, hand
+     raises and answers, on anonymous seats.
 
-   Students are recorded on anonymous seats, and unknown is never counted as zero.
-4. **Record the evidence in a shared, reusable format.** Write timestamped events for each camera in the team's JSONL
-   format, plus 10-second window tables, so results can be checked and reused without reprocessing the video.
+   Unknown is never counted as zero.
+4. **Record the evidence in a shared, reusable format.** One event file per camera (JSONL), summaries, 5-second window
+   tables and `facts.json`, so results can be checked and reused without reprocessing the video.
 5. **Analyse instructor–student associations honestly.**
-   - Compare student behaviour during each instructor activity with the rest of the lecture.
-   - Test whether student changes 5–30 seconds later go with what the instructor did (the team's fusion layer,
-     5-second windows).
-   - Use statistics that allow for neighbouring moments being alike (HAC standard errors, control for the previous
-     window).
-   - Correct for multiple testing (Benjamini–Hochberg q-values in the team's fusion layer; Bonferroni for the
-     comparisons).
-6. **Write feedback an instructor can act on.** Produce up to three positive and three negative points in plain
-   English, without statistical jargon. An optional rewrite by Claude Opus 5.5 is checked automatically against the
-   measured numbers, with the rule-based text as a fallback.
+   - Test whether students change 5–30 seconds after instructor actions (circular-shift test, Benjamini–Hochberg
+     q-values over 9 hypotheses fixed in advance and over exploratory pairs).
+   - Compare students during each instructor activity with the rest of the lecture (HAC errors, Bonferroni).
+6. **Write feedback an instructor can act on.** Up to three positive and three negative points in plain English,
+   without statistical jargon, always rewritten by Claude Opus 5.5 and checked automatically against the measured
+   numbers; the rule-based text is kept, with the reason shown, whenever the rewrite fails.
 7. **Deliver it through a simple web application.** Instructors give the lecture a title, upload the two videos,
-   follow the analysis stage by stage, and read a report in tabs: feedback, charts, timestamped
-   moments and key terms. Context is optional: the topic, the slides, activities in class that were not teaching
-   (a quiz, group work, a video or a break, added with one click and its duration in minutes) and additional
-   information.
-8. **Protect people and state limits openly.** The design rules:
+   follow the analysis stage by stage, and read a report in tabs: feedback, charts, timestamped moments and key terms, which can be downloaded as a PDF.
+   Context is optional: the topic, the slides, activities in class that were not teaching (with their duration) and
+   additional information.
+8. **Protect people and state limits openly.**
    - Processing stays local.
-   - Nobody is identified.
+   - Nobody is identified: temporary track IDs and anonymous seats; faces blurred in every report picture.
    - Only anonymised numbers ever reach the language model.
-   - Inner states are never claimed.
-   - Every saved report file states its limitations. The web page keeps to the points, charts, moments and key
-     terms, and no longer repeats the "unverified" note **[TODO: decide whether it should]**.
-   - Faces are pixelated in the seat chart the instructor sees.
+   - Inner states are never claimed; associations are never presented as causes.
+   - Every saved report file states its limitations **[TODO: decide whether the web page should say "not verified"]**.
 9. **Verify and evaluate.**
    - Test the software automatically.
-   - Run it end to end on a real two-camera recording.
-   - Prepare human-labelled checks of each detection's accuracy.
+   - Run it end to end on real two-camera recordings.
+   - Check each detection's accuracy with human review sheets.
 
-### Status at the time of writing (19 November 2026)
+### Status at the time of writing (20 November 2026)
 
 | Objective | Status | Evidence |
 |---|---|---|
-| 1 Two cameras, aligned | Done | Two real test lectures aligned from metadata (the student camera started 8.0 s and 2.0 s earlier) |
-| 2 Pretrained models, CPU | Done | Three YOLO26 models run locally; no downloads at run time |
-| 3 Observable indicators | Done (rules); accuracy not yet measured | Rule outputs on the two real lectures; no human labels yet |
-| 4 Shared evidence format | Done | Two JSONL files per lecture in the team's event format |
-| 5 Association analysis | Done | Comparisons, and the team's fusion layer on System B's event files, run on the two test lectures; no link passed the correction (see the results chapter) |
-| 6 Plain-English feedback | Done (rule-based); AI rewrite implemented, first real call pending | Feedback on the real lectures; offline tests of the checks |
-| 7 Web application | Done (local) | Upload with optional context and activities, progress, tabbed report, delete; 31 automated web tests. Marked activities are stored but not yet used by the analysis **[TODO]** |
-| 8 Privacy and honesty | Done in design and code | Local processing, anonymous seats, faces pixelated in the seat chart, word checks, limitations in the analysis details |
-| 9 Verification | Partly done | 251 automated tests pass (100 System B, 151 System A); human-labelled accuracy **[TODO]** |
+| 1 Two cameras, aligned | Done | Real two-camera lectures and scripted scenario lessons lined up from metadata |
+| 2 Pretrained models, CPU | Done | YOLO26n-pose, YOLO26n and two MediaPipe models run locally; nothing is downloaded at run time |
+| 3 Observable indicators | Done (rules); accuracy not yet measured | Rule outputs on scenario lessons and a real lecture; no human labels yet |
+| 4 Shared evidence format | Done | Lesson folders with events, summaries, windows and `facts.json` |
+| 5 Association analysis | Done | Lag analysis and "during each activity" comparisons; no lesson so far gives a confirmed link (all were short) |
+| 6 Plain-English feedback | Done (rules + always-on AI rewrite with fallback); first real AI call pending | Offline tests of the checks with simulated answers |
+| 7 Web application | Done (local) | Upload, progress by stage, tabbed report, PDF download, delete; 30 automated web tests. Activities are stored but not used **[TODO]** |
+| 8 Privacy and honesty | Done in design and code | Local processing, anonymous IDs and seats, blurred faces, word checks |
+| 9 Verification | Partly done | 210 automated tests pass (170 team pipeline, 40 report stage and web app); human-labelled accuracy **[TODO]** |
 
 ## The positive side of the project
 
@@ -84,8 +76,8 @@ causes, and never claims to measure inner states such as attention, engagement, 
 
 ### For students
 
-- **No student is identified or graded.** Seats are anonymous numbers, no faces are stored or matched, faces are
-  pixelated in the report's seat chart, and nothing is reported about any named student.
+- **No student is identified or graded.** Students are temporary track IDs and anonymous seats, no faces are
+  stored or matched, faces are blurred in the report's pictures, and nothing is reported about any named student.
 - **Benefit from better-informed teaching.** For example, a long stretch of explanation with no hand raises is pointed
   out together with a simple suggestion: ask a short question.
 
@@ -94,10 +86,10 @@ causes, and never claims to measure inner states such as attention, engagement, 
 - **Supports teaching development.** It adds observable evidence to existing quality processes such as student
   surveys and peer observation.
 - **Low cost and practical.** Two static cameras or phones on tripods and an ordinary laptop. Pretrained models only,
-  so no costly training dataset is needed, and the optional AI rewrite costs about USD 0.04 per report.
+  so no costly training dataset is needed, and the AI rewrite costs about USD 0.04 per report.
 - **Reproducible and reusable.** Every result is saved as plain files (events, tables, facts), so a report can be
-  rebuilt or re-checked without processing the video again. The modular design lets the team's two implementations
-  share one event format.
+  rebuilt or re-checked without processing the video again. Since 20 November 2026 the team's work forms one
+  modular pipeline.
 
 ### Design strengths
 

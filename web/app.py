@@ -32,10 +32,10 @@ def create_app(**overrides):
     app.config.update(overrides)
     config = app.config
     app.extensions["teachlens"] = {
-        "lectures": LectureRepository(config["BASE_DIR"], config["EVENTS_DIR"]),
-        "jobs": JobRunner(config["BASE_DIR"], config["EVENTS_DIR"], config["PYTHON"], config["MAIN_CODE"],
-                          config["LLM_REPORT"], ffmpeg_dir=config["FFMPEG_DIR"], llm_mode=config["LLM_MODE"],
-                          llm_model=config["LLM_MODEL"], links_report=config.get("LINKS_REPORT")),
+        "lectures": LectureRepository(config["BASE_DIR"]),
+        "jobs": JobRunner(config["BASE_DIR"], config["PYTHON"], config["ANALYZE"], config["REPORT"],
+                          ffmpeg_dir=config["FFMPEG_DIR"], llm_model=config["LLM_MODEL"],
+                          room_config=config["ROOM_CONFIG"]),
     }
     app.register_blueprint(lectures)
     return app

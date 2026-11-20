@@ -2,142 +2,116 @@
 
 ![TeachLens pipeline](pipeline.png)
 
-*Figure: TeachLens pipeline (System B), in the eight stages the web application shows while a lecture is analysed.
-Two recordings of one lecture are aligned and sampled, people and objects are detected by pretrained YOLO26 models,
-transparent rules turn the detections into observable behaviour, 10-second windows compare student behaviour across
-instructor activities, the team's fusion layer tests links over time, and the result is reported as plain-English
-feedback in a local web application. Drawn by `scripts/make_pipeline_diagram.py`.*
+*Figure: TeachLens pipeline (status 20 November 2026). Two recordings of one lecture are lined up by their recording
+times; each camera is analysed by pretrained YOLO26 and MediaPipe models and transparent rules; the two cameras are
+linked and the team's fusion layer tests links over time; the report stage compares students during each instructor
+activity, writes plain-English feedback and has it rewritten by Claude under automatic checks; a local web
+application shows the result. Drawn by `scripts/make_pipeline_diagram.py`.*
 
 ## 1. Design principles
 
 1. **Evidence, then analysis, then reporting.** Each layer reads the saved output of the previous one. Models never
    write report text.
-2. **Observable behaviour only.** Indicators describe what the camera sees ("heads up"), never inner states
-   ("attentive").
-3. **Unknown is not zero.** Hidden or unreadable posture stays unknown and is left out of percentages.
-4. **Associations, not causes.** Statistics are corrected for autocorrelation and multiple testing.
-5. **Local and anonymous.** Video never leaves the computer. Students are anonymous seat numbers, and faces are
-   pixelated in the seat chart. Only anonymised numbers may reach the language model.
-6. **Rebuildable.** Every report can be regenerated from saved files without processing the video again.
+2. **Observable behaviour only.** Indicators describe what the camera sees ("on task", "facing the front"), never
+   inner states ("attentive").
+3. **Unknown is not zero.** Hidden or unreadable behaviour stays unknown and is left out of shares.
+4. **Associations, not causes.** Statistics allow for neighbouring moments being alike and for multiple testing.
+5. **Local and anonymous.** Video never leaves the computer. People are temporary track IDs and anonymous seats;
+   faces are blurred in every picture the report shows. Only anonymised numbers reach the language model.
+6. **Rebuildable.** Every report can be regenerated from the saved lesson folder without processing the video again.
 
 ## 2. Architecture
 
-| Stage | Input | Processing | Output |
+One pipeline since 20 November 2026: the team's lesson pipeline (formerly "System A") does the processing; the report
+stage and the web application (formerly part of "System B") sit on it. The rest of System B's own processing was
+removed.
+
+| Stage (web app) | Input | Processing | Output (`outputs/lessons/<date>_<lecture>/`) |
 |---|---|---|---|
-| 1. Input and alignment | Instructor video and student video of the same lecture | Validate both files. Read each recording-start time from the metadata (ffprobe), or take a manual `--offset`. | Shared lecture time and offset (about ±1 s) |
-| 2. Preprocessing | Both videos | FFmpeg cuts both to the shared time and standardises them (25 fps, at most 720p). One frame every 2 s is taken from each camera and paired by time. | `frames.csv`, frame images |
-| 3. Detection | Paired frames | Instructor camera: YOLO26n-pose at 640 px; the most confident person in the teacher zone is the instructor. Student camera: YOLO26m-pose at 960 px, plus YOLO26s at 960 px for phones and books. Automatic anonymous seats. | `frame_detections.csv`, preview images |
-| 4. Behaviour recognition | Detections | Rules on keypoints (section 3) turn frames into a state timeline for the instructor and for each seat. Runs of frames become events. | `events.csv`, two JSONL event files |
-| 5. Window indicators | Timelines and events | 10-second windows: share of time explaining, at the board, moving or seated; student heads-up, phone and head-down-and-still rates; hand-raise counts; posture coverage | `window_features.csv` |
-| 6. Association analysis | Windows; the two JSONL event files | Comparisons during each instructor activity (HAC test). The team's fusion layer on the two event files (since 19 November 2026; it replaced System B's own lag analysis): 5-second windows, student changes 5–30 s after each instructor feature, circular-shift test, Benjamini-Hochberg q-values, lagged OLS with Newey-West errors, averages around the moments an action started. Only the indicators System B measures are tested. | `fusion.json`, `fusion_windows.csv`, `fusion_links.csv` |
-| 7. Report | All of the above | Rule-based positive and negative points, suggestions, evidence, limitations, glossary. `facts.json` holds anonymised numbers only. The fusion results become "links over time" points (`lag_facts.py`). | `final_feedback_report.txt`, `analysis_details.txt`, `facts.json`, `links/report_points.json` |
-| 8. Optional AI rewrite | `facts.json`, `fusion.json` | Claude Opus 5.5 rewrites the feedback points and the links over time. Code checks the numbers and the wording, with one retry and a fallback. | `llm_output.json`, `links/report_points.json`, checked report text |
-| Web application | A lecture title, the two videos and optional context; saved results | Upload (lecture title and the two videos; optional topic, slides, activities in class with their duration, additional information), progress by stage, tabbed report, delete | Pages served on the local computer; `context.json` with the instructor's context |
+| 1. Line up the cameras | Instructor and student video | Recording-start time from each file (ffprobe); keep the stretch both cameras recorded | `lesson.json` (ranges) |
+| 2. Student camera | Student video | One frame per second; YOLO26n-pose at 1280 px + ByteTrack (anonymous track IDs, stitching); seats learnt from seated shoulder positions; MediaPipe face landmarks (5 per second) and hand gestures; YOLO26n phone/laptop/book detector at 1920 px; rules (section 3) | `student/events.jsonl`, `summary.json`, `review.mp4`, `run.json` |
+| 3. Instructor camera | Instructor video | One frame per second; YOLO26n-pose at 1280 px + ByteTrack; the camera's single person is the instructor; rules | `instructor/` (same files) |
+| 4. Link the cameras | Both runs | Students who walk to the front, and the instructor walking into the student view, matched by time | `cross_camera.json` |
+| 5. Lagged analysis | Both event files | 5-second windows on real time; lag correlation (5–30 s) with a circular-shift test; Benjamini–Hochberg over 9 fixed hypotheses and over exploratory pairs; comparisons with HAC; lagged models; peri-event averages; `facts.json` for the report | `fusion/fusion.json`, `windows.csv`, `links.csv`, `facts.json` |
+| 6. Write the report | Windows, facts, events | Students during each instructor activity vs the rest (HAC, Bonferroni) added to `facts.json`; rule-based positive and negative points addressed to the instructor as "you"; CSV tables | `final_feedback_report_rules.txt`, `tables/events.csv`, `tables/activity_comparisons.csv` |
+| 7. AI rewrite (always) | `facts.json` | Claude Opus 5.5 rewrites the points; code checks numbers and wording; one retry; on any failure the rule-based points are kept and the reason is recorded | `final_feedback_report.txt`, `report_status.json`, `llm_output.json` |
+| Web application | Two videos and optional context | Upload, progress by stage, tabbed report, delete | `outputs/uploads/<lecture>/`, `outputs/web_jobs/` |
+| Human review (offline) | Lesson folder | Review sheets from the review videos; scoring | `outputs/validation/<lecture>/`, `facts.json` updated |
 
-## 3. Behaviour rules (System B)
+## 3. Behaviour rules (summary)
 
-**Instructor (instructor camera):**
+Rules work on body keypoints, face landmarks, hand gestures and object boxes; all thresholds are unvalidated starting
+values. Full definitions: the team's docs (`docs/list_a_pose.md`, `docs/list_c_students.md`,
+`docs/facial_actions.md`, `docs/fusion_lag_analysis.md`).
 
-| State | Rule |
+| Instructor (instructor camera) | Students (student camera) |
 |---|---|
-| Facing the class | Nose and an eye visible, with the nose near the middle of the shoulders. The camera sits on the students' side, so a visible face faces the class. |
-| Interacting | Facing the class with a hand raised |
-| At the board | Inside the calibrated board region and not facing the class. Not measured when no board region is set. |
-| Moving | Distance travelled between samples; "stationary" below 1% of the frame per sample |
-| Seated | Thigh short beside the torso (ratio < 0.5); needs hips and knees in view |
+| Visible / presence | Number of visible students, seats |
+| Facing the class, looking at the students, back to the class | Facing the front (on target) or away; looking down |
+| Board or screen, writing on the board, pointing | Hand raised (open palm or a high wrist), answers after a raise |
+| Gesturing, walking, standing still, path length | Phone (seen in the hand, or a long head-down), laptop, reading, writing |
+| Seated (from the legs, or behind the desk from the shoulders' height), at the desk, reading notes | Talking, smiling, yawning, eyes closed / dozing posture, nodding |
 
-**Students (student camera):**
-
-| State | Rule |
-|---|---|
-| Heads up | Nose clearly above the shoulder line (at least 0.25 shoulder widths) |
-| Head down and still | Head down or face hidden, with shoulders moving less than 0.15 shoulder widths between samples, for 30 s or more |
-| Hand raised | Wrist above the shoulder by 5% of the person's height, in 2 consecutive samples or more |
-| Phone or book in view | A YOLO26s phone or book whose centre lies inside the student's box |
-
-**Anonymous seats:**
-- **Finding seats:** shoulder midpoints are grouped over the whole lecture. A place becomes a seat when someone sat
-  there in at least 10% of the samples.
-- **Matching people to seats:** one person per seat per sample, within one shoulder width. Moving up counts half, so
-  a student who stands up stays in their seat.
-- **Leaving out false detections:** a detection that fits no seat is excluded, for example legs under a desk or a
-  chair seen as a person.
-- **Numbering:** seats are numbered row by row from the top left of the student camera's view.
+A student is **on task** when facing the current focus (the front, or a classmate who answers), writing or reading,
+and **off task** with a phone, a dozing posture, talking toward a neighbour, or facing away. Both are observable
+proxies, not measures of attention.
 
 ## 4. Data design
 
 | File | Contents |
 |---|---|
-| `sessions/<lecture>/tables/frames.csv` | Paired frame times of both cameras |
-| `.../tables/frame_detections.csv` | Every detection: box, cues, role, seat |
-| `.../tables/events.csv` | Events with start, end and seat |
-| `.../tables/window_features.csv` | 10-second window indicators |
-| `.../reports/fusion.json`, `.../tables/fusion_windows.csv`, `fusion_links.csv` | Association statistics (the team's fusion layer format, plus what System B did not measure) |
-| `.../reports/links/report_points.json` | The links over time in plain language |
-| `.../reports/facts.json` | Anonymised facts for the AI step (schema 2): each fact's numbers, direction, evidence strength and the detections it rests on |
-| `outputs/events/<lecture>_instructor_view.jsonl`, `..._student_view.jsonl` | Team event format: role, indicator, start and end in the original video, real (wall-clock) time, value, confidence (null for rule states), coverage, seat in `zone` |
+| `student/events.jsonl`, `instructor/events.jsonl` | The evidence: one observation or interval per line (indicator, track, role, value, video and real start/end times, coverage) |
+| `student/summary.json` | Totals per camera, seats (position, tracks, seconds on target / away / phone ...) |
+| `fusion/windows.csv` | The lesson in 5-second windows: instructor `T_*` and student `S_*` features; empty = too little evidence |
+| `fusion/fusion.json` | Lag analysis: hypotheses, links, models, peri-event results, findings |
+| `facts.json` | Anonymised facts for the AI step (schema 1): direction, kind, numbers, evidence strength, glossary, which detections were checked by people |
+| `tables/events.csv`, `tables/activity_comparisons.csv` | Both cameras' events as one table; every "during each activity" comparison |
+| `final_feedback_report.txt`, `report_status.json` | The report text (AI or rules) and who wrote it, with the reason when the AI was not used |
 
 ## 5. Web application design (Model–View–Controller, Flask + Jinja2)
 
 - **Models:**
-  - `lecture.py`: where each lecture's videos, context and results are stored; checks the activities an instructor
-    marks before any video is saved.
-  - `job.py`: runs the pipeline in the background and records stages 1–7, plus stage 8 for the AI rewrite.
-  - `report.py`: gathers the report data from saved files.
-  - `charts.py`: the instructor position heatmap and heads up by seat. The camera frame behind the seat chart has
-    every head it can locate pixelated: everyone detected in the first 10 seconds, plus where each seat's head usually
-    was. Only this picture is changed; the analysis reads the original frames.
-  - `stat_charts.py`: data for the lecture timeline and the activity comparison.
-- **Views:** Jinja2 pages for the lecture list, the upload form, live progress, the report and the delete
-  confirmation.
-- **Upload form:**
-  - Required: a lecture title (so the lecture can be found later) and the two videos. A missing title or video is
-    refused before anything is saved.
-  - Optional, in two sections: "Additional context" (the topic and the lecture slides) and "Activities in class"
-    (activities that were not teaching, then additional information as free text). Each activity (quiz or test, group
-    or pair work, video, break) is added with one button and one box for how many minutes it lasted (whole minutes, at
-    most 180 in total).
-  - The optional context is kept with the report and is not yet used by the analysis **[TODO]**.
-- **Report page tabs:**
-  - Feedback, with the context the instructor gave;
-  - Charts: two statistical charts with table views and two heatmaps ("Instructor Movement", "Student Seats");
-  - Moments: a filterable table;
-  - Key terms.
-
-  Suggestions and limitations stay in `analysis_details.txt` and are not shown on the page. The links over time (the
-  fusion layer's results) are still computed and saved (`fusion.json`, `links/report_points.json`, and section 3 of
-  `analysis_details.txt`), but since 19 November 2026 they have no tab of their own **[TODO: decide whether and how
-  instructors see them]**.
-- **Controller:** `lectures.py` with the routes `/`, `/lectures/new`, `POST /lectures`, `/lectures/<id>/progress`,
-  `/lectures/<id>/status`, `POST /lectures/<id>/run` (run again), `/lectures/<id>/delete` (confirmation page, then
-  POST), `/lectures/<id>` and `/lectures/<id>/charts/<name>`.
-- **Security:**
-  - The server listens only on 127.0.0.1, and chart files are served by exact name only.
-  - A delete sent from another website is refused.
-  - The AI rewrite is a deployment setting, so instructors never handle API keys.
+  - `lecture.py`: uploads and lesson folders; checks the upload form (title, videos, activities in class).
+  - `job.py`: runs `analyze_lesson.py` then `report_lesson.py` in the background, follows their output to show
+    stages 1–7, records the AI result or why it was not used. Ultralytics is never allowed to download anything.
+  - `report.py`, `stat_charts.py`, `charts.py`: report data, the two statistical charts, and the two heatmaps.
+- **Upload form:** required: a lecture title and the two videos. Optional: "Additional context" (topic, slides) and
+  "Activities in class" (quiz or test, group or pair work, video, break, each with its duration in minutes) followed
+  by additional information. The optional context is stored and shown, not yet used by the analysis **[TODO]**.
+- **Report page tabs:** Feedback (with a notice when the AI rewrite was not used, and why); Charts (the lecture
+  timeline of students on task per 5 seconds, students during each of your activities with 95% ranges, Instructor
+  Movement, Student Seats); Moments (hand raises, phones, dozing postures, with the seat and what you were doing);
+  Key terms. A "Download PDF" button saves the whole report (all tabs, the blurred charts, a summary of the
+  moments and the first 40 of them) as `report.pdf`, printed by a hidden local browser (Edge or Chrome) from a
+  self-contained copy of the page; nothing is downloaded or sent out, and the file is only made again when the
+  report changes.
+- **Privacy in the pictures:** both heatmaps are drawn on a frame of the uploaded video with every head pixelated:
+  the people the analysis tracked, each seat's usual position, and anyone else the pose model finds in that frame.
+  If this fails, the chart is drawn without the frame, never over the unblurred picture.
+- **Security:** the server listens only on 127.0.0.1; chart files are served by exact name; a delete sent from
+  another website is refused; instructors never handle API keys.
 
 ## 6. Integration
 
 | Interface | How it is integrated | Status |
 |---|---|---|
-| Instructor camera ↔ student camera | Recording-start metadata, or a manual offset. Frames are paired by time on one lecture clock. | Done; about ±1 s |
-| System A ↔ System B | System B writes the same JSONL event format, using an identical copy of System A's `events.py`: role `teacher`, times in each original video, real times, seats in `zone`. | Format shared; the two pipelines are not merged **[TODO: team decision]** |
-| Evidence ↔ fusion layer ↔ reporting | System B writes the indicators the team's fusion layer reads (its names and labels, from System B's own rules) and runs that layer on its two event files. The reporting layer (`src/reporting/lag_facts.py`) reads the fusion output (`<name>.fusion.json`). | Connected (18–19 November 2026); tested on synthetic data with planted links and on the two recorded test lectures |
-| Pipeline ↔ web application | The web job runs `Main Code.py` as a separate process and follows its stage messages. The report page reads saved files only. | Done |
-| Instructor's context ↔ analysis | The upload form stores each activity that was not teaching and its duration in `context.json`, but not when it happened, so the analysis cannot tell which minutes it covered. Options: a note beside the student figures it affects, or a stretch of matching length found automatically and confirmed by the instructor. Once the minutes are known, student states there can be marked unknown (the fusion layer already skips unknown time) and left out of the comparisons and moments. | Stored and shown; not yet used **[TODO: decide]** |
-| Reporting ↔ language model | `facts.json` → Claude Opus 5.5 → checks → `llm_output.json`. Rule-based text on any failure. | Implemented; first real call pending **[TODO]** |
+| Instructor camera ↔ student camera | Recording-start metadata; one real-time line | Done; about ±1 s |
+| Team pipeline ↔ report stage | The report stage reads the lesson folder the team's pipeline writes (`facts.json`, `fusion/windows.csv`, events, summaries) and adds its facts to `facts.json` | Done 20 November 2026 |
+| Pipeline ↔ web application | The web job runs the two commands and follows their output; the report page reads saved files only | Done; tested with made-up lessons and on a real lecture |
+| Reporting ↔ language model | `facts.json` → Claude → checks → report; rules on any failure, with the reason shown | Implemented; first real call pending **[TODO]** |
+| Human review ↔ report | Scores update `facts.json`'s indicator validation; the AI must then call a checked detection checked (or unreliable below 0.7 precision) | Implemented; no sheets filled yet **[TODO]** |
+| Instructor's context ↔ analysis | Activities are stored with their duration but not when they happened | Stored and shown; not used **[TODO: decide]** |
 
 ## 7. Main design decisions
 
 | Decision | Alternative | Reason |
 |---|---|---|
-| Two static cameras | One camera covering the whole room | One view rarely shows the instructor and the students clearly at the same time, and a moving or edited view broke zone-based roles in a single-camera test. |
-| Pretrained pose models with rules | Training action-recognition models | No labelled classroom action dataset. Rules are explainable and testable, and the team can train later once labels exist. |
-| Different model sizes per camera | One model for both | The instructor is one large person (nano is enough). Students are many, small and partly hidden (medium at 960 px). |
-| 2-second sampling, 10-second windows | 1-second sampling | CPU time. Hand raises still need 2 samples (4 s). |
-| Automatic seats | A fixed 3×4 grid | The grid merged two students and created false seats on the real lecture. |
-| HAC tests; for the lags, the team's circular-shift test with Benjamini-Hochberg q-values | Plain correlations and t-tests | Neighbouring windows are alike, so plain p-values overstate certainty. Shifting the instructor's timeline keeps that likeness and breaks only the alignment. |
-| Rule-based text plus a checked AI rewrite | The AI writes the report freely | Every sentence must trace back to a measured number. |
-| Local web application | Cloud hosting | Videos show real people, so processing stays on the local computer. |
-| Seat chart on a camera frame with pixelated faces | The raw frame, or no picture | The instructor can still see where each seat is, but no student can be recognised. Only the chart is changed; the analysis reads the original frames. |
-| Fixed statistical settings; behaviour thresholds tuned later from human labels | Letting the system tune everything on each lecture | Without human labels there is no correct answer to tune towards, and tuning the statistics on the data would produce false findings. |
+| One pipeline: the team's processing with this report stage and web app (20 November 2026) | Keep two separate implementations | The team's pipeline measures more behaviours (faces, hands, seats, the desk); keeping one avoids two sets of results that disagree. |
+| Two static cameras lined up by recording time | One camera; audio or clock syncing | One view rarely shows both sides; a moving view broke roles in an early test. Metadata gives about ±1 s without extra equipment. |
+| Pretrained models with transparent rules | Training action models | No labelled classroom dataset; rules can be explained and tested. |
+| One frame per second, 5-second windows | Every frame | CPU time on a laptop; the cameras are only aligned to about 1 s anyway. |
+| Comparisons during each activity next to the lag analysis | The lag analysis alone | With many pairs in one lecture the lag analysis rarely passes its correction; the simpler comparison still gives the instructor checked, hedged points. |
+| AI rewrite always on, with code checks and a rule-based fallback | Optional AI, or free AI text | Readable feedback by default, while every number stays traceable and a failure never leaves the instructor without a report. |
+| Fixed statistical settings; behaviour thresholds tuned later from human labels | Tuning everything on each lecture | Without labels there is no correct answer to tune towards; tuning the statistics on the data would produce false findings. |
+| Blurred faces in every report picture | The raw frame, or no picture | The instructor still sees the room and the seats, but nobody can be recognised. |
+| Local web application | Cloud hosting | Videos show real people. |

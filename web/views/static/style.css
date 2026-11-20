@@ -282,3 +282,7 @@ code { font-size: .88em; word-break: break-all; }
   .js .tab-panel > .panel-title { position: static; width: auto; height: auto; overflow: visible; clip: auto; margin: 2rem 0 .8rem; }
 }
 .printing .tab-panel { display: block !important; }   /* set by report.js just before printing, so charts draw full width */
+/* the PDF (web/models/pdf.py): every section from the start, so the charts are drawn at full width before printing */
+.pdf .tab-panel { display: block !important; }
+.pdf .tabs, .pdf .topbar nav, .pdf .filters { display: none; }
+@media print { .no-print { display: none !important; } }

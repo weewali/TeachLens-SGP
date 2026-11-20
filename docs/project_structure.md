@@ -1,348 +1,364 @@
 # TeachLens Project Structure
 
-This document is the repository map for TeachLens. It defines where every type of work belongs, which language or format it uses, and the responsibility of each current or planned file.
+This document is the repository map for TeachLens: where every kind of work
+belongs, its language or format, and the responsibility of each current or
+planned file. Updated 2026-11-20 to match the repository after the lesson
+pipeline, fusion and lag analysis, LLM facts, and dated output folders.
 
-The repository now has a small executable List A physical-indicator pipeline alongside the earlier pose demo. Existing datasets, recordings, and generated runs remain in place. See [list_a_pose.md](list_a_pose.md) for usage and limitations.
+Status in one line: the video pipeline works end to end, from a lesson's two
+recordings (student camera, instructor camera) to fused lag statistics and a
+`facts.json` ready for an LLM; the **LLM feedback and report-generation
+stages are the next work** (AGENTS.md section 17, docs/llm_integration.md).
+Nothing has been validated against human labels yet.
 
 ## 1. Technology choices
 
 | Area | Language or format | Why |
 | --- | --- | --- |
-| Pipeline, model inference, analysis, training, and command-line tools | Python 3.10+ (`.py`) | The existing TeachLens Conda environment uses Python 3.10; one executable language keeps the project easier to test and maintain. |
-| Runtime and model configuration | YAML (`.yaml`) | Human-readable settings can change without editing Python. |
-| Dataset annotations | YOLO text (`.txt`) | Ultralytics expects one normalized annotation row per object. |
-| Event interchange | JSON Lines (`.jsonl`) | One timestamped event per line is streamable, debuggable, and easy to process with Python or external tools. |
-| Summary tables | CSV (`.csv`) | Simple exchange format for metrics and manual review. |
-| Report templates | Jinja2 HTML (`.html.j2`) and CSS (`.css`) | Jinja2 is already a dependency and produces portable reports that can later be printed to PDF. |
-| Documentation | Markdown (`.md`) | Renders on GitHub and remains easy for the team to edit. |
-| Diagrams | Mermaid inside Markdown; PNG only when required | Text diagrams remain reviewable in Git. |
+| Pipeline, models, analysis, statistics, command-line tools | Python 3.10 (`.py`), Conda environment `TeachLens` | One executable language; easy to test. |
+| Runtime settings, calibration, hypotheses | YAML (`.yaml`) | Human-readable; changes without editing Python. |
+| Evidence | JSON Lines (`events.jsonl`) | One timestamped event per line; streamable and debuggable. |
+| Summaries, analysis results, LLM input | JSON (`summary.json`, `fusion.json`, `facts.json`, `lesson.json`) | Structured, readable, versionable schemas. |
+| Tables | CSV (`windows.csv`, `links.csv`, manifests) | Simple exchange with spreadsheets. |
+| Review media | MP4 (H.264 through MSMF on Windows) | Visual checks of what the rules saw. |
+| Charts | PNG from Matplotlib | Regenerated from saved tables. |
+| Dataset annotations | YOLO text (`.txt`) | Ultralytics format (training is not part of the current pipeline). |
+| Reports (planned) | Jinja2 HTML (`.html.j2`) + CSS, later PDF | Jinja2 is already a dependency. |
+| Documentation | Markdown (`.md`), Mermaid diagrams | Renders on GitHub. |
 
-JavaScript or TypeScript is not part of the initial pipeline. If TeachLens later gets an interactive web dashboard, it should be introduced as a separate `web/` application rather than mixed into the Python analysis code.
-
-FFmpeg is an external command-line dependency used for media conversion and frame/audio extraction; it is not a project language.
+External tools: FFmpeg/ffprobe (recording-time tags, lossless trims). A later
+interactive dashboard belongs in a separate `web/` application, not mixed
+into the Python analysis code. Audio is out of scope for the SGP's
+physical-indicator work.
 
 ## 2. Architecture and data flow
 
 ```text
-recording + camera zones + run configuration
-                    |
-                    v
-            preprocessing layer
-       video metadata, frames (audio later)
-                    |
-                    v
-              inference layer
- YOLO26 pose (person boxes + COCO-17 joints) -> ByteTrack
-                    |
-                    v
-               event layer
- timestamped observations + confidence + coverage
-                    |
-                    v
-              analysis layer
- visual, interaction, and quality metrics
-                    |
-                    v
-             reporting layer
-       charts + HTML/PDF-ready report
+student_view video ----\                                    (src/preprocessing/alignment.py)
+                         >-- line up by real time, keep the stretch both cameras recorded
+instructor_view video -/
+        |  per camera (src/pipeline.analyze_video)
+        v
+preprocessing  src/preprocessing/video.py        sampled frames (1/s, faces 5/s), GPU decoding (D3D11)
+inference      src/inference/pose.py             YOLO26 pose + ByteTrack -> boxes, COCO-17 joints
+               src/inference/tracking.py         stitch IDs of people moving between samples
+               src/inference/face_mesh.py        MediaPipe face landmarks (student camera only)
+               src/inference/hands.py            MediaPipe gesture recognizer on wrist crops
+               src/inference/objects.py          COCO detector: phone, laptop, book
+rules          src/analysis/visual_indicators.py List A (presence, count, posture, motion, zones ...)
+               src/analysis/teacher_indicators.py List B (teacher facing, board, pointing, gestures ...)
+               src/analysis/student_indicators.py List C (hand raises, seats, device use, alertness ...)
+               src/analysis/interaction_indicators.py, facial_actions.py
+evidence       src/analysis/events.py            events.jsonl (+ real wall-clock times)
+summary        src/analysis/aggregates.py        summary.json
+review         src/reporting/annotated_video.py  review.mp4
+        |  per lesson (src/pipeline.analyze_lesson)
+        v
+links          src/analysis/cross_camera.py      cross_camera.json
+fusion         src/analysis/fusion.py            fusion/windows.csv (5 s windows, T_ and S_ features)
+statistics     src/analysis/lag_analysis.py      fusion/fusion.json (hypotheses, lags, comparisons, models)
+charts         src/reporting/charts.py           fusion/timeline.png
+LLM input      src/reporting/facts.py            facts.json  (schema 1 of the LLM stage)
+video          src/reporting/side_by_side.py     side_by_side.mp4
+index          src/pipeline.py                   lesson.json
+        |  several lessons (src/pipeline.pool_lessons)
+        v
+pooled         lag_analysis.pooled_analyze       outputs/pooled/<stamp>_<name>/pooled.json, facts.json
+        |
+        v  NEXT (not built here yet)
+LLM feedback   reads facts.json -> strengths, weak points, suggestions, checked in code
+report         renders lesson.json + facts + LLM text + charts/video links -> HTML/PDF
 ```
 
-The important boundary is the event layer. Models should not write report prose directly. They should create timestamped evidence records; analysis code aggregates those records; reporting code presents the results and their limitations.
+The boundaries: models never write prose; rules write evidence; analysis
+reads saved evidence; the LLM reads only `facts.json`; reports regenerate
+from saved files without rerunning models.
 
-Every event should eventually include:
-
-- `video_id`
-- anonymous `track_id`, when applicable
-- `role`: `teacher`, `student`, `unknown`, `both`, `classroom`, or `recording`
-- `indicator_name`
-- `start_time`, `end_time`, and `duration` (seconds into the video)
-- `start_real_time` and `end_real_time` (wall clock from the recording-start metadata; null without it)
-- observed value or event label
-- model or rule confidence
-- evidence-coverage or media-quality flag
-- optional calibrated classroom zone
+Every event (`events.jsonl` line) has `video_id`, `track_id` (anonymous, per
+recording), `role` (teacher, student, unknown, both, classroom, recording),
+`indicator_name`, `start_time`/`end_time`/`duration` (seconds into the video),
+`start_real_time`/`end_real_time` (wall clock, ISO 8601), `value`,
+`confidence` (model confidence or null for rules), `coverage` (adequate,
+limited, unknown), and `zone`.
 
 ## 3. Repository tree
 
-`[current]` means the path already contains project work. `[scaffold]` means the directory or configuration was added to reserve its role. `[planned]` means the named implementation file should be created when that feature is built; an empty Python file is deliberately not committed.
+`[git]` = committed; `[local]` = on disk only, ignored by Git (copy it to a
+new machine by hand); `[planned]` = to be created when the feature is built.
 
 ```text
 TeachLens-SGP/
-|-- README.md                              [current]
-|-- requirements.txt                      [current]
-|-- data.yaml                              [current]
-|-- person_v1_data.yaml                    [current, historical person labels]
-|-- role_data.yaml                         [current, imported role labels]
-|-- .gitignore                             [current]
+|-- AGENTS.md                         [git] handoff and rules for AI agents (read first)
+|-- README.md                         [git] short project description
+|-- requirements.txt                  [git] Python dependencies (unpinned)
+|-- data.yaml                         [git] one-class person dataset contract (training only)
+|-- .gitignore                        [git]
 |
 |-- configs/
-|   |-- default.yaml                       [scaffold]
-|   |-- indicators.yaml                    [scaffold]
-|   |-- web_sample_cameras.yaml            [current, override for panning web clips]
-|   `-- zones.example.yaml                 [scaffold]
+|   |-- default.yaml                  [git] all runtime defaults: cameras, inference, analysis, teacher,
+|   |                                       faces, students, tracking, objects, fusion (+ hypotheses), review
+|   |-- indicators.yaml               [git] on/off switches for every indicator (Lists A, B, C, faces)
+|   |-- sgp_room.yaml                 [git] the scenario room: instructor-camera zones/targets
+|   |-- bytetrack_1fps.yaml           [git] tracker settings for 1 sample per second
+|   |-- web_sample_cameras.yaml       [git] override for downloaded clips with moving cameras
+|   |-- howtospeak_4500/4718/4748.yaml [git] zone overrides for web-sample segments
+|   `-- zones.example.yaml            [git] calibration template
 |
 |-- data/
-|   |-- raw_videos/                        [current, local only]
-|   |-- raw_frames/                        [current, local only]
-|   |-- person_detection/                  [current, local Roboflow exports + YAML]
-|   |-- calibration/                       [scaffold]
-|   |-- manifests/                         [scaffold]
-|   |-- samples/                           [current]
-|   |-- person_detection_v1/               [current, incomplete labels]
-|   |-- person_detection_v2/               [current, split overlap]
-|   `-- student_instructor_imported/       [current, imported role dataset]
+|   |-- manifests/sgp_scenario_videos.csv  [git] scenario recordings: files, real starts, sync windows
+|   |-- calibration/
+|   |   |-- sgp_room_instructor_view.yaml  [git] zones (front_left, front_center, desk_area) and
+|   |   |                                        targets (screen, board, desk) of the scenario room
+|   |   `-- howtospeak_*_instructor_view.yaml [git] web-sample calibrations
+|   |-- raw_student_videos/           [local] own scenario recordings, student camera (sgp_<scenario>_student.MOV)
+|   |-- raw_instructor_videos/        [local] own scenario recordings, instructor camera (+ unedited/)
+|   |-- raw_videos/                   [local] web samples and clock tests (clock_test_02.MOV is private)
+|   |-- person_detection/combined.yaml [git] dataset YAML; the images are [local]
+|   |-- raw_frames/, samples/         [local] / placeholders
 |
-|-- models/
-|   |-- detection/                         [scaffold, local artifacts]
-|   |-- pose/                              [current, local YOLO26 checkpoint]
-|   `-- audio/                             [scaffold, local artifacts]
+|-- models/                           [local] weights, never downloaded by the code
+|   |-- pose/yolo26n-pose.pt          YOLO26 pose (all pose rules)
+|   |-- detection/yolo26n.pt          COCO detector (phones, laptops, books; isolated object runs)
+|   |-- face/face_landmarker.task     MediaPipe face landmarks (students only)
+|   `-- hands/gesture_recognizer.task MediaPipe gestures (hand raises, response gestures)
 |
 |-- src/
+|   |-- pipeline.py                   [git] analyze_video, detect_objects, analyze_lesson, pool_lessons,
+|   |                                       link_runs, fuse_and_write, review_timing
 |   |-- preprocessing/
-|   |   |-- video.py                       [current]
-|   |   |-- camera_motion.py               [current, pan/zoom/cut estimate]
-|   |   |-- recording_time.py              [current, metadata recording time]
-|   |   `-- dataset.py                     [planned]
+|   |   |-- video.py                  [git] sampled frames, segments, hardware decoding
+|   |   |-- alignment.py              [git] line up a lesson's two recordings; CameraRun plans; manifest
+|   |   |-- recording_time.py         [git] recording-start tags via ffprobe (GPS never printed)
+|   |   |-- camera_motion.py          [git] pan/zoom compensation (web samples only)
+|   |   `-- dataset.py                [planned] dataset audits and splits
 |   |-- inference/
-|   |   |-- detection.py                   [planned]
-|   |   |-- tracking.py                    [implemented 2026-11-17: TrackStitcher]
-|   |   |-- pose.py                        [current, YOLO26 + ByteTrack adapter]
-|   |   `-- speech.py                      [planned]
+|   |   |-- pose.py                   [git] YOLO26 pose + ByteTrack adapter, PosePerson, joint groups
+|   |   |-- tracking.py               [git] TrackStitcher
+|   |   |-- face_mesh.py              [git] MediaPipe face landmarks on pose-based crops
+|   |   |-- hands.py                  [git] MediaPipe gesture recognizer
+|   |   `-- objects.py                [git] COCO object detector
 |   |-- analysis/
-|   |   |-- events.py                      [current]
-|   |   |-- visual_indicators.py           [current, List A]
-|   |   |-- speech_indicators.py           [planned]
-|   |   |-- interaction_indicators.py      [implemented 2026-11-17: head targets, orientation proxy, hand-raise outcomes]
-|   |   |-- quality.py                     [planned]
-|   |   `-- aggregates.py                  [current, List A JSON summary]
+|   |   |-- events.py                 [git] Event schema, atomic JSONL, real times
+|   |   |-- visual_indicators.py      [git] List A rules, FoundationAnalyzer, desk posture
+|   |   |-- teacher_indicators.py     [git] List B teacher rules
+|   |   |-- student_indicators.py     [git] List C student rules
+|   |   |-- interaction_indicators.py [git] head targets, orientation proxy, hand-raise outcomes
+|   |   |-- facial_actions.py         [git] smile, brows, eyes closed, yawn, talking, nods
+|   |   |-- aggregates.py             [git] summary.json from saved events
+|   |   |-- cross_camera.py           [git] timing links between the cameras
+|   |   |-- fusion.py                 [git] window table on real time; on/off-task states
+|   |   |-- lag_analysis.py           [git] hypotheses, lag tests, comparisons, models, pooling
+|   |   `-- quality.py                [planned] media/evidence quality denominators
 |   |-- reporting/
-|   |   |-- annotated_video.py             [current, List A overlays/MP4/live window]
-|   |   |-- charts.py                      [planned]
-|   |   |-- renderer.py                    [planned]
-|   |   `-- templates/                     [scaffold]
-|   |       |-- report.html.j2             [planned]
-|   |       `-- report.css                 [planned]
-|   |-- training/
-|   |   |-- train_detector.py              [planned]
-|   |   `-- evaluate_detector.py           [planned]
+|   |   |-- annotated_video.py        [git] review.mp4 overlays (small grey HUD), live window
+|   |   |-- side_by_side.py           [git] side_by_side.mp4
+|   |   |-- charts.py                 [git] fusion/timeline.png
+|   |   |-- facts.py                  [git] facts.json for the LLM stage
+|   |   |-- llm_report.py             [planned] LLM feedback from facts.json (AGENTS.md section 17)
+|   |   |-- renderer.py               [planned] HTML/PDF report
+|   |   `-- templates/                [git placeholder] report.html.j2, report.css [planned]
 |   |-- utils/
-|   |   |-- config.py                      [current]
-|   |   |-- paths.py                       [current]
-|   |   `-- logging.py                     [planned]
-|   `-- pipeline.py                        [current, List A orchestration]
+|   |   |-- config.py                 [git] YAML loading, overrides, validation, switches, zones
+|   |   |-- output_layout.py          [git] dated output folders and file names
+|   |   |-- paths.py                  [git] repository paths, file-in-use check
+|   |   `-- logging.py                [planned]
+|   `-- training/                     [git placeholder] detector training [planned]
 |
-|-- scripts/
-|   |-- extract_frames_ffmpeg.py           [current]
-|   |-- pose_action_demo.py                [current local prototype]
-|   |-- recording_time.py                  [current, shows recording time]
-|   `-- analyze.py                          [current, List A CLI]
-|
+|-- scripts/                          [git] thin command-line entry points (section 8)
 |-- tests/
-|   |-- unit/                              [current, List A tests]
-|   |-- integration/                       [scaffold]
-|   `-- fixtures/                          [scaffold]
-|
-|-- notebooks/                             [current placeholder]
-|-- docs/                                  [current]
-|-- outputs/
-|   |-- events/                            [scaffold, generated]
-|   |-- reports/                           [scaffold, generated]
-|   |-- visualizations/                    [scaffold, generated]
-|   `-- debug/                             [scaffold, generated]
-|-- runs/                                  [current, generated]
-|
-|-- Instructor Recordings/                 [current legacy local folder]
-|-- Student Recordings/                    [current legacy local folder]
-|-- yolo11n.pt                             [current local pretrained weight]
-`-- yolo11n-pose.pt                        [current local pretrained weight]
+|   |-- unit/                         [git] 20 test files, 170 tests (unittest), no video or GPU needed
+|   |-- integration/, fixtures/       [git placeholders]
+|-- docs/                             [git] section 11
+|-- notebooks/                        [git placeholder]
+|-- outputs/                          [local] generated; only the .gitkeep placeholders are in Git
+|   |-- lessons/<YYYY-MM-DD_HHMM>_<lesson>/   one lesson (section 10)
+|   |-- runs/<YYYY-MM-DD_HHMM>_<run>/         single-camera runs
+|   |-- pooled/<YYYY-MM-DD_HHMM>_<name>/      several lessons tested together
+|   `-- logs/                                 batch logs
+`-- runs/                             [local] Ultralytics/demo experiment output (repository root)
 ```
 
 ## 4. Root files
 
-| File | Format | Responsibility |
-| --- | --- | --- |
-| `README.md` | Markdown | Gives the short project description and links to this detailed map. Keep it brief so a new contributor can orient quickly. |
-| `requirements.txt` | pip requirements | Lists Python runtime dependencies. Pin tested versions before a reproducible release; add development-only tools to a future `requirements-dev.txt`. |
-| `data.yaml` | Ultralytics YAML | Current one-class `person` experiment using `data/person_detection/people_01`. `people_02` appears to duplicate the same Roboflow export, and source names overlap across train and validation. |
-| `person_v1_data.yaml` | Ultralytics YAML | Historical one-class `person` dataset. Most training images lack labels. |
-| `role_data.yaml` | Ultralytics YAML | Historical imported role dataset, with `0: student` and `1: instructor`; it is not used by the current one-class, two-camera pipeline. Audit its malformed label and split overlap before any future training. |
-| `.gitignore` | Git pattern file | Prevents recordings, raw frames, model weights, generated outputs, caches, IDE files, and run artifacts from being committed while retaining directory placeholders. |
-| `yolo11n.pt` | PyTorch weight | Local Ultralytics object-detection checkpoint used by experiments. It is intentionally ignored by Git. New downloaded weights should preferably be placed under `models/detection/`. |
-| `yolo11n-pose.pt` | PyTorch weight | Local Ultralytics pose checkpoint used by the pose demo. It is intentionally ignored by Git. New pose weights should preferably be placed under `models/pose/`. |
+| File | Responsibility |
+| --- | --- |
+| `AGENTS.md` | The handoff for any AI agent or new teammate: decisions, rules, environment, every module, results, and what comes next. Read it first; keep it current. |
+| `README.md` | Short project description and links. |
+| `requirements.txt` | Python dependencies (ultralytics, opencv-python, numpy, pandas, matplotlib, pyyaml, scipy, statsmodels, jinja2). mediapipe is installed separately without dependencies (AGENTS.md section 5). |
+| `data.yaml` | One-class `person` dataset contract for detector training (not used by the running pipeline). |
+| `.gitignore` | Keeps recordings, frames, weights, outputs, and caches out of Git; keeps `.gitkeep` placeholders. `/runs/` (root only) is ignored; `outputs/**` content is ignored. |
 
 ## 5. Configuration files
 
-| File | Format | Responsibility |
-| --- | --- | --- |
-| `configs/default.yaml` | YAML | Central default paths, local YOLO26 pose checkpoint, camera role policies, inference and List A thresholds. Code loads this before local and command-line overrides. |
-| `configs/indicators.yaml` | YAML | List A feature switches are honored by the current pipeline. Hand raises, audio, recording quality, and advanced visual work are disabled or deferred. |
-| `configs/web_sample_cameras.yaml` | YAML | Committed override for the downloaded web samples, whose operated cameras pan, zoom, and cut: turns on camera-motion compensation for `instructor_view`. TeachLens's own static-camera recordings use the defaults instead. |
-| `configs/zones.example.yaml` | YAML | Example normalized polygon calibration for a fixed classroom camera. Copy it to a camera-specific file and edit the points; never treat these example polygons as real calibration. |
-| `configs/*.local.yaml` | YAML, future and ignored if added | Machine- or experiment-specific overrides such as local absolute paths. These should not contain credentials or be committed. |
+| File | Responsibility |
+| --- | --- |
+| `configs/default.yaml` | Every runtime default: `video` (1 sample/s, hardware decoding), `models`, `inference` (image size 1280), `cameras` (student_view, instructor_view policies, joints, posture method, filters), `analysis` (List A thresholds, desk posture), `teacher` (List B thresholds), `faces`, `students` (List C), `tracking`, `objects`, `fusion` (windows, lags, permutations, alpha, the 9 hypotheses), `review` (MP4, HUD, paths). Validated by `src/utils/config.py`. |
+| `configs/indicators.yaml` | On/off switch per indicator; all implemented ones on by default. `--indicators` on the CLIs turns on only the named ones. |
+| `configs/sgp_room.yaml` | Local override for the scenario room: points the instructor camera at `data/calibration/sgp_room_instructor_view.yaml`. Default `--local-config` of the scenario and lesson scripts. |
+| `configs/bytetrack_1fps.yaml` | ByteTrack with looser matching for 1 sample/s. |
+| `configs/web_sample_cameras.yaml`, `configs/howtospeak_*.yaml` | Overrides for the downloaded web samples (moving cameras, segment zones). |
+| `configs/zones.example.yaml` | Template for a new room's calibration. |
+| `configs/*.local.yaml` | Ignored machine-specific overrides (never credentials). |
 
-Configuration precedence should be: command-line value > local override > `configs/default.yaml`.
+Precedence: command-line value > `--local-config` YAML > `configs/default.yaml`.
 
 ## 6. Data directories and file contracts
 
-| Path | Format | Responsibility |
-| --- | --- | --- |
-| `data/raw_videos/` | MP4/MOV/MKV, local only | Canonical location for source recordings. New recordings should be copied here under clear, anonymous names. |
-| `data/raw_frames/` | JPG/PNG, local only | Frames extracted from raw recordings. Filenames should contain a video ID and zero-padded frame number. |
-| `data/person_detection/` | YOLO images/labels plus YAML | Holds downloaded one-class Roboflow exports locally and a `combined.yaml` that currently selects one copy. Add distinct sources to the YAML only after checking class IDs and split leakage. |
-| `data/calibration/` | YAML/JSON | One camera-specific zone file per fixed camera. Store geometry only, not recordings. |
-| `data/manifests/` | CSV/JSON | Records stable video IDs, source provenance, allowed use, split assignment, and optional calibration ID without putting identity into filenames. |
-| `data/samples/` | Small images and labels | Tiny, safe fixtures used in documentation, smoke tests, and examples. Do not turn this into a second full dataset. |
-| `data/person_detection_v1/` | YOLO images and labels | Historical one-class `person` set; most training images and all test images have no matching labels. Do not reinterpret ID 0 as instructor. |
-| `data/person_detection_v2/` | YOLO images and labels | Historical one-class `person` set, no longer selected by root `data.yaml`; its train and validation contain the same frames. |
-| `data/student_instructor_imported/` | YOLO images and labels | Imported role set with ID 0 = student, ID 1 = instructor. One annotation is not YOLO text, and source frames appear across splits. Preserve its mapping while repairing a derived version. |
-| `data/**/images/{train,val,test}/` | JPG/PNG | Model inputs split before training. Frames from the same source recording must not be split across train and validation/test sets. |
-| `data/**/labels/{train,val,test}/` | YOLO TXT | One annotation file per image with the same base filename. `classes.txt` is informative; the dataset YAML remains the training source of truth. |
-| `*.cache` inside datasets | Ultralytics cache | Generated acceleration files. They can be deleted and regenerated; they are not authoritative labels. |
-
-The top-level `Instructor Recordings/` and `Student Recordings/` directories are preserved because they already contain local source media. They are legacy import locations. New code should read from `data/raw_videos/`, and the large media files should remain uncommitted.
+| Path | Responsibility |
+| --- | --- |
+| `data/manifests/sgp_scenario_videos.csv` | One row per scenario recording: `video_id`, scenario (A1-A6, B1), take, camera, file, duration, `recording_start` (corrected real start), sync window (`sync_start_seconds`, `sync_end_seconds`). Read by `alignment.plan_from_manifest()` and `run_scenarios.py`. |
+| `data/calibration/sgp_room_instructor_view.yaml` | Normalized polygons of the scenario room's instructor camera: zones (where the teacher stands) and targets (screen, board, desk). Recalibrate if the camera moves. |
+| `data/raw_student_videos/`, `data/raw_instructor_videos/` | Local recordings of the scripted scenarios (docs/test_recording_scenarios.pdf, docs/scenario_test_videos.md). Never commit. |
+| `data/raw_videos/` | Local web samples and clock tests. `clock_test_02.MOV` shows an identifiable presenter: private, not test data. |
+| `data/person_detection/` | Roboflow exports (local) and `combined.yaml` for future detector training; audit before training. |
 
 ## 7. Source-code responsibilities
 
-Create a Python file below only when its first behavior and tests are implemented. Every source directory should become a Python package by adding `__init__.py` alongside the first module.
+### `src/pipeline.py`
+
+Orchestration only (no model or rule logic):
+
+- `analyze_video()`: one camera recording -> run folder with `events.jsonl`,
+  `summary.json`, `review.mp4`, `run.json`. Loads the models a camera's
+  switches need, runs every sample through the rules, writes atomically.
+- `detect_objects()`: the isolated COCO detector -> `objects.jsonl`,
+  `objects_summary.json`, `objects_review.mp4`, `objects_run.json`.
+- `analyze_lesson()`: two `CameraRun` plans -> both camera runs into
+  `outputs/lessons/<stamp>_<lesson>/student|instructor/` (or `reuse` saved
+  runs, `redo` one camera) -> `link_runs()` -> `fuse_and_write()` (fusion/ and
+  facts.json) -> `side_by_side.mp4` -> `lesson.json`. Output clashes are
+  checked before any analysis.
+- `pool_lessons()`: the hypotheses over several fused lessons ->
+  `outputs/pooled/<stamp>_<name>/pooled.json`, `facts.json`.
+- `review_timing()`: when each review frame was taken (from `run.json`).
 
 ### `src/preprocessing/`
 
-| Planned file | Responsibility |
+| File | Responsibility |
 | --- | --- |
-| `video.py` | Current timestamp-preserving video frame reader with FPS and dimension validation, and optional start/end segments that seek directly and keep the full-run sample grid. Codec diagnostics and richer preprocessing remain future work. |
-| `camera_motion.py` | Current. Estimates a moving camera's pan/zoom between samples from background features (people masked out), chains it into per-shot reference coordinates, and starts a new shot at cuts or unmeasurable steps. Pure measurement; analysis decides how to use it. |
-| `recording_time.py` | Current. Reads recording-time tags with ffprobe (Apple `com.apple.quicktime.creationdate` preferred, then UTC `creation_time`), video duration, frames, frame rate, and camera make/model; converts video positions to clock time. Whole-second camera-clock precision: coarse alignment only, not frame-level camera sync. |
-| `dataset.py` | Validate image/label pairs, enforce class mappings, detect train/validation leakage by source video, and build immutable versioned splits. |
+| `video.py` | `frames()` / `frames_with_subsamples()`: sampled frames with source timestamps, segments that seek frame-exactly, extra face frames, grab-only for unused frames, OpenCV hardware decoding with software fallback. |
+| `alignment.py` | `CameraRun`; `read_manifest()`; `recording_window()`, `shared_range()`, `limit_range()`; `plan_from_videos()` (two files, tag starts or given starts) and `plan_from_manifest()` (scenario, tag, take). |
+| `recording_time.py` | Recording-start/duration tags through ffprobe (Apple creationdate, 3GPP udta date, creation_time). |
+| `camera_motion.py` | Moving-camera compensation for web samples (own recordings use static cameras). |
 
 ### `src/inference/`
 
-| Planned file | Responsibility |
+| File | Responsibility |
 | --- | --- |
-| `detection.py` | Load the one-class YOLO person detector and return boxes and confidences in a model-independent record shape. Camera context supplies an expected role; ambiguous tracks remain unknown. |
-| `tracking.py` | Associate detections over time with anonymous temporary IDs using ByteTrack or BoT-SORT and report track-quality information. IDs must reset between recordings. |
-| `pose.py` | Current local YOLO26 Pose + ByteTrack adapter, returning normalized person boxes and confidence-aware COCO-17 joints. It never claims attention, engagement, or emotion. A separate detector/tracker module is unnecessary for this List A path. |
-
+| `pose.py` | YOLO26 pose + ByteTrack adapter; `PosePerson`, `Keypoint`, `joint_indices`; refuses missing weights (never downloads). |
+| `tracking.py` | `TrackStitcher`: one ID for a person who moved between samples. |
+| `face_mesh.py` | MediaPipe face landmarks (478 points, blendshapes, head angles) on crops from pose head joints; student camera only; crops stay in memory. |
+| `hands.py` | MediaPipe gesture recognizer on wrist crops. |
+| `objects.py` | COCO YOLO26 detector restricted to chosen classes. |
 
 ### `src/analysis/`
 
-| Planned file | Responsibility |
+| File | Responsibility |
 | --- | --- |
-| `events.py` | Current validated timestamped event schema and streaming JSONL serialization; `with_real_time()` adds wall-clock `start_real_time`/`end_real_time` from the recording-start metadata. |
-| `visual_indicators.py` | Current List A presence/count/role-context/position/zone/visibility/posture/motion rules. After each sample it also exposes the per-track rule state (`last_sample`) used by review overlays. With camera-motion input it measures motion and path positions in camera-shot coordinates. Hand raises are not implemented here yet. |
-| `interaction_indicators.py` | Link teacher prompts, student responses, hand raises, feedback, orientation, and proximity into cross-modal interaction events. |
-| `quality.py` | Measure blur, brightness, coverage, audio quality, ASR confidence, occlusion, and tracking reliability; provide the validity denominator for every metric. |
-| `aggregates.py` | Current List A JSON summary derived from saved events. Full report/chart aggregation remains planned. |
-| `fusion.py` | Current (2026-11-18): one lesson's two saved runs on a shared real-time line, cut into windows; one column per teacher/student feature (docs/fusion_lag_analysis.md). |
-| `lag_analysis.py` | Current (2026-11-18): lag correlation with circular-shift tests and q-values, lagged OLS with Newey-West errors, peri-event averages, findings labelled strength / weak point / observation. |
+| `events.py` | `Event` schema, rounding, atomic JSONL writer, `with_real_time()`. |
+| `visual_indicators.py` | List A rules (presence, count, roles, position, zones, entry/exit, visibility, sitting/standing incl. the desk rule, motion), duplicate filter, `FoundationAnalyzer` (calls the List B/C/face rule sets), `last_sample` for overlays. |
+| `teacher_indicators.py` | List B: facing, head orientation, board/screen, writing, pointing, gestures, raised hand, torso lean, stationary episodes. |
+| `student_indicators.py` | List C: hand raises, seats, out of seat, head down, alertness, device use, note-taking, reading, response gestures. |
+| `interaction_indicators.py` | Head targets, orientation proxy (on/off target), hand-raise outcomes. |
+| `facial_actions.py` | Per-student facial actions against each student's own baseline. |
+| `aggregates.py` | `summary.json` from saved events. |
+| `cross_camera.py` | Students who left for the front; the teacher in the student view (timing only). |
+| `fusion.py` | `FEATURES` (T_ teacher and S_ student columns with desirable direction), `student_state()` (on/off task per second), `build_windows()`, `onsets()`, `fuse_runs()`. |
+| `lag_analysis.py` | `cross_correlation`, `shift_test`, `benjamini_hochberg`, `comparison`, `lagged_model`, `peri_event`, `analyze()` (hypotheses first, exploratory links, findings), `between_lessons`, `pooled_analyze()`. |
 
 ### `src/reporting/`
 
-| Planned file | Responsibility |
+| File | Responsibility |
 | --- | --- |
-| `annotated_video.py` | Current. Draws each analyzed sample's boxes, confident joints, anonymous IDs, assumed roles, and rule states from `PosePerson` observations and the analyzer's `SampleSnapshot`. Optionally draws teacher/all path trails in camera-shot coordinates. Writes `outputs/debug/<id>.list_a.mp4` atomically and runs the optional live OpenCV window. No model or rule logic belongs here. |
-| `charts.py` | Build deterministic timelines, heatmaps, and summary charts from aggregate tables. Save plots under `outputs/visualizations/`. |
-| `renderer.py` | Validate report inputs, render the Jinja2 template, attach evidence/limitations, and write HTML under `outputs/reports/`. PDF export may be added behind the same interface. |
-| `templates/report.html.j2` | Own the semantic HTML report layout and Jinja2 placeholders. It should display observation, denominator, confidence, and limitation together. |
-| `templates/report.css` | Own print-friendly report styling. No analysis logic or hard-coded metrics belongs here. |
-
-### `src/training/`
-
-| Planned file | Responsibility |
-| --- | --- |
-| `train_detector.py` | Validate the dataset contract, set seeds, launch Ultralytics training, and save the exact configuration and metrics with each run. |
-| `evaluate_detector.py` | Evaluate a checkpoint on a held-out set, save class-level metrics and error examples, and compare against a declared baseline. |
-
-Pose action rules should first be evaluated using the pretrained pose model. Add a separate action-training module only when the team has a labeled temporal-action dataset.
+| `annotated_video.py` | Review overlays (boxes, joints, IDs, roles, every rule state), small translucent HUD, MP4 writer, live window. |
+| `side_by_side.py` | `ReviewTiming`, `write_side_by_side()`. |
+| `charts.py` | `plot_fusion_timelines()`. |
+| `facts.py` | `lesson_facts()`, `pooled_facts()`, `comparison_facts()`, `lesson_comparison_facts()`: facts.json schema 1. |
+| `llm_report.py` | [planned] the LLM stage (AGENTS.md section 17). |
+| `renderer.py`, `templates/` | [planned] the HTML/PDF report (AGENTS.md section 17). |
 
 ### `src/utils/`
 
-| Planned file | Responsibility |
+| File | Responsibility |
 | --- | --- |
-| `config.py` | Current YAML loader, local overrides, range validation, List A switches, and optional camera-zone calibration. |
-| `paths.py` | Current consistent repository-relative path resolution. |
-| `logging.py` | Configure console/file logs with timestamps, stage names, video IDs, and run IDs while excluding personal data. |
-
-### `src/pipeline.py`
-
-This module currently orchestrates one List A run: validate input, call preprocessing and pose tracking, save JSONL events, write the annotated review MP4 and optional live preview through `src/reporting/annotated_video.py`, and generate a JSON summary. HTML/PDF rendering remains planned. It coordinates modules rather than containing model or indicator logic.
+| `config.py` | YAML loading, recursive overrides, validation, indicator switches, zones and targets. |
+| `output_layout.py` | `<YYYY-MM-DD_HHMM>_<name>` folders, `RUN_FILES`, `LESSON_FILES`, `find_run`, `find_lesson`, `run_folder`, `new_folder`, `events_file`. |
+| `paths.py` | `project_path()`, `file_in_use()`. |
 
 ## 8. Scripts
 
-Scripts are thin developer-facing entry points. Reusable behavior belongs under `src/`; a script should parse arguments and call that behavior.
+Thin entry points; reusable behaviour belongs in `src/`.
 
-| File | Language | Responsibility |
-| --- | --- | --- |
-| `scripts/extract_frames_ffmpeg.py` | Python | Current standalone FFmpeg wrapper that extracts one image every N seconds. Later, keep the CLI here but move reusable media logic into `src/preprocessing/video.py`. |
-| `scripts/pose_action_demo.py` | Python | Current experimental YOLO pose + ByteTrack hand-raise demo. It is a proof of concept, not the production pipeline. |
-| `scripts/recording_time.py` | Python | Current thin CLI: prints each video's recording start/end (HH:MM:SS), duration, frame rate, and clock time at given positions from container metadata via `src/preprocessing/recording_time.py`; with several videos, start differences in whole seconds. Never prints GPS values. |
-| `scripts/train.py` | Python, future | Thin CLI that loads config and calls `src/training/train_detector.py`. |
-| `scripts/analyze.py` | Python, current | Thin CLI that analyzes one recording through `src/pipeline.py`; `--start/--end` select a segment, and `--live`, `--save-video/--no-save-video`, and `--path` control the review outputs. |
-| `scripts/fuse_lesson.py` | Python, current | Thin CLI over `src/analysis/fusion.py` and `lag_analysis.py`: fuses a lesson's two saved runs and writes the fusion JSON, window/link CSVs, and a timeline PNG. |
-| `scripts/report.py` | Python, future | Re-renders a report from saved events/aggregates without rerunning expensive models. |
+| Script | Responsibility |
+| --- | --- |
+| `scripts/analyze_lesson.py` | **The main command**: a whole lesson (two videos + `--name`, or `--scenario`/`--all-scenarios` + `--tag`) -> lesson folder; `--reuse`, `--redo`, `--pool`, `--start/--end`, `--dry-run`. |
+| `scripts/analyze.py` | One camera recording -> run folder (`--indicators`, `--start/--end`, `--live`, `--path`). |
+| `scripts/run_scenarios.py` | Camera runs over the scenario manifest (indicator tests, `--objects`). |
+| `scripts/fuse_lesson.py` | Redo a lesson's fusion, statistics, and facts.json from saved runs. |
+| `scripts/link_cameras.py` | Redo a lesson's cross-camera links. |
+| `scripts/pool_lessons.py` | Test the hypotheses over several lessons (`--lessons` or `--all`). |
+| `scripts/show_indicator.py` | Print one indicator of a saved run as a table (no video). |
+| `scripts/detect_objects.py` | Isolated COCO object detection on one video. |
+| `scripts/recording_time.py` | Show recording start/end and clock times of videos. |
+| `scripts/trim_video.py` | Lossless cut that keeps the real recording start. |
+| `scripts/organize_outputs.py` | One-off mover of old flat outputs into the dated layout. |
+| `scripts/extract_frames_ffmpeg.py`, `scripts/pose_action_demo.py` | Dataset frame extraction; old YOLO11 hand-raise demo (not the pipeline). |
+| `scripts/llm_report.py`, `scripts/report.py` | [planned] thin CLIs for the LLM and report stages. |
 
 ## 9. Tests
 
-| Path | Language/data | Responsibility |
-| --- | --- | --- |
-| `tests/unit/` | Python/pytest | Fast tests for one rule or function: coordinate normalization, hand-raise logic, event merging, configuration validation, and aggregation. |
-| `tests/integration/` | Python/pytest | Small end-to-end checks across media loading, model output adapters, event storage, and report rendering. Heavy full-video benchmarks do not belong here. |
-| `tests/fixtures/` | Tiny media/config/event samples | Small, non-sensitive, redistributable inputs with known expected outcomes. Never place real classroom recordings here. |
+| Path | Responsibility |
+| --- | --- |
+| `tests/unit/` | 170 unittest tests, synthetic data, no video, model, or GPU: config, video sampling, recording time, events, aggregates, List A/B/C rules, faces, objects, annotated video, paths, scripts, fusion, lag analysis, lesson pipeline (mocked models), output layout, desk posture, facts.json schema, side-by-side timing. Run: `python -m unittest discover -s tests/unit`. |
+| `tests/integration/`, `tests/fixtures/` | Placeholders; never put classroom recordings in fixtures. |
 
-Test filenames should mirror source modules, for example `src/analysis/quality.py` -> `tests/unit/test_quality.py`.
+Test files mirror modules (`src/analysis/fusion.py` -> `tests/unit/test_fusion.py`); the 2026-11-19 additions are in `test_lesson.py` and `test_lesson_outputs.py`.
 
 ## 10. Model and generated-output directories
 
-| Path | Typical format | Responsibility |
-| --- | --- | --- |
-| `models/detection/` | `.pt`, `.onnx` | Downloaded or trained person/role detector checkpoints. |
-| `models/pose/` | `.pt`, `.onnx` | Pose checkpoints. |
-| `runs/` | generated folders | Raw framework experiment output. It is disposable and ignored; final promoted metrics should be summarized elsewhere. |
-| `outputs/events/` | `.jsonl` | Canonical per-video timestamped evidence records. |
-| `outputs/reports/` | `.html`, later `.pdf` | Human-readable final reports. |
-| `outputs/visualizations/` | `.png`, `.svg`, `.csv` | Charts, heatmaps, and their source tables. |
-| `outputs/debug/` | annotated media/logs | Overlays and diagnostics used to inspect incorrect predictions, including `<id>.list_a.mp4` review videos. These contain original classroom footage. |
+| Path | Responsibility |
+| --- | --- |
+| `models/pose/`, `models/detection/`, `models/face/`, `models/hands/` | Local weights (section 3); copy them to a new machine, the code never downloads them. |
+| `outputs/lessons/<YYYY-MM-DD_HHMM>_<lesson>/` | One lesson: `lesson.json` (index), `student/` and `instructor/` (each `events.jsonl`, `summary.json`, `review.mp4`, `run.json`), `cross_camera.json`, `fusion/` (`fusion.json`, `windows.csv`, `links.csv`, `timeline.png`), `facts.json`, `side_by_side.mp4`; later the LLM and report outputs. Contains classroom footage. |
+| `outputs/runs/<YYYY-MM-DD_HHMM>_<run>/` | One camera run made on its own (same files as a lesson's camera folder; `objects.*` for object runs). |
+| `outputs/pooled/<YYYY-MM-DD_HHMM>_<name>/` | `pooled.json`, `facts.json` over several lessons. |
+| `outputs/logs/` | Logs of long batches. |
+| `runs/` (root) | Ultralytics experiment output; disposable. |
 
-Model files and generated outputs are local artifacts and remain ignored by Git. The `.gitkeep` files preserve the intended empty directory layout.
+Every output file and JSON key is explained in docs/outputs_guide.md.
 
 ## 11. Documentation files
 
 | File | Responsibility |
 | --- | --- |
-| `docs/project_structure.md` | This architecture map and the source of truth for file ownership. Update it when a boundary or major file changes. |
-| `docs/test_recording_scenarios.pdf` | Filming plan for short static-camera test lectures (4-6 students): camera setup, behaviour codes, scenarios with per-student roles, calibration clips, and a ground-truth log template. |
-| `docs/fusion_lag_analysis.md` | Lesson fusion and lag analysis: window features, tests, guardrails, outputs, A1 results, limits. |
-| `docs/video_indicator_catalog.md` | Full catalog of defensible visual, audio, transcript, interaction, and quality indicators plus claims TeachLens must avoid. |
-| `docs/annotation_guidelines.md` | Label names and bounding-box rules for the reviewed two-class annotation workflow. |
-| `docs/annotation_review.md` | Review checklist and audit table for labeled batches. |
-| `docs/dataset_preparation_notes.md` | Current notes for placing images/labels and splitting a dataset. |
-| `docs/model_training_notes.md` | Detailed manual Ultralytics training, validation, prediction, and troubleshooting commands. |
-| `docs/pose_training_rules.md` | Reserved for reviewed pose/action rules and their validation evidence. It is currently empty. |
-| `docs/selected_videos.md` | Approval register for recordings selected for dataset preparation. Do not put sensitive identity data in it. |
-| `docs/team_workflow.md` | Team Git workflow, commit guidance, and the rule against committing large artifacts. |
-| `docs/video_sources_instructor.md` | Provenance and suitability notes for candidate instructor-focused source videos. |
-| `docs/video_sources_students.md` | Provenance and suitability notes for candidate student-focused source videos. |
-| `docs/diagrams/` | Exported diagrams only when Markdown/Mermaid cannot express them. Include an editable source when possible. |
+| `AGENTS.md` | Handoff for agents: decisions, environment, every module, results, next stages (sections 16-18). |
+| `docs/project_structure.md` | This map. |
+| `docs/outputs_guide.md` | Every output file, what uses it later, the lag formula, every JSON symbol. |
+| `docs/llm_integration.md` | The LLM/UI stage on the pipeline_creation branch and the facts.json contract. |
+| `docs/lesson_pipeline.md` | The one-command lesson pipeline: steps, options, run times, scenario results. |
+| `docs/fusion_lag_analysis.md` | Fusion and lag analysis: features, hypotheses, tests, guardrails, pooling, results. |
+| `docs/list_a_pose.md` | List A run guide, indicators, camera assumptions, desk posture, calibration. |
+| `docs/list_b_teacher.md` | List B teacher indicators. |
+| `docs/list_c_students.md` | List C student indicators, per-indicator test commands. |
+| `docs/facial_actions.md` | Student facial actions from MediaPipe face landmarks. |
+| `docs/object_detection.md` | Isolated COCO object detection. |
+| `docs/scenario_test_videos.md` | The scenario recordings, their sync windows, test commands. |
+| `docs/test_recording_scenarios.pdf` | The filming booklet: scenarios A1-D2, behaviour codes (T-SIT, T-READ ...), expected outcomes. |
+| `docs/video_indicator_catalog.md` | Catalog of defensible indicators and claims to avoid. |
+| `docs/team_workflow.md` | Team Git workflow. |
+| `docs/annotation_guidelines.md`, `docs/annotation_review.md`, `docs/dataset_preparation_notes.md`, `docs/model_training_notes.md`, `docs/pose_training_rules.md` | Dataset and training notes (historical parts marked in AGENTS.md section 3). |
+| `docs/selected_videos.md`, `docs/video_sources_instructor.md`, `docs/video_sources_students.md` | Source registers (candidates are not approvals). |
 
-## 12. Notebook policy
+## 12. Naming and ownership rules
 
-`notebooks/` is for short-lived exploration, data checks, and plots. A notebook may call reusable code from `src/`, but production logic must not exist only in a notebook. Name notebooks with a sequence and purpose, such as `01_dataset_audit.ipynb`, then move proven logic into tested Python modules.
+- `snake_case.py` modules, `test_<module>.py` tests; scripts thin, logic in `src/`, settings in `configs/`.
+- Outputs only through `src/utils/output_layout.py`: one dated folder per lesson or run, never loose files in `outputs/`.
+- Anonymous IDs only; no names in files, IDs, or facts; no face recognition or identity matching.
+- Report observable proxies ("on task", "facing the class") with denominators and limitations, never attention, engagement, emotion, or intent as fact; associations, never causes.
+- Never commit recordings, frames, weights, or generated outputs (they show people).
 
-## 13. Naming and ownership rules
+## 13. Implementation order from here
 
-- Use `snake_case.py` for Python modules and `test_<module>.py` for tests.
-- Use stable anonymous video IDs such as `V001`; do not place student or teacher names in filenames.
-- Treat dataset versions and their class-ID mappings as immutable contracts.
-- Keep paths relative to the repository in committed YAML; machine-specific absolute paths belong in local overrides.
-- Keep scripts thin, reusable computation in `src/`, settings in `configs/`, and generated artifacts in `outputs/` or `runs/`.
-- Do not report internal states such as attention, engagement, emotion, intent, or understanding as facts. Report observable behavior, evidence coverage, confidence, and limitations.
-- Never commit full classroom recordings, extracted frames, trained weights, or generated reports containing sensitive evidence.
-
-## 14. Recommended implementation order
-
-1. Use the one-class `person` contract for the current two-camera pipeline. Repair missing labels and split leakage before training; preserve the historical imported two-class mapping without using it for this pipeline.
-2. Completed for List A: timestamped frame iteration, canonical JSONL events, YOLO26 pose + ByteTrack adapter, visual rules, evidence flags, and a JSON summary. The old demo remains separate.
-3. Next: validate List A rules on labeled clips from both cameras; tune thresholds and audit role assumptions, pose coverage, and tracker ID switches.
-4. Later: add charts and an HTML report with explicit confidence and limitations.
-5. Audio remains out of scope for the current physical-indicator implementation.
-
-This order produces a reviewable vertical slice before introducing advanced semantic indicators or a web interface.
+1. Done: per-camera pipeline (Lists A, B, C, faces, objects), one-command lessons, fusion and lag analysis, pooling, facts.json, side-by-side review, dated outputs.
+2. Next: the LLM feedback stage and the HTML/PDF report (AGENTS.md section 17).
+3. Then: validate the indicators the facts rest on against human labels of the scenario videos; run more and longer lessons; optional OpenVINO inference on the Intel Iris Xe.

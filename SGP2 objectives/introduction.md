@@ -36,12 +36,14 @@ recorded lecture. The feedback describes associations between instructor activit
 never causes or inner states. The specific objectives are:
 
 1. Record each lecture with two static cameras (instructor and students) and align them to about one second.
-2. Detect people, body keypoints, phones and books with pretrained YOLO26 models on a laptop CPU.
-3. Derive observable instructor and student indicators with transparent rules and anonymous seats.
+2. Detect people, body keypoints, faces, hands, phones and books with pretrained YOLO26 and MediaPipe models on a
+   laptop CPU.
+3. Derive observable instructor and student indicators with transparent rules, temporary track IDs and anonymous
+   seats.
 4. Store timestamped evidence in the team's shared event format.
 5. Analyse instructor–student associations with statistics that allow for autocorrelation and multiple testing.
-6. Produce up to three positive and three negative points in plain English, with an optional, automatically checked
-   AI rewrite.
+6. Produce up to three positive and three negative points in plain English, always rewritten by an AI model under
+   automatic checks, with the rule-based text as a fallback.
 7. Deliver the analysis through a local web application.
 8. Protect privacy and state the limits of every result.
 9. Verify the software and evaluate it on real recordings.
@@ -55,7 +57,8 @@ Full wording and the benefits of the project: see `objective.md`.
 - Observable behaviour:
   - instructor: presence, facing the class, board work when a board region is calibrated, movement, sitting or
     standing;
-  - students: heads up, head down and still, hand raises, phones and books in view.
+  - students: on task / off task (facing the front, writing, reading; phone, dozing posture, chatting, facing away),
+    hand raises and answers, phones, laptops and books.
 - Anonymous seats.
 - Associations within a lecture (pooling across lectures is not part of the current version).
 - Plain-English feedback and a local web report.
@@ -74,12 +77,12 @@ Full wording and the benefits of the project: see `objective.md`.
 
 | SGP1 plan | SGP2 | Reason |
 |---|---|---|
-| One fixed camera covering the instructor and students | Two static cameras, aligned from recording metadata | One view rarely shows both sides clearly. In a single-camera test, roles assigned by image zone failed when the framing changed. |
+| One fixed camera covering the instructor and students | Two static cameras, aligned from recording metadata; one merged pipeline since 20 November 2026 | One view rarely shows both sides clearly. In a single-camera test, roles assigned by image zone failed when the framing changed. |
 | Train YOLO11 action models (instructor and student classes) | Pretrained YOLO26 pose and detection models with transparent rules; no training | No labelled classroom action dataset was available. Rules on keypoints can be explained and tested. |
-| Seat regions for student identity | Seats found automatically from where students sat (System B); temporary tracker IDs (System A) | A fixed grid did not match real seating. |
+| Seat regions for student identity | Temporary ByteTrack IDs, and seats learnt from where students sat | A fixed grid did not match real seating. |
 | Emotion recognition | Dropped | It cannot be measured reliably and would claim inner states. |
 | Cross-correlation and lagged regression | Kept, as the team's fusion layer: a circular-shift test, Benjamini–Hochberg q-values, lagged models with HAC errors, and averages around the moments an action started | Neighbouring windows are alike, so naive p-values overstated certainty. |
-| Report template, with an LLM filling placeholders | Rule-based feedback plus an optional Claude Opus 5.5 rewrite checked in code; local web application | Keeps every sentence traceable to a measured number. |
+| Report template, with an LLM filling placeholders | Rule-based feedback, always rewritten by Claude Opus 5.5 and checked in code (rules kept on failure); local web application | Keeps every sentence traceable to a measured number. |
 
 ## 1.6 Structure of this report
 

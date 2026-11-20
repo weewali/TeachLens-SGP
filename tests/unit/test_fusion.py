@@ -178,8 +178,10 @@ class LagAnalysisTest(unittest.TestCase):
         table = pd.DataFrame({"T_board": x, "T_screen": rare, "S_on_target": y,
                               "S_phone": np.random.default_rng(4).normal(0.2, 0.05, 150)})
         meta = {"window_seconds": 5.0, "features": {
-            "T_board": {"camera": "teacher", "desirable": 0}, "T_screen": {"camera": "teacher", "desirable": 0},
-            "S_on_target": {"camera": "students", "desirable": 1}, "S_phone": {"camera": "students", "desirable": -1}}}
+            "T_board": {"camera": "teacher", "desirable": 0, "kind": "share"},
+            "T_screen": {"camera": "teacher", "desirable": 0, "kind": "share"},
+            "S_on_target": {"camera": "students", "desirable": 1, "kind": "share"},
+            "S_phone": {"camera": "students", "desirable": -1, "kind": "share"}}}
         settings = {"permutations": 200, "model_lags": [2], "outcomes": ["S_on_target"],
                     "model_predictors": ["T_board", "T_screen"], "min_events": 3}
         result = analyze(table, meta, settings, {"screen_start": [40], "board_start": [10, 50, 90, 130]})
@@ -190,7 +192,7 @@ class LagAnalysisTest(unittest.TestCase):
                          ("T_board", "S_on_target", 10.0))
         self.assertLessEqual(top["q"], 0.05)
         self.assertEqual(list(result["lagged_models"][0]["terms"]), ["const", "T_board[t-2]", "S_on_target[t-1]"])
-        finding = [f for f in result["findings"] if f["method"] == "lag_correlation"][0]
+        finding = [f for f in result["findings"] if f["method"] == "exploratory_lag_correlation"][0]
         self.assertEqual((finding["kind"], finding["student_feature"]), ("strength", "S_on_target"))
         self.assertEqual(result["peri_event"][0], {"teacher_event": "screen_start", "events": 1,
                                                    "skipped": "too few onsets"})

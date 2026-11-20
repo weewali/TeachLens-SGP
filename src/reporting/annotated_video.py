@@ -100,6 +100,7 @@ def describe_track(person: PosePerson, track: TrackSnapshot | None) -> list[str]
     if track.posture is not None:
         posture = ("posture ?" if track.posture == "unknown" else
                    f"{track.posture} (partial)" if track.posture_basis == "upper_legs"
+                   else f"{track.posture} (desk)" if track.posture_basis == "desk"
                    else track.posture)
         if track.posture_rise is not None:
             posture += f" rise {track.posture_rise:.2f}"
@@ -274,6 +275,27 @@ def _text_block(cv2: Any, image: Any, lines: Sequence[str], rect: Rect, scale: f
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5 * scale, text_color, thickness, cv2.LINE_AA)
 
 
+HUD_SCALE = 0.6  # of the frame's text scale (user request 2026-11-19: the HUD hid students' labels)
+HUD_GREY = (110, 110, 110)
+HUD_OPACITY = 0.45  # share of grey over the scene; the rest stays visible through it
+
+
+def _hud_block(cv2: Any, image: Any, lines: Sequence[str], scale: float) -> Rect:
+    """The top-left HUD: small text on translucent grey, drawn under the people's labels."""
+    rect = _clamp(image, 0, 0, _text_size(cv2, lines, scale))
+    x1, y1, x2, y2 = rect
+    region = image[y1:y2, x1:x2]
+    grey = region.copy()
+    grey[:] = HUD_GREY
+    image[y1:y2, x1:x2] = cv2.addWeighted(grey, HUD_OPACITY, region, 1 - HUD_OPACITY, 0)
+    thickness, pad = max(1, round(scale)), max(2, round(4 * scale))
+    line_height = (y2 - y1) // len(lines)
+    for index, line in enumerate(lines):
+        cv2.putText(image, line, (x1 + pad, y1 + line_height * (index + 1) - pad),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5 * scale, (255, 255, 255), thickness, cv2.LINE_AA)
+    return rect
+
+
 # Distinct BGR colours for object classes (cycled by label).
 OBJECT_PALETTE = ((0, 140, 255), (255, 80, 80), (60, 200, 60), (200, 80, 255), (0, 220, 220),
                   (255, 180, 0), (180, 120, 60), (120, 120, 255), (80, 255, 160), (255, 0, 160))
@@ -306,6 +328,7 @@ class ObjectOverlay:
         height, width = image.shape[:2]
         scale = max(0.6, min(width, height) / 720)
         thickness = max(2, round(2 * scale))
+        _hud_block(cv2, image, self.hud_lines(time, objects), HUD_SCALE * scale)
         for item in objects:
             color = self.colors.get(item.label, (255, 255, 255))
             x1, y1, x2, y2 = (round(item.box[0] * width), round(item.box[1] * height),
@@ -315,9 +338,6 @@ class ObjectOverlay:
             size = _text_size(cv2, text, 0.8 * scale)
             _text_block(cv2, image, text, _clamp(image, x1, y1 - size[1], size), 0.8 * scale,
                         color, (255, 255, 255))
-        hud = self.hud_lines(time, objects)
-        _text_block(cv2, image, hud, _clamp(image, 0, 0, _text_size(cv2, hud, scale)), scale,
-                    None, (255, 255, 255))
         return image
 
 
@@ -463,17 +483,16 @@ class ReviewOverlay:
         for mesh in (faces or {}).values():
             for x, y in mesh.points:
                 cv2.circle(image, (round(x * width), round(y * height)), dot, FACE_COLOR, -1)
-        hud = self.hud_lines(sample)
-        hud_rect = _clamp(image, 0, 0, _text_size(cv2, hud, scale))
+        # Small translucent HUD first; people's labels may cover it, never the reverse.
+        _hud_block(cv2, image, self.hud_lines(sample), HUD_SCALE * scale)
         # Faces count as taken spots, so labels move off them when they can.
         face_rects = [(round(min(x for x, _ in m.points) * width), round(min(y for _, y in m.points) * height),
                        round(max(x for x, _ in m.points) * width), round(max(y for _, y in m.points) * height))
                       for m in (faces or {}).values()]
-        placed = [hud_rect] + face_rects
+        placed = list(face_rects)
         for person in ordered:
             placed.append(self._draw_label(cv2, image, person, states.get(person.track_id),
                                            0.8 * scale, placed))
-        _text_block(cv2, image, hud, hud_rect, scale, None, (255, 255, 255))
         return image
 
     def _draw_zones(self, cv2: Any, image: Any, scale: float) -> None:

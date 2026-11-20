@@ -1,9 +1,10 @@
-"""Analysis job model: runs the two-camera pipeline (and, when the deployment enables it, the plain-language rewrite
-of the feedback with Claude) in the background and records which stage it has reached, so the progress page can show
-it. One job runs at a time: the analysis uses the whole CPU.
+"""Analysis job model: runs the lesson pipeline (scripts/analyze_lesson.py: both cameras, camera links, fusion,
+facts.json) and then the report (scripts/report_lesson.py: comparisons, tables, rule-based points and the AI rewrite,
+which always runs) in the background, and records which stage it has reached, so the progress page can show it.
+One job runs at a time: the analysis uses the whole CPU.
 
 While a job runs, its status lives in memory and the progress page reads it from there. A copy is saved as a small
-JSON file (<BASE_DIR>/jobs/<id>.json) so the page still works after the run, or after the web app restarts; a job
+JSON file (<BASE_DIR>/web_jobs/<id>.json) so the page still works after the run, or after the web app restarts; a job
 that was running when the web app stopped is shown as interrupted.
 
 Windows will not replace a file that another program or thread has open for a moment (the progress page, an antivirus
@@ -22,16 +23,24 @@ import time
 from pathlib import Path
 
 STAGES = [
-    (1, "Checking both videos and lining up the two cameras"),
-    (2, "Cutting both videos to the shared time and extracting frames"),
-    (3, "Detecting people and body poses in both cameras"),
-    (4, "Recognising behaviours and writing the two event files"),
-    (5, "Building 10-second windows"),
-    (6, "Lagged analysis: linking instructor actions to student behaviour"),
-    (7, "Writing the report"),
-    (8, "Writing the feedback in plain language"),   # only when the deployment enables it
+    (1, "Lining up the two cameras by their recording times"),
+    (2, "Analysing the student camera (the longest step)"),
+    (3, "Analysing the instructor camera"),
+    (4, "Linking the two cameras"),
+    (5, "Lagged analysis: linking instructor actions to student behaviour"),
+    (6, "Writing the report"),
+    (7, "Writing the feedback in plain language (AI)"),
 ]
-STAGE_RE = re.compile(r"^\[(\d)/7\]")
+# Lines of the two programs' output that start a stage (the lesson pipeline logs, report_lesson.py prints [6/7] ...).
+STAGE_PATTERNS = [
+    (re.compile(r"src\.preprocessing\.alignment:|analyze_lesson: Lesson \d"), 1),
+    (re.compile(r"\[\d/2\] student_view: analyzing"), 2),
+    (re.compile(r"\[\d/2\] instructor_view: analyzing"), 3),
+    (re.compile(r"Linking the cameras"), 4),
+    (re.compile(r"Fusing the runs"), 5),
+    (re.compile(r"^\[6/7\]"), 6),
+    (re.compile(r"^\[7/7\]"), 7),
+]
 LOG_LINES = 80
 SAVE_EVERY_SECONDS = 1.0           # the status copy on disk is refreshed at most this often (and at every stage)
 FILE_ATTEMPTS = 20                 # retries when Windows briefly blocks the status file
@@ -56,14 +65,28 @@ def stop_process_tree(process):
         pass
 
 
+def read_report_status(lecture):
+    """report_status.json of the lecture's lesson ({"source": "llm" | "rules", "reason": ...}), or {}."""
+    path = lecture.lesson_dir / "report_status.json" if lecture.lesson_dir else None
+    if path is None or not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def stage_of(line):
+    """The stage a line of output starts, or None."""
+    return next((stage for pattern, stage in STAGE_PATTERNS if pattern.search(line)), None)
+
+
 class JobRunner:
-    def __init__(self, base_dir, events_dir, python, main_code, llm_report, ffmpeg_dir=None, llm_mode="auto",
-                 llm_model="opus", links_report=None):
-        self.base_dir, self.events_dir = Path(base_dir), Path(events_dir)
-        self.python, self.main_code, self.llm_report = str(python), str(main_code), str(llm_report)
-        self.links_report = str(links_report) if links_report else None   # scripts/report.py: the links over time
+    def __init__(self, base_dir, python, analyze, report, ffmpeg_dir=None, llm_model="opus", room_config="none"):
+        self.base_dir = Path(base_dir)
+        self.python, self.analyze, self.report = str(python), str(analyze), str(report)
         self.ffmpeg_dir = ffmpeg_dir
-        self.llm_mode, self.llm_model = llm_mode, llm_model
+        self.llm_model, self.room_config = llm_model, str(room_config)
         self._lock = threading.Lock()
         self._running = None           # id of the lecture being analysed
         self._live = None              # its status, kept in memory
@@ -75,7 +98,7 @@ class JobRunner:
 
     # ------------------------------------------------------------------ status
     def _path(self, lecture_id):
-        return self.base_dir / "jobs" / f"{lecture_id}.json"
+        return self.base_dir / "web_jobs" / f"{lecture_id}.json"
 
     def _write(self, status):
         """Saves the status copy; True if it worked. Retries while Windows blocks the file, never raises."""
@@ -150,42 +173,27 @@ class JobRunner:
 
     # ------------------------------------------------------------------ running
     def environment(self):
-        env = dict(os.environ, TEACHLENS_BASE=str(self.base_dir), TEACHLENS_EVENTS_DIR=str(self.events_dir),
-                   PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")
+        # YOLO_AUTOINSTALL / YOLO_OFFLINE: Ultralytics must never download or install anything during an analysis
+        env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1", YOLO_AUTOINSTALL="False",
+                   YOLO_OFFLINE="True")
         if self.ffmpeg_dir:
             env["PATH"] = str(self.ffmpeg_dir) + os.pathsep + env.get("PATH", "")
         return env
 
     def analysis_command(self, lecture, overwrite=False):
-        command = [self.python, "-u", self.main_code, "--instructor", str(lecture.video_path("instructor")),
-                   "--students", str(lecture.video_path("students")), "--session", lecture.id]
+        command = [self.python, "-u", self.analyze, "--student-video", str(lecture.video_path("students")),
+                   "--instructor-video", str(lecture.video_path("instructor")), "--name", lecture.id,
+                   "--output-dir", str(self.base_dir), "--local-config", self.room_config, "--no-side-by-side"]
         return command + (["--overwrite"] if overwrite else [])
 
-    def llm_command(self, lecture):
-        return [self.python, "-u", self.llm_report, "--facts", str(lecture.reports_dir / "facts.json"),
+    def report_command(self, lecture):
+        return [self.python, "-u", self.report, "--name", lecture.id, "--output-dir", str(self.base_dir),
                 "--model", self.llm_model]
-
-    def links_command(self, lecture):
-        """The plain-language rewrite of the links over time (the team's fusion results), or None when this lecture
-        has none to rewrite. It keeps the rule-based points when the rewrite fails its checks."""
-        fusion = lecture.reports_dir / "fusion.json"
-        if not self.links_report or not fusion.exists():
-            return None
-        return [self.python, "-u", self.links_report, "--lag-results", str(fusion), "--out-dir",
-                str(lecture.reports_dir / "links"), "--lecture-id", lecture.id, "--model", self.llm_model, "--you"]
-
-    def llm_enabled(self):
-        """Whether the plain-language rewrite runs: a deployment setting (TEACHLENS_LLM), never an instructor choice."""
-        if self.llm_mode == "off":
-            return False
-        if self.llm_mode == "on":
-            return True
-        return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))   # auto
 
     def start(self, lecture, overwrite=False):
         """Starts the analysis in the background. overwrite=True replaces the lecture's earlier results (a rerun)."""
         status = {"lecture_id": lecture.id, "state": "running", "stage": 0, "stage_name": "Starting",
-                  "use_llm": self.llm_enabled(), "llm_result": None, "error": None, "log": [],
+                  "llm_result": None, "llm_ok": None, "error": None, "log": [],
                   "started": time.strftime("%Y-%m-%d %H:%M:%S"), "finished": None}
         with self._lock:
             if self._running:
@@ -200,8 +208,8 @@ class JobRunner:
             status.update(changes)
         self._save(status, force=True)
 
-    def _stream(self, command, status, stage_from_output):
-        with subprocess.Popen(command, cwd=str(Path(self.main_code).parents[1]), env=self.environment(),
+    def _stream(self, command, status, stage_from_output=True):
+        with subprocess.Popen(command, cwd=str(Path(self.analyze).parents[1]), env=self.environment(),
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
                               errors="replace", bufsize=1, start_new_session=os.name != "nt") as process:
             with self._lock:
@@ -214,13 +222,13 @@ class JobRunner:
                     line = line.rstrip()
                     if not line:
                         continue
-                    match = STAGE_RE.match(line) if stage_from_output else None
+                    stage = stage_of(line) if stage_from_output else None
                     with self._lock:
                         status["log"] = (status["log"] + [line])[-LOG_LINES:]
-                        if match:
-                            status["stage"] = int(match.group(1))
-                            status["stage_name"] = STAGES[status["stage"] - 1][1]
-                    self._save(status, force=bool(match))
+                        if stage and stage >= status["stage"]:
+                            status["stage"] = stage
+                            status["stage_name"] = STAGES[stage - 1][1]
+                    self._save(status, force=bool(stage))
                 return process.wait()
             finally:
                 with self._lock:
@@ -234,26 +242,22 @@ class JobRunner:
 
     def _run(self, lecture, overwrite, status):
         try:
-            code = self._stream(self.analysis_command(lecture, overwrite), status, stage_from_output=True)
-            if self._stopped(status):
-                return
-            if code != 0:
-                self._set(status, state="failed", error=f"The analysis stopped with an error (exit code {code}). "
-                                                        "The technical log below shows where.")
-                return
-            if status["use_llm"]:
-                self._set(status, stage=8, stage_name=STAGES[7][1])
-                code = self._stream(self.llm_command(lecture), status, stage_from_output=False)
+            for command in (self.analysis_command(lecture, overwrite), self.report_command(lecture)):
+                code = self._stream(command, status)
                 if self._stopped(status):
                     return
-                links = self.links_command(lecture)
-                if links:   # the links over time: falls back to its rule-based points by itself
-                    self._stream(links, status, stage_from_output=False)
-                    if self._stopped(status):
-                        return
-                # a failed rewrite is not a failed analysis: the standard feedback is complete on its own
-                self._set(status, llm_result="Feedback written in plain language and checked." if code == 0 else
-                          "The plain-language rewrite did not pass its checks, so the standard feedback is shown.")
+                if code != 0:
+                    self._set(status, state="failed", error=f"The analysis stopped with an error (exit code {code}). "
+                                                            "The technical log below shows where.")
+                    return
+            # a failed AI rewrite is not a failed analysis: the rule-based feedback is complete on its own
+            report = read_report_status(lecture)
+            if report.get("source") == "llm":
+                self._set(status, llm_ok=True, llm_result="The feedback was written in plain language by the AI and "
+                                                          "passed every automatic check.")
+            else:
+                self._set(status, llm_ok=False, llm_result="The AI rewrite was not used, so the rule-based feedback "
+                          f"is shown. Reason: {report.get('reason') or 'unknown (no report_status.json).'}")
             self._set(status, state="done", stage_name="Finished")
         except Exception as error:   # shown on the progress page instead of disappearing in a background thread
             with self._lock:

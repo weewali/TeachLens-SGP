@@ -39,8 +39,8 @@ class FileInUseTests(unittest.TestCase):
             root = Path(directory)
             video = root / "clip.mp4"
             video.write_bytes(b"")  # never decoded: the check comes first
-            (root / "debug").mkdir()
-            review = root / "debug" / "v1.list_a.mp4"
+            (root / "runs" / "2026-11-19_1200_v1").mkdir(parents=True)
+            review = root / "runs" / "2026-11-19_1200_v1" / "review.mp4"
             review.write_bytes(b"x")
             with open(review, "rb"):
                 with self.assertRaisesRegex(PermissionError, "open in another program"):

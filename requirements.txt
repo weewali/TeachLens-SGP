@@ -8,3 +8,7 @@ scipy
 statsmodels
 jinja2
 anthropic
+flask
+lap>=0.5.12
+# mediapipe 1.2.2 is installed WITHOUT its dependencies (it would add opencv-contrib-python beside
+# opencv and can break cv2): pip install --no-deps mediapipe==1.2.2 absl-py flatbuffers sounddevice

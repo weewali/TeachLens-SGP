@@ -150,7 +150,7 @@
 
       host.textContent = "";
       const svg = svgEl("svg", { width: width, height: height, viewBox: "0 0 " + width + " " + height, tabindex: "0",
-                                 focusable: "true", "aria-label": "Lecture timeline. Use the left and right arrow keys to read each 10-second part." }, host);
+                                 focusable: "true", "aria-label": "Lecture timeline. Use the left and right arrow keys to read each part." }, host);
 
       // what the instructor was doing: one block per run of the same activity, 2px of surface between runs
       svgText(svg, left, 12, "What you were doing", "viz-label");
@@ -165,8 +165,8 @@
         runStart = i + 1;
       });
 
-      // heads up: gridlines, area wash and line, broken where too few students were readable
-      svgText(svg, left, plot.y - 10, "Students in view with their heads up", "viz-label");
+      // heads up: gridlines, area wash and line, broken where there was too little student evidence
+      svgText(svg, left, plot.y - 10, "Students in view who were on task", "viz-label");
       // time axis: about one label per 80px, at round steps; gridlines first so the line is drawn over them
       const steps = [10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600];
       const tick = steps.find(function (s) { return data.duration / s <= Math.max(2, Math.floor(plotW / 80)); }) || 3600;
@@ -181,8 +181,8 @@
       const segments = [];
       let segment = [];
       data.parts.forEach(function (part) {
-        if (part.heads_up === null) { if (segment.length) segments.push(segment); segment = []; return; }
-        segment.push([x((part.start + part.end) / 2), y(part.heads_up)]);
+        if (part.on_task === null) { if (segment.length) segments.push(segment); segment = []; return; }
+        segment.push([x((part.start + part.end) / 2), y(part.on_task)]);
       });
       if (segment.length) segments.push(segment);
       segments.forEach(function (points) {
@@ -197,13 +197,13 @@
       });
 
       // label only the highest and lowest parts, not every point
-      const measured = data.parts.filter(function (p) { return p.heads_up !== null; });
+      const measured = data.parts.filter(function (p) { return p.on_task !== null; });
       if (measured.length > 1) {
-        const high = measured.reduce(function (a, b) { return b.heads_up > a.heads_up ? b : a; });
-        const low = measured.reduce(function (a, b) { return b.heads_up < a.heads_up ? b : a; });
-        if (high.heads_up - low.heads_up >= 5) {
-          [[high, "Highest " + pct(high.heads_up), -9], [low, "Lowest " + pct(low.heads_up), 18]].forEach(function (item) {
-            const px = x((item[0].start + item[0].end) / 2), py = y(item[0].heads_up);
+        const high = measured.reduce(function (a, b) { return b.on_task > a.on_task ? b : a; });
+        const low = measured.reduce(function (a, b) { return b.on_task < a.on_task ? b : a; });
+        if (high.on_task - low.on_task >= 5) {
+          [[high, "Highest " + pct(high.on_task), -9], [low, "Lowest " + pct(low.on_task), 18]].forEach(function (item) {
+            const px = x((item[0].start + item[0].end) / 2), py = y(item[0].on_task);
             svgEl("circle", { cx: px, cy: py, r: 4, class: "viz-dot" }, svg);
             const lx = Math.min(Math.max(px, left + 40), width - right - 40);
             const ly = item[2] > 0 && py + item[2] > y(0) - 2 ? py - 9 : py + item[2];
@@ -264,24 +264,24 @@
       geo.cross.setAttribute("x1", cx);
       geo.cross.setAttribute("x2", cx);
       geo.cross.setAttribute("visibility", "visible");
-      if (part.heads_up !== null) {
+      if (part.on_task !== null) {
         geo.dot.setAttribute("cx", cx);
-        geo.dot.setAttribute("cy", geo.y(part.heads_up));
+        geo.dot.setAttribute("cy", geo.y(part.on_task));
         geo.dot.setAttribute("visibility", "visible");
       } else {
         geo.dot.setAttribute("visibility", "hidden");
       }
       tip.textContent = "";
       line(tip, "tip-time", mmss(part.start) + "–" + mmss(part.end));
-      if (part.heads_up !== null) {
-        const value = line(tip, "tip-value", pct(part.heads_up));
+      if (part.on_task !== null) {
+        const value = line(tip, "tip-value", pct(part.on_task));
         const rest = document.createElement("span");
         rest.style.fontWeight = "400";
         rest.style.fontSize = ".85rem";
-        rest.textContent = " heads up";
+        rest.textContent = " on task";
         value.appendChild(rest);
       } else {
-        line(tip, "tip-row", "Too few students readable here");
+        line(tip, "tip-row", "Too little student evidence here");
       }
       const row = line(tip, "tip-row", "");
       const swatch = document.createElement("span");

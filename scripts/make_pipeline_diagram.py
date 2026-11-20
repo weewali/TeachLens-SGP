@@ -1,8 +1,8 @@
-"""Draws the TeachLens (System B) pipeline diagram for the SGP2 report: "SGP2 objectives/pipeline.png".
+"""Draws the TeachLens pipeline diagram for the SGP2 report: "SGP2 objectives/pipeline.png".
 
     python scripts/make_pipeline_diagram.py [--out PATH]
 
-The eight steps match the stages the web app shows while a lecture is analysed (web/models/job.py STAGES). Edit the
+The eight cards follow the web app's seven stages (web/models/job.py STAGES; its stage 6 is cards 6 and 7). Edit the
 STAGES text below whenever the pipeline changes, and run this again (the user asked for the SGP2 objectives to be
 kept up to date with every change). Needs only matplotlib.
 """
@@ -18,7 +18,7 @@ from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Rectangle  # noq
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "SGP2 objectives" / "pipeline.png"
-UPDATED = "19 November 2026"
+UPDATED = "20 November 2026"
 
 W, H = 2400, 1650                      # pixels; one axis unit = one pixel (saved at 100 dpi)
 INK, MUTED, LINE = "#1f2430", "#5b6475", "#c9ccd6"
@@ -33,57 +33,49 @@ KINDS = {                              # badge colours: fill, text, border
 # Body items: ("bold", text) | ("text", text) | ("badges", [(kind, label), ...]) | ("gap", pixels)
 STAGES = [
     (1, "Line up the cameras", [
-        ("text", "Check both videos."),
-        ("text", "Read each video's recording-start time (ffprobe), or use a manual offset."),
-        ("text", "Result: one lecture clock for both cameras, accurate to about 1 s."),
+        ("text", "Read each video's recording-start time (ffprobe) and keep the stretch both cameras recorded."),
+        ("text", "Result: one lesson clock for both cameras, accurate to about 1 s."),
         ("badges", [("tool", "ffprobe")]),
-    ], "alignment in evaluation_result.json", False),
-    (2, "Cut and sample", [
-        ("text", "Cut both videos to the time they share."),
-        ("text", "Standardise them: 25 fps, at most 720p."),
-        ("text", "Take one frame every 2 s from each camera, paired by time."),
-        ("badges", [("tool", "FFmpeg")]),
-    ], "frames.csv + frame images", False),
-    (3, "Detect people", [
-        ("bold", "Instructor camera"),
-        ("badges", [("ai", "YOLO26n-pose · 640 px")]),
-        ("gap", 6),
-        ("bold", "Student camera"),
-        ("badges", [("ai", "YOLO26m-pose · 960 px")]),
-        ("badges", [("ai", "YOLO26s · phones, books")]),
-        ("text", "Body keypoints and boxes; pretrained, not retrained."),
-    ], "frame_detections.csv", False),
-    (4, "Read behaviour", [
-        ("bold", "Instructor"),
-        ("text", "facing the class, at the board, moving, hand raised"),
-        ("bold", "Students, on anonymous seats"),
-        ("text", "heads up, head down and still, hand raised, phone in view"),
-        ("badges", [("tool", "Transparent rules")]),
-    ], "events.csv + two JSONL event files\n(the team's shared format)", False),
-    (5, "10-second windows", [
-        ("text", "For each 10 s: what the instructor was doing, and the share of students with heads up, a phone, "
-                 "head down and still, a hand raised."),
-        ("text", "Compare students during each instructor activity with the rest of the lecture."),
-        ("badges", [("stats", "HAC test")]),
-    ], "window_features.csv", False),
-    (6, "Links over time", [
-        ("text", "The team's fusion layer, run on the two event files."),
+    ], "lesson.json (ranges)", False),
+    (2, "Student camera", [
+        ("text", "One frame per second; every student tracked with an anonymous ID and given a seat."),
+        ("badges", [("ai", "YOLO26n-pose · 1280 px")]),
+        ("badges", [("ai", "YOLO26n · phones, books")]),
+        ("badges", [("ai", "MediaPipe · faces, hands")]),
+    ], "student/events.jsonl,\nsummary.json, review.mp4", False),
+    (3, "Instructor camera", [
+        ("text", "One frame per second; transparent rules: facing the class, board, gestures, pointing, seated, "
+                 "walking, notes."),
+        ("badges", [("ai", "YOLO26n-pose · 1280 px")]),
+        ("badges", [("tool", "ByteTrack")]),
+    ], "instructor/events.jsonl,\nsummary.json, review.mp4", False),
+    (4, "Link the cameras", [
+        ("text", "Students who walk to the front, and the instructor walking into the student view, are matched "
+                 "by time."),
+        ("badges", [("tool", "Timing rules")]),
+    ], "cross_camera.json", False),
+    (5, "Links over time", [
         ("text", "5-second windows: do students change 5–30 s after an instructor action?"),
-        ("text", "Actions seen too rarely are not tested."),
+        ("text", "9 hypotheses fixed in advance, plus exploratory pairs; rare actions are not tested."),
         ("badges", [("stats", "Circular-shift test")]),
         ("badges", [("stats", "Benjamini–Hochberg q")]),
-    ], "fusion.json, fusion_links.csv", False),
+    ], "fusion/fusion.json,\nwindows.csv, facts.json", False),
+    (6, "During each activity", [
+        ("text", "Students while you did each thing (facing the class, at the board, seated, ...) compared with "
+                 "the rest of the lecture."),
+        ("badges", [("stats", "HAC test · Bonferroni")]),
+    ], "facts.json (added),\ntables/*.csv", False),
     (7, "Write the report", [
         ("text", "Up to 3 positive and 3 negative points in plain English, addressed to the instructor as \"you\"."),
-        ("text", "The links over time in words."),
         ("text", "facts.json: anonymised numbers only."),
         ("badges", [("tool", "Rules")]),
-    ], "final_feedback_report.txt\nfacts.json, links/report_points.json", False),
-    (8, "AI rewrite (optional)", [
+    ], "final_feedback_report_rules.txt", False),
+    (8, "AI rewrite (always)", [
         ("text", "Rewrites the points in plain language."),
-        ("text", "Code checks every number and word; one retry, then the rule-based text is kept."),
+        ("text", "Code checks every number and word; if it fails, the rule-based text is kept and the report "
+                 "says why."),
         ("badges", [("ai", "Claude Opus 5.5")]),
-    ], "llm_output.json", True),
+    ], "final_feedback_report.txt,\nreport_status.json", False),
 ]
 
 COL_X = [380, 890, 1400, 1910]         # left edge of the four stage columns
@@ -171,8 +163,8 @@ def draw(out):
 
     text(ax, 60, 50, "TeachLens pipeline", size=36, weight="bold")
     text(ax, 60, 128, "How two videos of one lecture become a feedback report. All steps run on an ordinary laptop "
-                      "CPU; the numbers 1–8 are the stages shown while a lecture is analysed.", size=15, color=MUTED)
-    text(ax, W - 60, 60, f"System B · updated {UPDATED}", size=12, color=MUTED, ha="right")
+                      "CPU; the web app shows them as 7 stages while it works.", size=15, color=MUTED)
+    text(ax, W - 60, 60, f"updated {UPDATED}", size=12, color=MUTED, ha="right")
 
     # inputs
     (top1, h1), (top2, h2) = ROWS
@@ -204,8 +196,8 @@ def draw(out):
     wy = top2 + h2 + 70
     box(ax, 380, wy, COL_X[3] + CARD_W - 380, 120, "#ffffff", HEAD, lw=2.5)
     text(ax, 410, wy + 22, "Web application", size=17, weight="bold")
-    text(ax, 410, wy + 62, "Upload the two videos  →  follow stages 1–8  →  read the report in tabs:  Feedback  |  "
-                           "Charts  |  Moments  |  Key terms", size=14)
+    text(ax, 410, wy + 62, "Upload the two videos  →  follow stages 1–7  →  read the report in tabs:  Feedback  |  "
+                           "Charts  |  Moments  |  Key terms  →  Download PDF", size=14)
     text(ax, COL_X[3] + CARD_W - 30, wy + 24, "Flask + Jinja2, runs on this computer only", size=12, color=MUTED,
          ha="right")
     arrow(ax, [(COL_X[2] + CARD_W / 2, top2 + h2), (COL_X[2] + CARD_W / 2, wy)])
@@ -220,10 +212,10 @@ def draw(out):
         lx += 290
     box(ax, lx, ly, 44, 34, "#ffffff", MUTED, radius=8, lw=1.5, dashed=True)
     text(ax, lx + 58, ly + 6, "Optional", size=14)
-    notes = ("The YOLO26 models (Ultralytics) are pretrained and used without retraining. Only anonymised numbers, never "
-             "video, go to Claude, and only when the rewrite is switched on.\n"
-             "The team's evidence pipeline (System A: YOLO26n-pose with ByteTrack) writes the same JSONL event format; "
-             "the two pipelines are not merged yet. Accuracy has not been checked against human labels yet.")
+    notes = ("The YOLO26 and MediaPipe models are pretrained and used without retraining. Only anonymised numbers, never "
+             "video, images or names, go to Claude. Faces are blurred in every picture the report shows.\n"
+             "Since 20 November 2026 one pipeline: the team's processing (steps 1-5) with the report stage and web app "
+             "on top. Accuracy has not been checked against human labels yet.")
     text(ax, 60, ly + 70, notes, size=12, color=MUTED)
 
     out.parent.mkdir(parents=True, exist_ok=True)

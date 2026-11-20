@@ -23,7 +23,6 @@ Examples (repository root, TeachLens environment):
 """
 
 import argparse
-import csv
 from dataclasses import dataclass
 from datetime import datetime
 import logging
@@ -34,13 +33,13 @@ import time
 # Allow direct `python scripts/run_scenarios.py` from any working directory.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from src.preprocessing.alignment import CAMERAS, DEFAULT_MANIFEST, read_manifest  # noqa: E402,F401 (shared)
 from src.preprocessing.recording_time import parse_timestamp  # noqa: E402
 from src.utils.config import INDICATORS  # noqa: E402
+from src.utils.output_layout import find_run  # noqa: E402
 from src.utils.paths import project_path  # noqa: E402
 
 LOGGER = logging.getLogger("run_scenarios")
-DEFAULT_MANIFEST = project_path("data/manifests/sgp_scenario_videos.csv")
-CAMERAS = ("student_view", "instructor_view")
 
 
 @dataclass(frozen=True)
@@ -59,18 +58,6 @@ class Run:
     def path(self) -> str:
         """Overlay trail for the review video: the teacher's path on the instructor camera."""
         return "teacher" if self.camera == "instructor_view" else "off"
-
-
-def read_manifest(path: Path) -> list[dict[str, str]]:
-    with open(path, newline="", encoding="utf-8") as handle:
-        rows = list(csv.DictReader(handle))
-    for number, row in enumerate(rows, start=2):
-        missing = [key for key in ("video_id", "scenario", "camera", "file") if not row.get(key)]
-        if missing:
-            raise ValueError(f"{path} line {number}: missing {', '.join(missing)}")
-        if row["camera"] not in CAMERAS:
-            raise ValueError(f"{path} line {number}: unknown camera {row['camera']!r}")
-    return rows
 
 
 def plan_runs(rows: list[dict[str, str]], data_root: Path, *,
@@ -183,12 +170,11 @@ def main() -> int:
     config = load_config(args.config, args.local_config)
     output_root = (args.output_dir.resolve() if args.output_dir
                    else project_path(config["paths"]["outputs"]))
-    suffix = "objects" if args.objects else "list_a"
+
     failed = []
     for number, run in enumerate(runs, start=1):
-        summary = output_root / "reports" / f"{run.video_id}.{suffix}.json"
-        if args.skip_existing and summary.exists():
-            LOGGER.info("[%d/%d] %s: summary exists, skipped", number, len(runs), run.video_id)
+        if args.skip_existing and find_run(output_root, run.video_id) is not None:
+            LOGGER.info("[%d/%d] %s: saved run exists, skipped", number, len(runs), run.video_id)
             continue
         LOGGER.info("[%d/%d] %s (%s)", number, len(runs), run.video_id, run.camera)
         started = time.perf_counter()

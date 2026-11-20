@@ -20,17 +20,21 @@ data/dataset_v1/images/val/*
 *.wav
 
 # Model files
-models/*
-!models/.gitkeep
+models/**
+!models/**/
+!models/**/.gitkeep
 *.pt
 *.pth
 *.onnx
 *.h5
 
 # Outputs
-outputs/*
-!outputs/.gitkeep
-runs/
+# lessons, uploads, review sheets and web job status hold classroom footage and evidence: keep them local
+outputs/**
+!outputs/**/
+!outputs/**/.gitkeep
+# Training runs at the repository root (outputs/runs/ follows the outputs rules above)
+/runs/
 
 # Two-camera lectures hold real classroom footage: keep videos, frames and review images local
 # (team rule: never commit extracted frames or sensitive evidence)

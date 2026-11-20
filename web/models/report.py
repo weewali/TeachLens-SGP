@@ -1,27 +1,22 @@
-"""Report model: everything the instructor's report page shows, gathered from a lecture's saved results.
+"""Report model: everything the instructor's report page shows, gathered from a lesson folder's saved files.
 
-Nothing is recomputed from video, so the page can be rebuilt at any time. Sources (all written by Main Code.py,
-except llm_output.json, which main code/llm_report.py writes when the Claude step ran):
-    reports/final_feedback_report.txt   positive and negative points (rule-based, or Claude's checked rewrite)
-    reports/evaluation_result.json      lecture facts (duration, alignment, visibility, counts)
-    reports/facts.json                  the key terms (its glossary)
-    tables/events.csv, window_features.csv
-Not shown (user decisions): analysis_details.txt (indicators, linkage statistics, suggestions, limitations), which
-stays for the team, and the "Links over time" results (reports/fusion.json, reports/links/report_points.json; the tab
-was removed on 2026-11-19).
+Nothing is recomputed from video, so the page can be rebuilt at any time. Sources (outputs/lessons/<stamp>_<id>/):
+    final_feedback_report.txt   positive and negative points (the checked AI rewrite, or the rule-based points)
+    report_status.json          who wrote them, and why the AI rewrite was not used when it failed
+    facts.json                  the key terms (its glossary) and the lesson length
+    fusion/windows.csv, student/events.jsonl, student/summary.json   the charts and the moments
+Not shown (user decisions): the statistics (fusion/fusion.json, lesson.json) and the limitations, which stay in the
+lesson folder for the team.
 """
 import json
-
-import pandas as pd
 
 from web.models import stat_charts
 from web.models.charts import ensure_charts
 from web.models.lecture import describe_activity
 
-WINDOW_SECONDS = 10
-MOMENT_LABELS = {"phone_use": "Phone in view", "head_down_still": "Head down and still (30 s or more)",
-                 "hand_raise": "Hand raised", "reading": "Book in view"}
-DATA_TERMS = {"window", "observable students", "observable student time"}
+MOMENT_LABELS = {"hand_raise": "Hand raised", "phone_use": "Phone seen", "dozing": "Dozing posture"}
+# glossary entries that describe the data, not words the page uses
+DATA_TERMS = {"window", "later", "lesson time", "students on task (percent)"}
 
 
 def fmt_time(seconds):
@@ -53,57 +48,47 @@ def parse_feedback(text):
             "note": " ".join(parts["note"]) or None}
 
 
-def report_source(reports_dir):
-    """Who wrote the points: the AI rewrite (only if its text passed every check) or the standard feedback. AI-written
-    text is disclosed to the instructor; the standard feedback needs no label."""
-    path = reports_dir / "llm_output.json"
-    if path.exists():
-        with open(path, encoding="utf-8") as f:
-            record = json.load(f)
-        attempts = record.get("attempts") or []
-        if record.get("output") and attempts and not attempts[-1].get("problems"):
-            return {"kind": "llm", "label": "Feedback written with AI from the measured results and checked automatically"}
-    return {"kind": "rules", "label": None}
+def _json(path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
 
 
-def activity_phrase(window):
-    """What the instructor was doing in a 10-second window (the same wording as the report)."""
-    return stat_charts.PHRASES[stat_charts.activity_of(window)]
+def report_source(lesson):
+    """Who wrote the points. AI text is disclosed; when the AI rewrite was not used, the reason is shown (user
+    decision 2026-11-20: tell me if an error occurred, with why)."""
+    status = _json(lesson / "report_status.json")
+    if status.get("source") == "llm":
+        return {"kind": "llm", "label": "Feedback written with AI from the measured results and checked automatically",
+                "problem": None}
+    return {"kind": "rules", "label": None,
+            "problem": status.get("reason") or "The AI step has not run for this lecture."}
 
 
-def moments(tables_dir):
-    """Every phone, head-down-and-still, hand-raise and book moment, with what the instructor was doing then."""
-    events_path, windows_path = tables_dir / "events.csv", tables_dir / "window_features.csv"
-    if not events_path.exists():
-        return []
-    events = pd.read_csv(events_path)
-    windows = pd.read_csv(windows_path).set_index("window_id") if windows_path.exists() else pd.DataFrame()
+def moments(lecture, windows_table=None, window=5.0):
+    """Every hand-raise, phone and dozing moment, with what the instructor was doing then."""
+    table, window = (windows_table, window) if windows_table is not None else stat_charts.windows(lecture)
+    by_start = {}
+    if table is not None:
+        for row in table.to_dict("records"):
+            by_start[int(round(float(row["lesson_seconds"]) / window))] = stat_charts.activity_of(row, window)
     rows = []
-    for e in events[events["label"].isin(MOMENT_LABELS)].sort_values("start_s").itertuples():
-        window_id = int(e.start_s // WINDOW_SECONDS)
-        activity = activity_phrase(windows.loc[window_id].to_dict()) if window_id in windows.index else "unknown"
-        rows.append({"time": fmt_time(e.start_s), "end": fmt_time(e.end_s), "seconds": float(e.start_s),
-                     "duration": int(round(e.duration_s)), "seat": stat_charts.seat_name(e.entity_id), "kind": e.label,
-                     "behaviour": MOMENT_LABELS[e.label], "activity": activity.removeprefix("the instructor was ")})
+    for m in stat_charts.moments(lecture):
+        key = by_start.get(int(m["start"] // window))
+        rows.append({"time": fmt_time(m["start"]), "end": fmt_time(m["end"]), "seconds": m["start"],
+                     "duration": int(round(m["end"] - m["start"])), "seat": m["seat"], "kind": m["kind"],
+                     "behaviour": MOMENT_LABELS[m["kind"]],
+                     "activity": stat_charts.PHRASES[key].removeprefix("you were ") if key else "unknown"})
     return rows
-
-
-def lecture_length(result):
-    """The analysed length, shown beside the analysis date."""
-    duration = result.get("alignment", {}).get("duration_s")
-    return fmt_time(duration) if duration else None
 
 
 def build_report(lecture):
     """Everything report.html needs, as plain Python data."""
-    reports = lecture.reports_dir
-    feedback = parse_feedback((reports / "final_feedback_report.txt").read_text(encoding="utf-8"))
-    facts = {}
-    if (reports / "facts.json").exists():
-        with open(reports / "facts.json", encoding="utf-8") as f:
-            facts = json.load(f)
-    result = lecture.result() or {}
-    found = moments(lecture.tables_dir)
+    lesson = lecture.lesson_dir
+    feedback = parse_feedback((lesson / "final_feedback_report.txt").read_text(encoding="utf-8"))
+    facts = _json(lesson / "facts.json")
+    found = moments(lecture)
     context = lecture.context()
     return {
         "lecture": lecture,
@@ -111,16 +96,15 @@ def build_report(lecture):
         "activities": [describe_activity(a) for a in context.get("activities") or []
                        if isinstance(a, dict) and isinstance(a.get("minutes"), int)],
         "analysed_at": lecture.analysed_at(),
-        "source": report_source(reports),
+        "source": report_source(lesson),
         "feedback": feedback,
-        "length": lecture_length(result),
+        "length": (facts.get("lecture") or {}).get("duration"),
         "timeline": stat_charts.timeline(lecture),
         "comparison": stat_charts.comparison(lecture),
         "charts": ensure_charts(lecture),
         "moments": found,
         "moment_kinds": [(key, label) for key, label in MOMENT_LABELS.items() if any(m["kind"] == key for m in found)],
-        # the key terms: words the page uses, in plain language. Terms that describe the data the AI step reads
-        # (keys like "evidence.strength", "window", "observable ...") are left out; the page never uses them.
+        # the key terms: words the page uses, in plain language (keys like "evidence.strength" are left out)
         "glossary": {term: meaning for term, meaning in facts.get("glossary", {}).items()
                      if "." not in term and term not in DATA_TERMS},
     }

@@ -20,8 +20,6 @@
     document.querySelectorAll("#stages li").forEach(function (item) {
       const number = Number(item.dataset.stage);
       item.classList.remove("done", "current", "failed");
-      item.hidden = number === 8 && !status.use_llm;   // the plain-language stage only exists when the deployment enables it
-      if (item.hidden) return;
       if (status.state === "done" || number < stage) item.classList.add("done");
       else if (number === stage) item.classList.add(status.state === "failed" || status.state === "interrupted" ? "failed" : "current");
     });

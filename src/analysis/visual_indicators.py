@@ -254,6 +254,43 @@ def _upper_leg_posture(person: PosePerson, min_conf: float, sitting_max: float,
     return labels.pop() if len(labels) == 1 else "unknown"
 
 
+def polygon_top(polygon: tuple[tuple[float, float], ...], x: float) -> float | None:
+    """Highest point (smallest y) of a polygon's outline at image x, or None outside it."""
+    tops = []
+    for (x1, y1), (x2, y2) in zip(polygon, polygon[1:] + polygon[:1]):
+        if x1 != x2 and min(x1, x2) <= x <= max(x1, x2):
+            tops.append(y1 + (y2 - y1) * (x - x1) / (x2 - x1))
+    return min(tops) if tops else None
+
+
+LEG_JOINTS = (13, 14, 15, 16)  # knees and ankles
+
+
+def desk_posture(person: PosePerson, desk: tuple[tuple[float, float], ...], min_conf: float,
+                 sitting_max: float, standing_min: float) -> tuple[str, float | None]:
+    """Posture of someone behind a desk that hides their legs (user request 2026-11-19).
+
+    Measures how far the shoulders are above the desk's top edge, in shoulder
+    widths. The seated teacher in A3/A4 (4K instructor camera) measured
+    0.56-0.77 widths in every sample; standing shoulders are about 70 cm above
+    a 75 cm desk, about 1.75 widths. Returns (label, widths): sitting at or
+    below sitting_max, standing at or above standing_min, else unknown; also
+    unknown when knees or ankles are visible (not behind the desk) or the
+    shoulders are not both visible or not above the desk.
+    """
+    if any(person.point(i, min_conf) is not None for i in LEG_JOINTS):
+        return "unknown", None
+    shoulders = shoulder_sample(person, min_conf)
+    if shoulders is None or shoulders[2] < 8:
+        return "unknown", None
+    top = polygon_top(desk, shoulders[0] / person.width)
+    if top is None:
+        return "unknown", None
+    widths = (top * person.height - shoulders[1]) / shoulders[2]
+    label = ("sitting" if widths <= sitting_max else "standing" if widths >= standing_min else "unknown")
+    return label, round(widths, 3)
+
+
 SEATED_LEVEL_QUANTILE = 0.8  # of image y (grows downward): the low end of shoulder heights
 SEAT_HISTORY_SECONDS = 300.0
 
@@ -406,7 +443,7 @@ class TrackSnapshot:
     samples: int
     role: str
     posture: str | None = None
-    posture_basis: str | None = None  # "full_legs", "upper_legs", or "shoulder_rise" for a known posture
+    posture_basis: str | None = None  # "full_legs", "upper_legs", "desk", or "shoulder_rise" for a known posture
     posture_rise: float | None = None  # shoulder_rise: shoulder widths above the seated level
     motion: str | None = None
     motion_score: float | None = None  # smoothed body-heights/second behind the label
@@ -562,6 +599,8 @@ class FoundationAnalyzer:
         if posture_method == "shoulder_rise" and not camera_fixed:
             raise ValueError("shoulder_rise posture needs a fixed camera")
         self.posture_method = posture_method
+        # Teacher behind the desk with hidden legs: posture from the shoulders' height above it.
+        self.desk = (targets or {}).get("desk") if expected_role == "teacher" else None
         self.joints = joints
         self.zones = zones
         self.period = sample_period
@@ -786,7 +825,19 @@ class FoundationAnalyzer:
                         upper_legs=bool(self.settings.get("upper_leg_posture", False)),
                         thigh_tolerance=float(self.settings.get("thigh_axis_tolerance_degrees", 30)),
                         thigh_torso_ratio=float(self.settings.get("thigh_torso_min_ratio", 0.5)))
-                # Only full legs are adequate; upper legs and shoulder rise are weaker bases.
+                    if posture == "unknown" and self.desk is not None:
+                        posture, desk_gap = desk_posture(
+                            person, self.desk, self.min_conf,
+                            float(self.settings.get("desk_sitting_max_widths", 1.1)),
+                            float(self.settings.get("desk_standing_min_widths", 1.4)))
+                        basis = "desk" if posture != "unknown" else None
+                        if desk_gap is not None and self.enabled["sitting_standing"]:
+                            # Unsmoothed sample behind the label, for threshold tuning.
+                            events.append(make_event(self.video_id, "desk_shoulder_height", time, time,
+                                                     {"shoulder_widths_above_desk": desk_gap},
+                                                     track_id=track_id, role=role, confidence=None,
+                                                     coverage="limited"))
+                # Only full legs are adequate; upper legs, desk, and shoulder rise are weaker bases.
                 if self.enabled["sitting_standing"]:
                     events.extend(self.segments.update("sitting_standing", track_id, time, posture,
                                                        role, None,

@@ -6,26 +6,25 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 DEFAULTS = {
-    # where lectures' inputs (videos/<id>/) and results (sessions/<id>/) live; the same folder the pipeline uses
-    "BASE_DIR": Path(os.environ.get("TEACHLENS_BASE", REPO_ROOT / "classroom_project")),
-    # where the pipeline writes the two per-camera JSONL event files
-    "EVENTS_DIR": Path(os.environ.get("TEACHLENS_EVENTS_DIR", REPO_ROOT / "outputs" / "events")),
+    # the lesson pipeline's output root: uploads/<id>/, lessons/<stamp>_<id>/, web_jobs/, validation/ (ignored by Git)
+    "BASE_DIR": Path(os.environ.get("TEACHLENS_OUTPUTS", REPO_ROOT / "outputs")),
     "PYTHON": sys.executable,
-    "MAIN_CODE": REPO_ROOT / "main code" / "Main Code.py",
-    "LLM_REPORT": REPO_ROOT / "main code" / "llm_report.py",
-    # the plain-language rewrite of the "links over time" points (the team's fusion results), same deployment setting
-    "LINKS_REPORT": REPO_ROOT / "scripts" / "report.py",
+    # step 1: both cameras, camera links, fusion and facts.json (System A's one-command lesson pipeline)
+    "ANALYZE": REPO_ROOT / "scripts" / "analyze_lesson.py",
+    # step 2: comparisons, tables, rule-based points and the AI rewrite (always run; rules are kept if it fails)
+    "REPORT": REPO_ROOT / "scripts" / "report_lesson.py",
+    # room file with the board, screen and desk areas (configs/*.yaml); "none" = no room areas, so "at the board"
+    # and "at the desk" are not measured. The pipeline's own default is the scenario room, which is wrong elsewhere.
+    "ROOM_CONFIG": os.environ.get("TEACHLENS_ROOM_CONFIG", "none"),
     # optional folder holding ffmpeg and ffprobe, put first on PATH for analysis runs (if they are not on PATH already)
     "FFMPEG_DIR": os.environ.get("TEACHLENS_FFMPEG_DIR"),
+    # browser used to print the report to PDF (run hidden); empty = Microsoft Edge or Google Chrome where installed
+    "PDF_BROWSER": os.environ.get("TEACHLENS_PDF_BROWSER"),
     # uploads are lecture videos (often several GB), so no size limit; the app only listens on this computer
     "MAX_CONTENT_LENGTH": None,
-    # The plain-language rewrite of the feedback (Claude) is a deployment setting, not an instructor choice:
-    #   auto (default) = run it when an Anthropic API key is set for this server, otherwise keep the standard feedback
-    #   on  = always try it (it falls back to the standard feedback if no key works)
-    #   off = never call it
-    # Each lecture gets up to two rewrites (the feedback, and the links over time when that analysis ran), each about
-    # 4 US cents with the default model; they send only the measured numbers, never video, slides or names.
-    "LLM_MODE": os.environ.get("TEACHLENS_LLM", "auto"),
+    # The AI rewrite of the feedback always runs (user decision 2026-11-20), about 4 US cents per lecture with the
+    # default model. It sends only facts.json (numbers, no video, slides or names). It needs ANTHROPIC_API_KEY set for
+    # this server; without it, or on any error, the rule-based feedback is shown and the page says why.
     "LLM_MODEL": os.environ.get("TEACHLENS_LLM_MODEL", "opus"),
 }
 HOST, PORT = "127.0.0.1", 5000   # local only: the videos show real people
