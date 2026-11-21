@@ -62,7 +62,7 @@ causes, and never claims to measure inner states such as attention, engagement, 
 | 6 Plain-English feedback | Done (Claude writes it, with code checks); first real call on 21 November 2026: 3 of 4 points passed and are shown | Offline tests of the checks with simulated answers |
 | 7 Web application | Done (local) | Upload, progress by stage, tabbed report, PDF download, delete; 35 automated web tests. Activities are stored but not used **[TODO]** |
 | 8 Privacy and honesty | Done in design and code | Local processing, anonymous IDs and seats, blurred faces, word checks |
-| 9 Verification | Partly done | 219 automated tests pass (170 team pipeline, 49 report stage and web app); human-labelled accuracy **[TODO]** |
+| 9 Verification | Partly done | 221 automated tests pass (171 team pipeline, 50 report stage and web app); human-labelled accuracy **[TODO]** |
 
 ## The positive side of the project
 

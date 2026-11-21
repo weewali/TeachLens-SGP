@@ -567,6 +567,19 @@ class ModelTests(unittest.TestCase):
             (lesson / "llm_output.json").write_text(json.dumps({"prompt_version": report_model.PROMPT_VERSION}))
             self.assertEqual(report_model.report_source(lesson)["kind"], "llm")
 
+    def test_the_report_says_when_the_instructor_was_never_identified(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lesson = Path(directory)
+            self.assertIsNone(report_model.instructor_note(lesson))          # no instructor camera results
+            (lesson / "instructor").mkdir()
+            summary = lesson / "instructor" / "summary.json"
+            summary.write_text(json.dumps({"teacher_visible_seconds": 0.0, "track_episodes_by_role": {"unknown": 4}}))
+            self.assertEqual(report_model.instructor_note(lesson), report_model.NO_INSTRUCTOR)   # 2 people all along
+            summary.write_text(json.dumps({"teacher_visible_seconds": 0.0, "track_episodes_by_role": {}}))
+            self.assertIsNone(report_model.instructor_note(lesson))          # nobody in view: "out of view" is true
+            summary.write_text(json.dumps({"teacher_visible_seconds": 230.0, "track_episodes_by_role": {"teacher": 1}}))
+            self.assertIsNone(report_model.instructor_note(lesson))
+
     def test_chart_data_and_moments_from_the_demo_lesson(self):
         with tempfile.TemporaryDirectory() as directory:
             make_demo_lesson(directory)

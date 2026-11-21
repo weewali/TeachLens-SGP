@@ -98,6 +98,21 @@ def moments(lecture, windows_table=None, window=5.0):
     return rows
 
 
+NO_INSTRUCTOR = ("The instructor could not be told apart in the instructor camera (more than one person was in view "
+                 "the whole time), so Instructor Movement and what you were doing are missing from this report.")
+
+
+def instructor_note(lesson):
+    """NO_INSTRUCTOR when the instructor camera was analysed but nobody in it was ever taken for the instructor
+    (the role needs one person alone in view); otherwise None. Without it the page shows "out of the camera's view"
+    for the whole lecture with no reason, and the Instructor Movement chart simply missing."""
+    summary = _json(lesson / "instructor" / "summary.json")
+    if not summary or summary.get("teacher_visible_seconds") is None:
+        return None
+    return NO_INSTRUCTOR if float(summary["teacher_visible_seconds"]) <= 0 and summary.get("track_episodes_by_role") \
+        else None
+
+
 def build_report(lecture):
     """Everything report.html needs, as plain Python data."""
     lesson = lecture.lesson_dir
@@ -118,6 +133,7 @@ def build_report(lecture):
         "timeline": stat_charts.timeline(lecture),
         "comparison": stat_charts.comparison(lecture),
         "charts": ensure_charts(lecture),
+        "instructor_note": instructor_note(lesson),
         "moments": found,
         "moment_kinds": [(key, label) for key, label in MOMENT_LABELS.items() if any(m["kind"] == key for m in found)],
         # the key terms: words the page uses, in plain language (keys like "evidence.strength" are left out)

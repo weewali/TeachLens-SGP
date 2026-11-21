@@ -63,6 +63,7 @@
 
 <section id="charts" class="tab-panel charts-panel">
   <h2 class="panel-title">Charts</h2>
+  {% if instructor_note %}<div class="banner" role="status"><p>{{ instructor_note }}</p></div>{% endif %}
   {% if timeline and pdf %}
   <figure class="card chart print-chart">
     <h3 class="chart-title">Over the lecture</h3>

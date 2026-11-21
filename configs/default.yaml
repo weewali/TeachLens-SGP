@@ -79,6 +79,13 @@ cameras:
     # Ignore people whose box lies inside these calibrated targets: photos or
     # video of people on the screen. Needs a zone file with targets.
     ignore_people_inside_targets: [screen]
+    # Without a room file no screen is marked, and on a real lecture
+    # (2026-11-21) a person in a slide's photo counted as a second person the
+    # whole time, so the instructor's role stayed unknown. Then the COCO
+    # detector looks for screens (its class "tv") every this many seconds and
+    # people inside one are ignored as above. Used only for that, never as a
+    # board or screen target. null = off.
+    find_screens_every_seconds: 30
     zones: null
 
 # Background feature matching for cameras with fixed_camera: false and

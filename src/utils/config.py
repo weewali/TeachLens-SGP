@@ -69,6 +69,9 @@ def validate_config(config: dict[str, Any]) -> None:
         if inside is not None and (not isinstance(inside, list)
                                    or not all(isinstance(name, str) for name in inside)):
             raise ValueError(f"cameras.{name}.ignore_people_inside_targets must be a list of target names")
+        every = camera.get("find_screens_every_seconds")
+        if every is not None and (isinstance(every, bool) or not isinstance(every, (int, float)) or every <= 0):
+            raise ValueError(f"cameras.{name}.find_screens_every_seconds must be null or a positive number")
         below = camera.get("ignore_people_starting_below")
         if below is not None and (isinstance(below, bool) or not isinstance(below, (int, float))
                                   or not 0 < below <= 1):

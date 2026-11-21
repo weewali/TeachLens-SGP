@@ -41,7 +41,7 @@ report's pictures; the instructor, whose report it is, stays visible.
   for 6 students) still need a human check.
 - Run time on this laptop's CPU is about 2.2 minutes of computing per lecture minute (more on battery power), so a
   one-hour lecture takes roughly two hours or more.
-- 219 automated tests pass (170 for the team's pipeline, 49 for the report stage and the web application).
+- 221 automated tests pass (171 for the team's pipeline, 50 for the report stage and the web application).
 
 **Limitations.** The detections have not been checked against human labels, so no accuracy figure can be claimed.
 All results so far come from short lessons; real lectures last 55–75 minutes. With many instructor–student pairs a

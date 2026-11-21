@@ -1,12 +1,13 @@
 """List B teacher rules on synthetic skeletons; no video or model needed."""
 
+from types import SimpleNamespace
 import unittest
 
 from src.analysis.teacher_indicators import (
     TeacherBehavior, facing_direction, head_orientation, lean_label, pointing, raised_hands,
     torso_tilt,
 )
-from src.analysis.visual_indicators import FoundationAnalyzer, inside_any_target
+from src.analysis.visual_indicators import FoundationAnalyzer, ScreenFinder, inside_any_box, inside_any_target
 from src.inference.pose import Keypoint, PosePerson
 
 # Normalized 1000 x 1000 frame. Teacher standing at x ~0.3 facing the camera:
@@ -165,6 +166,33 @@ class ScreenFilterTests(unittest.TestCase):
         self.assertTrue(inside_any_target(on_screen, TARGETS, ("screen",)))
         self.assertFalse(inside_any_target(in_front, TARGETS, ("screen",)))
         self.assertFalse(inside_any_target(on_screen, TARGETS, ()))  # filter off
+
+    def test_screens_found_automatically_hide_people_in_the_slides(self):
+        """No room file: screens come from the detector every few seconds; the last ones are kept."""
+        class Detector:
+            def __init__(self, answers):
+                self.answers, self.calls = list(answers), 0
+
+            def detect(self, frame):
+                self.calls += 1
+                return self.answers.pop(0)
+
+        tv = SimpleNamespace(box=(.33, .36, .64, .68))      # measured on the real lecture's TV (2026-11-21)
+        detector = Detector([[tv], []])
+        screens = ScreenFinder(detector, every=30)
+        on_screen = pose(FRONT, box=(.367, .46, .402, .596))  # the person in the slide's photo
+        at_desk = pose(FRONT, box=(.70, .58, .81, .77))       # the seated instructor
+        self.assertFalse(screens.hides(on_screen))           # nothing found yet
+        screens.update(0.0, None)
+        screens.update(10.0, None)                           # not checked again before 30 s
+        self.assertEqual(detector.calls, 1)
+        self.assertTrue(screens.hides(on_screen))
+        self.assertFalse(screens.hides(at_desk))
+        screens.update(30.0, None)                           # a check that finds no screen keeps the last one
+        self.assertEqual((detector.calls, screens.checks, screens.found), (2, 2, 1))
+        self.assertTrue(screens.hides(on_screen))
+        self.assertEqual(screens.ignored, 2)
+        self.assertFalse(inside_any_box((.3, .3, .5, .9), [tv.box]))   # someone standing in front of it
 
 
 class AnalyzerTests(unittest.TestCase):

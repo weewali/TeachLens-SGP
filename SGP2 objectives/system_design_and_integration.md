@@ -2,11 +2,12 @@
 
 ![TeachLens pipeline](pipeline.png)
 
-*Figure: TeachLens pipeline (status 20 November 2026). Two recordings of one lecture are lined up by their recording
-times; each camera is analysed by pretrained YOLO26 and MediaPipe models and transparent rules; the two cameras are
-linked and the team's fusion layer tests links over time; the report stage compares students during each instructor
-activity, writes plain-English feedback and has it rewritten by Claude under automatic checks; a local web
-application shows the result. Drawn by `scripts/make_pipeline_diagram.py`.*
+*Figure: TeachLens pipeline (status 21 November 2026), in three phases. Watch the lecture: the two recordings are
+lined up by their recording times and each camera is analysed by pretrained YOLO26 and MediaPipe models and
+transparent rules (the camera links are saved but not used by the report yet). Find the patterns: the team's fusion
+layer tests links over time (exploratory in a single lecture) and the report stage compares students during each
+instructor activity. Write the advice: Claude writes the feedback from the anonymised facts under automatic checks;
+a local web application shows the result. Drawn by `scripts/make_pipeline_diagram.py`.*
 
 ## 1. Design principles
 
@@ -30,9 +31,9 @@ removed.
 |---|---|---|---|
 | 1. Line up the cameras | Instructor and student video | Recording-start time from each file (ffprobe); keep the stretch both cameras recorded | `lesson.json` (ranges) |
 | 2. Student camera | Student video | One frame per second; YOLO26n-pose at 1280 px + ByteTrack (anonymous track IDs, stitching); seats learnt from seated shoulder positions; MediaPipe face landmarks (5 per second) and hand gestures; YOLO26n phone/laptop/book detector at 1920 px; rules (section 3) | `student/events.jsonl`, `summary.json`, `review.mp4`, `run.json` |
-| 3. Instructor camera | Instructor video | One frame per second; YOLO26n-pose at 1280 px + ByteTrack; the camera's single person is the instructor; rules | `instructor/` (same files) |
-| 4. Link the cameras | Both runs | Students who walk to the front, and the instructor walking into the student view, matched by time | `cross_camera.json` |
-| 5. Lagged analysis | Both event files | 5-second windows on real time; lag correlation (5–30 s) with a circular-shift test; Benjamini–Hochberg over 9 fixed hypotheses and over exploratory pairs; comparisons with HAC; lagged models; peri-event averages; `facts.json` for the report | `fusion/fusion.json`, `windows.csv`, `links.csv`, `facts.json` |
+| 3. Instructor camera | Instructor video | One frame per second; YOLO26n-pose at 1280 px + ByteTrack; the camera's single person is the instructor; people shown on a screen are ignored (the YOLO26n detector finds the screen every 30 s when the room is not marked; added 21 November 2026 after a person in a slide's photo hid the instructor for a whole real lecture); rules | `instructor/` (same files) |
+| 4. Link the cameras | Both runs | Students who walk to the front, and the instructor walking into the student view, matched by time; saved for the team but not used by the report yet (checked 21 November 2026: no later stage reads it; 0 links on a real lecture) | `cross_camera.json` |
+| 5. Lagged analysis | Both event files | 5-second windows on real time; lag correlation (5–30 s) with a circular-shift test; Benjamini–Hochberg over 9 fixed hypotheses and over exploratory pairs; comparisons with HAC; lagged models; peri-event averages; `facts.json` for the report. Exploratory in one lecture: a single link rarely passes the correction (implementation report, 3.2); its window table feeds the charts and stage 6 | `fusion/fusion.json`, `windows.csv`, `links.csv`, `facts.json` |
 | 6. Write the report | Windows, facts, events | Students during each instructor activity vs the rest (HAC, Bonferroni) added to `facts.json`; CSV tables | `facts.json`, `tables/events.csv`, `tables/activity_comparisons.csv` |
 | 7. Claude writes the feedback | `facts.json` | Claude Opus 5.5 writes the positive and negative points for the instructor ("you") as plain teaching advice (user decision, 21 November 2026): a positive point says what went well and what to keep doing, a negative point says calmly what happened and offers one idea to try next time; no caveats about how the results were measured; code checks numbers and wording; one retry; then points that still fail a check after the retry are left out and the points that passed are shown (user decision, 21 November 2026); a side whose every point failed says so; when no point passes or on any error, no feedback is written and the reason is recorded (no rule-based text) | `final_feedback_report.txt`, `report_status.json`, `llm_output.json` |
 | Web application | Two videos and optional context | Upload, progress by stage, tabbed report, delete | `outputs/uploads/<lecture>/`, `outputs/web_jobs/` |

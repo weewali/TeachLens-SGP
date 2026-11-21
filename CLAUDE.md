@@ -126,8 +126,21 @@ statsmodels, jinja2, anthropic, Flask 3.1.3, FFmpeg 9.0.2. Root weights yolo26m-
   camera ~13 min), 124 windows, 0 fusion findings, 10 facts (2 weak activity comparisons), AI fallback with reason.
   Lesson `outputs/lessons/2026-11-20_1714_Mixed_gender_classes`, upload linked (hard links) in
   `outputs/uploads/Mixed_gender_classes/`. To check by eye: 30 hand raises for 6 students; 8 seats for 6 students.
-- Tests: `python -m unittest discover -s tests/unit` -> **219 tests** (170 System A, 14 `test_report_stage.py`,
-  35 `test_web_app.py`), no network, no video.
+- Tests: `python -m unittest discover -s tests/unit` -> **221 tests** (171 System A, 14 `test_report_stage.py`,
+  36 `test_web_app.py`), no network, no video.
+- **Screens found automatically (2026-11-21, our change to System A files):** on the real lecture
+  GEIT100_..._Section_03_Week_11 (4 min, instructor seated at the desk) a person in a slide's photo on the TV was
+  tracked as a 2nd person all along, so `single_visible` never gave the teacher role: no instructor data at all
+  (no Instructor Movement, "out of view" 100%, 0/9 hypotheses, no activity comparisons). `ignore_people_inside_targets:
+  [screen]` needs a room file. Now `cameras.instructor_view.find_screens_every_seconds: 30` (configs/default.yaml)
+  runs the COCO detector (class "tv") every 30 s when no screen is marked (`ScreenFinder`, `inside_any_box` in
+  src/analysis/visual_indicators.py; wired in src/pipeline.py; checked in src/utils/config.py; test in
+  test_teacher_indicators.py; docs/list_b_teacher.md). Detected screens are used ONLY to ignore people, never as a
+  List B target. Re-run in a temp folder (deleted): screen in 9/9 checks, 239 detections ignored, teacher 242.5 s,
+  1/9 hypotheses, 4 activity comparisons. The web report now shows `report.NO_INSTRUCTOR` on the Charts tab when
+  instructor/summary.json has teacher_visible_seconds 0 but tracks exist. **These System A files are no longer
+  byte-identical to the team branch: tell the teammate, and merge by hand at the next team update.** The user's
+  copy of that lecture in outputs/ still holds the old (broken) results until it is re-run from the web app.
 
 ## Working agreements with this user (follow these)
 - **Ask before downloading anything** and **before anything that spends money or sends data out**. The AI rewrite in
@@ -137,7 +150,18 @@ statsmodels, jinja2, anthropic, Flask 3.1.3, FFmpeg 9.0.2. Root weights yolo26m-
 - Short, plain answers; state limitations honestly; say when something is unverified.
 - Do not commit or push unless asked. Do not delete the user's files without being asked.
 - **After every change, update `SGP2 objectives/`** and, if the pipeline changed, STAGES in
-  `scripts/make_pipeline_diagram.py` + `python scripts/make_pipeline_diagram.py` (look at the PNG).
+  `scripts/make_pipeline_diagram.py` + `python scripts/make_pipeline_diagram.py` (look at the PNG). Since 2026-11-21
+  the diagram has the UAEU look (user request "UAEU theme, colour reds") and, by the user's choice, three
+  HORIZONTAL phase bands (Watch the lecture 1-4 / Find the patterns 5-6 / Write the advice 7-8) with step cards
+  under each (since the user's "make the phase bigger or more visual": each phase a tinted panel under a 42 pt red
+  band with a drawn icon (camera / bar chart / speech bubble), "PHASE n", the name at 13.5 pt and a one-line summary;
+  the arrows between phases are labelled "events of both cameras" and "facts.json (anonymised facts)"; no note
+  paragraph under the legend and no ("you") in step 7, both removed at the user's request), drawn in points at A4 width (text ~8 pt in print; Canvas class), no date. Deep red #961721 (the web's
+  red was "too bright"), labels in UAEU navy (AI models) and gold (statistics). Every claim was checked against the
+  code on 2026-11-21: step 4 (cross_camera.json) is dashed and says "not used by the report yet" (nothing reads it;
+  0 links on the real lecture); board/screen/desk need the room's areas (open item 4); step 5 is "exploratory";
+  an optional "Accuracy check" box (review sheets, evaluation/) sits beside the web app, the UAEU logo (SVG drawn by headless Edge via web.models.pdf.find_browser; skipped
+  without a browser), Segoe UI.
 - Never press Delete on the user's real lectures while testing: only made-up lectures in temporary folders.
 - On this laptop `git` is not on PATH: `%LOCALAPPDATA%\GitHubDesktop\app-3.6.6\resources\app\git\cmd\git.exe`.
 - Git history: on 2026-11-20 the then-unpushed commits were rebuilt twice (without unblurred real-lecture images; then

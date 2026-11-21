@@ -26,7 +26,7 @@ from src.analysis.events import make_event, with_real_time, write_jsonl
 from collections import defaultdict
 
 from src.analysis.visual_indicators import (
-    FACE_DEPENDENT_STUDENT_INDICATORS, DuplicateFilter, FoundationAnalyzer, inside_any_target,
+    FACE_DEPENDENT_STUDENT_INDICATORS, DuplicateFilter, FoundationAnalyzer, ScreenFinder, inside_any_target,
     restrict_joints, starts_below,
 )
 from src.inference.face_mesh import FaceLandmarker
@@ -185,6 +185,19 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
             float(student_settings.get("object_confidence", objects_settings.get("confidence_threshold", 0.25))),
             float(objects_settings.get("iou_threshold", 0.45)),
             student_settings.get("object_image_size", objects_settings.get("image_size")), device)
+    # No marked screen (no room file): find screens with the COCO detector and ignore people inside them,
+    # so a person in the slides is not taken for a second person in the room (ScreenFinder).
+    screens = None
+    every = camera.get("find_screens_every_seconds")
+    if every and "screen" in ignore_inside and "screen" not in targets:
+        objects_settings = config.get("objects") or {}
+        screens = ScreenFinder(ObjectDetector(
+            project_path(objects_settings.get("detector", "models/detection/yolo26n.pt")), ["tv"],
+            float(objects_settings.get("confidence_threshold", 0.25)),
+            float(objects_settings.get("iou_threshold", 0.45)), objects_settings.get("image_size"), device),
+            float(every))
+        LOGGER.info("camera=%s: no screen marked; screens are found automatically every %gs and people "
+                    "inside them are ignored", camera_id, float(every))
     if is_student_camera and on & {"response_gesture", "hand_raise", "hand_raise_outcome"}:
         gestures_model = HandGestures(
             project_path(student_settings.get("gesture_model", "models/hands/gesture_recognizer.task")),
@@ -249,7 +262,8 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
                     overlay = ReviewOverlay(
                         f"{video_id} | {camera_id}", float(config["inference"]["keypoint_confidence"]),
                         duration=info.duration or None, zones=zones, targets=targets,
-                        notes=camera_notes(camera, enabled, bool(zones)),
+                        notes=camera_notes(camera, enabled, bool(zones))
+                        + (("screens: found automatically (no room file)",) if screens is not None else ()),
                         show_rejected_keypoints=bool(review.get("show_rejected_keypoints", False)),
                         time_range=(start, end) if segment else None, path=path_mode,
                         path_seconds=(float(review["path_seconds"])
@@ -261,9 +275,12 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
             # Rules and overlays see only the joints this camera may use, and
             # not people cut off at the bottom (e.g. student heads in front
             # of the instructor camera).
+            if screens is not None:
+                screens.update(timestamp, frame)
             people = tuple(restrict_joints(person, joints) for person in tracker.infer(frame)
                            if not starts_below(person, ignore_below)
-                           and not inside_any_target(person, targets, ignore_inside))
+                           and not inside_any_target(person, targets, ignore_inside)
+                           and not (screens is not None and screens.hides(person)))
             if duplicates is not None:  # one detection per body (desks split seated people)
                 people = duplicates(people)
             if stitcher is not None:  # one ID for a person walking between samples
@@ -311,6 +328,10 @@ def analyze_video(video: Path, video_id: str, camera_id: str,
     if stitcher is not None and stitcher.stitched:
         LOGGER.info("video=%s joined %d tracker IDs of people moving between samples",
                     video_id, stitcher.stitched)
+    if screens is not None:
+        LOGGER.info("video=%s screens: found in %d of %d checks, last at %s; ignored %d detections of people "
+                    "inside them", video_id, screens.found, screens.checks,
+                    [[round(v, 3) for v in box] for box in screens.boxes], screens.ignored)
     duration = info.duration if info.duration > 0 else last_time + info.sample_period
     summary = summarize_list_a(events_path, camera_id, video_id, duration, info.sample_period,
                                start, analyzed_end(),

@@ -93,6 +93,56 @@ def inside_any_target(person: PosePerson, targets: dict[str, tuple[tuple[float, 
                for name in names if name in targets)
 
 
+def inside_any_box(box: tuple[float, float, float, float],
+                   outers: Sequence[tuple[float, float, float, float]], min_fraction: float = 0.85) -> bool:
+    """True if at least min_fraction of box (normalized xyxy) lies inside one of the outer boxes."""
+    area = (box[2] - box[0]) * (box[3] - box[1])
+    if area <= 0:
+        return False
+    for outer in outers:
+        width = max(0.0, min(box[2], outer[2]) - max(box[0], outer[0]))
+        height = max(0.0, min(box[3], outer[3]) - max(box[1], outer[1]))
+        if width * height / area >= min_fraction:
+            return True
+    return False
+
+
+class ScreenFinder:
+    """Screens found by the COCO detector (its class "tv": TVs, monitors) on a camera without a marked screen.
+
+    Without a room file the screen is not marked, so ignore_people_inside_targets could not work: on a real
+    lecture (2026-11-21) a person in a slide's photo was tracked as a second person for the whole lecture
+    and the seated instructor's role stayed unknown, leaving the report without any instructor data. The
+    camera is fixed, so the screens are looked for every `every` seconds only, and the last ones found are
+    kept when a check finds none (a dark slide, someone standing in front). The boxes are used only to
+    ignore people inside them, never as a board or screen target for the teacher rules.
+    """
+
+    def __init__(self, detector: Any, every: float, min_fraction: float = 0.85):
+        self.detector = detector                  # anything with detect(frame) -> objects with a .box
+        self.every = every
+        self.min_fraction = min_fraction
+        self.boxes: tuple[tuple[float, float, float, float], ...] = ()
+        self.next_check: float | None = None
+        self.checks = self.found = self.ignored = 0
+
+    def update(self, time: float, frame: Any) -> None:
+        if self.next_check is not None and time < self.next_check:
+            return
+        boxes = tuple(tuple(item.box) for item in self.detector.detect(frame))
+        self.checks += 1
+        if boxes:
+            self.boxes = boxes
+            self.found += 1
+        self.next_check = time + self.every
+
+    def hides(self, person: PosePerson) -> bool:
+        """True (and counted) when the person's box lies inside a screen found so far."""
+        hidden = inside_any_box(person.box, self.boxes, self.min_fraction)
+        self.ignored += hidden
+        return hidden
+
+
 HEAD_AND_SHOULDERS = tuple(range(7))  # COCO nose, eyes, ears, shoulders
 
 

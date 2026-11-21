@@ -133,6 +133,11 @@ The summary adds `teacher_behavior_seconds` and `teacher_behavior_episodes`
   in the slides' photos (A2: three, A3: one) and the instructor's role was
   `unknown` for whole lessons. `cameras.instructor_view.ignore_people_inside_targets:
   [screen]` now drops boxes lying at least 85% inside the screen.
+  Without a room file the screen is not marked, so on a real lecture (2026-11-21) a
+  person in a slide's photo made the instructor `unknown` for the whole lecture;
+  `find_screens_every_seconds: 30` now finds screens with the COCO detector (class
+  `tv`) and drops people inside them the same way (`ScreenFinder`; only for this,
+  never as a board or screen target).
 
 ## Teaching material and facial expressions: datasets
 

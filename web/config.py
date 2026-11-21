@@ -11,7 +11,8 @@ DEFAULTS = {
     "PYTHON": sys.executable,
     # step 1: both cameras, camera links, fusion and facts.json (System A's one-command lesson pipeline)
     "ANALYZE": REPO_ROOT / "scripts" / "analyze_lesson.py",
-    # step 2: comparisons, tables, rule-based points and the AI rewrite (always run; rules are kept if it fails)
+    # step 2: comparisons, tables, and Claude writes the feedback (always run; no rule-based text: if Claude fails,
+    # the report says why and offers "Try again")
     "REPORT": REPO_ROOT / "scripts" / "report_lesson.py",
     # room file with the board, screen and desk areas (configs/*.yaml); "none" = no room areas, so "at the board"
     # and "at the desk" are not measured. The pipeline's own default is the scenario room, which is wrong elsewhere.

@@ -22,7 +22,7 @@
   - YAML settings for the pipeline (sampling, thresholds, cameras, indicators, fusion) and a room file per classroom
     (board, screen and desk areas);
   - deployment settings for the web application (`TEACHLENS_LLM_MODEL`, `TEACHLENS_ROOM_CONFIG`, `TEACHLENS_OUTPUTS`).
-- **Automated testing:** 219 unit tests (Python `unittest`; 170 for the team's pipeline, 49 for the report stage and
+- **Automated testing:** 221 unit tests (Python `unittest`; 171 for the team's pipeline, 50 for the report stage and
   web application). They run without
   network access or video and cover the event format, seat finding, feedback wording, the fusion step, the AI-text
   checks and the web application.

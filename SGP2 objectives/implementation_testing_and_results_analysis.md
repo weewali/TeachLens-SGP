@@ -30,7 +30,7 @@ history); its results are kept in section 3.3 as history.
 | `scripts/` | `analyze_lesson.py` (whole lesson), `report_lesson.py` (report), `review_sheets.py` (human review), `make_pipeline_diagram.py` (this report's figure), and the team's single-step scripts |
 | `web/` | Flask application (models, views, controller) |
 | `evaluation/` | The team's accuracy evaluation (added 21 November 2026): blind labelling frames, scoring against the labels with intervals, lessons stitched onto one timeline, a simulation of the lag test's false-positive rate and power, head blurring for report pictures |
-| `tests/unit/` | 219 automated tests |
+| `tests/unit/` | 221 automated tests |
 
 ### 1.3 Key parameters
 
@@ -76,13 +76,13 @@ would turn chance patterns into "findings".
 
 ## 2. Testing
 
-### 2.1 Automated tests: 219 tests, all passing on 21 November 2026
+### 2.1 Automated tests: 221 tests, all passing on 21 November 2026
 
 | Test files | Tests | What they cover |
 |---|---|---|
-| The team's pipeline (`test_config`, `test_events`, `test_visual_indicators`, `test_student_indicators`, `test_teacher_indicators`, `test_facial_actions`, `test_fusion`, `test_lesson`, `test_lesson_outputs`, `test_video`, ...) | 170 | Settings, the event format, behaviour rules on synthetic people, tracking, camera alignment, fusion and lag analysis, lesson folders |
+| The team's pipeline (`test_config`, `test_events`, `test_visual_indicators`, `test_student_indicators`, `test_teacher_indicators`, `test_facial_actions`, `test_fusion`, `test_lesson`, `test_lesson_outputs`, `test_video`, ...) | 171 | Settings, the event format, behaviour rules on synthetic people, tracking, camera alignment, fusion and lag analysis, lesson folders, people on a screen found automatically and ignored |
 | `test_report_stage.py` | 14 | A planted difference found by the "during each activity" comparison; facts added once and renumbered; no rule-based text; the checks accept a faithful answer and reject a bad one; plain teaching advice passes and caveats ("not verified", "could easily be chance", "this may be because"), promises and points on a detection found unreliable are rejected; Claude gets the facts without the team's notes; no key: no feedback, the reason kept and "Error, Code=01"; only API key problems get Code=01 and only billing problems Code=02; a passing answer used and cached; the points that passed shown and the rest left out (never cached, never "nothing found" for a side whose points failed); two answers with no passing point: no feedback, with the reason; review sheets made, scored and marked in `facts.json` |
-| `test_web_app.py` | 35 | Pages, the API key read from `.env` at start-up (never shown; the template's placeholder ignored), "Try again" for Claude's step, "Error, Code=01" / "Error, Code=02" instead of a key or billing reason on the report and progress pages, the PDF download (self-contained page, saved copy reused, a clear message without a browser), upload checks (title, videos, activities), the two commands and their stages, the AI result or its reason, failed and interrupted analyses, Windows file locks, rerun, delete (including a running analysis and cross-site requests), report and chart data, face blurring |
+| `test_web_app.py` | 36 | Pages, the API key read from `.env` at start-up (never shown; the template's placeholder ignored), "Try again" for Claude's step, "Error, Code=01" / "Error, Code=02" instead of a key or billing reason on the report and progress pages, the PDF download (self-contained page, saved copy reused, a clear message without a browser), upload checks (title, videos, activities), the two commands and their stages, the AI result or its reason, failed and interrupted analyses, Windows file locks, rerun, delete (including a running analysis and cross-site requests), report and chart data, face blurring, a notice when the instructor could not be told apart |
 
 They run without network access or video, in about 8 seconds, on a made-up lesson (`tests/fixtures/demo_lesson.py`).
 
@@ -113,6 +113,15 @@ They run without network access or video, in about 8 seconds, on a made-up lesso
    and that a strict check can also reject good text. Under the rule adopted the same day (show the points that
    passed), the saved second answer gives 1 positive and 2 negative points; the point with the invented number is
    left out (applied to the saved answer, no new call).
+5. **A 4-minute real lecture with a person in the slides** (21 November 2026): the pose model also found the person
+   in a photo on the classroom TV, so the instructor camera always showed "two people" and the seated instructor was
+   never identified. The report had no instructor data: no Instructor Movement chart, "out of the camera's view" for
+   the whole lecture, 0 of 9 hypotheses testable and no "during each activity" comparison. Without a room file the
+   existing "ignore people inside the screen" rule could not work, so the instructor camera now finds the screen
+   itself (YOLO26n, class "tv", every 30 s). Re-run on the same videos: the screen was found in 9 of 9 checks, 239
+   detections inside it were ignored, the instructor was identified for 242 of 243 s (facing the class 239 s,
+   gesturing 51 s), 1 hypothesis became testable and 4 "during each activity" comparisons were made. The report
+   page now also says so when the instructor cannot be told apart, instead of leaving the chart out silently.
 
 ### 2.3 Human-labelled evaluation
 

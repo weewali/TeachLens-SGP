@@ -1,6 +1,6 @@
 """Analysis job model: runs the lesson pipeline (scripts/analyze_lesson.py: both cameras, camera links, fusion,
-facts.json) and then the report (scripts/report_lesson.py: comparisons, tables, rule-based points and the AI rewrite,
-which always runs) in the background, and records which stage it has reached, so the progress page can show it.
+facts.json) and then the report (scripts/report_lesson.py: comparisons, tables, and the feedback Claude writes, with
+no rule-based text) in the background, and records which stage it has reached, so the progress page can show it.
 One job runs at a time: the analysis uses the whole CPU.
 
 While a job runs, its status lives in memory and the progress page reads it from there. A copy is saved as a small
