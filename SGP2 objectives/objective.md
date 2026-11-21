@@ -30,8 +30,9 @@ causes, and never claims to measure inner states such as attention, engagement, 
      q-values over 9 hypotheses fixed in advance and over exploratory pairs).
    - Compare students during each instructor activity with the rest of the lecture (HAC errors, Bonferroni).
 6. **Write feedback an instructor can act on.** Up to three positive and three negative points in plain English,
-   without statistical jargon, written by Claude Opus 5.5 from the measured facts and checked automatically against them;
-   when Claude cannot write it, the report shows the reason (an API key problem only as "Code=01", a billing problem only as "Code=02") and a "Try again" button.
+   without statistical jargon or caveats, in the voice of a supportive mentor (what went well and what to keep
+   doing; for each negative point one idea to try next time), written by Claude Opus 5.5 from the measured facts and checked automatically against them
+   (a point that fails the checks is left out); when no point passes or Claude cannot write it, the report shows the reason (an API key problem only as "Error, Code=01", a billing problem only as "Error, Code=02") and a "Try again" button.
 7. **Deliver it through a simple web application.** Instructors give the lecture a title, upload the two videos,
    follow the analysis stage by stage, and read a report in tabs: feedback, charts, timestamped moments and key terms, which can be downloaded as a PDF.
    Context is optional: the topic, the slides, activities in class that were not teaching (with their duration) and
@@ -42,11 +43,12 @@ causes, and never claims to measure inner states such as attention, engagement, 
      instructor's: the report is theirs).
    - Only anonymised numbers ever reach the language model.
    - Inner states are never claimed; associations are never presented as causes.
-   - Every saved report file states its limitations **[TODO: decide whether the web page should say "not verified"]**.
+   - Every saved report file states its limitations; the web page gives plain teaching advice without them (user
+     decision, 21 November 2026).
 9. **Verify and evaluate.**
    - Test the software automatically.
    - Run it end to end on real two-camera recordings.
-   - Check each detection's accuracy with human review sheets.
+   - Check each detection's accuracy with human review sheets or the team's blind labelling frames (`evaluation/`).
 
 ### Status at the time of writing (20 November 2026)
 
@@ -57,10 +59,10 @@ causes, and never claims to measure inner states such as attention, engagement, 
 | 3 Observable indicators | Done (rules); accuracy not yet measured | Rule outputs on scenario lessons and a real lecture; no human labels yet |
 | 4 Shared evidence format | Done | Lesson folders with events, summaries, windows and `facts.json` |
 | 5 Association analysis | Done | Lag analysis and "during each activity" comparisons; no lesson so far gives a confirmed link (all were short) |
-| 6 Plain-English feedback | Done (Claude writes it, with code checks); first real call pending | Offline tests of the checks with simulated answers |
+| 6 Plain-English feedback | Done (Claude writes it, with code checks); first real call on 21 November 2026: 3 of 4 points passed and are shown | Offline tests of the checks with simulated answers |
 | 7 Web application | Done (local) | Upload, progress by stage, tabbed report, PDF download, delete; 35 automated web tests. Activities are stored but not used **[TODO]** |
 | 8 Privacy and honesty | Done in design and code | Local processing, anonymous IDs and seats, blurred faces, word checks |
-| 9 Verification | Partly done | 217 automated tests pass (170 team pipeline, 47 report stage and web app); human-labelled accuracy **[TODO]** |
+| 9 Verification | Partly done | 219 automated tests pass (170 team pipeline, 49 report stage and web app); human-labelled accuracy **[TODO]** |
 
 ## The positive side of the project
 

@@ -30,10 +30,21 @@ Pipeline (one lecture):
    (`src/analysis/activity_comparison.py`: teacher feature >= 0.5 of a window vs other windows, HAC p, Bonferroni,
    >= 5 windows each side) to facts.json as kind `activity_comparison` (idempotent, ids renumbered); writes
    `tables/events.csv`, `tables/activity_comparisons.csv`; then Claude WRITES the feedback (`src/reporting/llm_report.py`,
-   moved from `main code/llm_report.py`, prompt version 4, same checks: numbers from cited facts, direction, no
-   causal/inner-state words, hedges, "not verified" for unchecked detections via KIND_INDICATORS -> indicator_validation
-   keys; one retry; cache by hash). **No rule-based text since 2026-11-20 (user: "no rule-based for report
-   generation")**: on any failure (no key, network, refusal, failed checks) no final_feedback_report.txt is written (a
+   moved from `main code/llm_report.py`; **prompt version 5 since 2026-11-21, user: plain teaching advice, no
+   caveats** ("not verified", "could easily be chance", "simple shares, not tests", "this may be because" are NOT
+   wanted on the report page): positive = what went well + what to keep doing; negative = what happened + one idea
+   for next time, offered not promised. Checks: numbers from cited facts, direction, no causal/inner-state words,
+   no "because" (REASON_RE), no measurement talk (METHOD_RE), no "will help/increase..." (PROMISE_RE), a point on
+   a detection a person checked and found unreliable (`unreliable()`, KIND_INDICATORS -> indicator_validation) is
+   dropped. Claude gets facts.json minus TEAM_ONLY (report_note, alternative_explanations, data_quality,
+   indicator_validation) and minus evidence notes (~37% fewer characters). `report_source` hides feedback whose
+   llm_output.json prompt_version is older (`outdated`, banner + Try again); all 4 lectures were in that state
+   on 2026-11-21. One retry; cache by hash). **No rule-based text since 2026-11-20 (user: "no rule-based for report
+   generation")**. **Partial answers (user decision 2026-11-21):** after the last attempt, points that still fail a
+   check are dropped (`passing_points`, per point; best attempt, later on a tie; never cached; status/log
+   `left_out`); a side whose points all failed says "No positive/negative point passed the automatic checks this
+   time." (parse_feedback -> positive_empty/negative_empty). When no point passes, or on any error (no key,
+   network, refusal), no final_feedback_report.txt is written (a
    stale one is deleted) and `report_status.json` = `{"source": "none", "reason": ..., "code": ...}`; the Feedback tab shows
    the reason + a "Try again" button (POST /lectures/<id>/rewrite, own-site only, runs report_lesson only:
    `JobRunner.start(report_only=True)`). **Shown only as a code** (user requests 2026-11-20: never mention the key
@@ -43,9 +54,9 @@ Pipeline (one lecture):
    `llm_report.status_problem`. The banner then reads only "Error, Code=NN" with the Try again button and the hint
    "No analysis done yet." (user wording 2026-11-20); the progress page and its log also say only "Error, Code=NN". The reason stays in report_status.json / llm_output.json. Other failures (network,
    rate limit, failed checks) keep their plain reason. `Lecture.has_report` = facts.json + report_status.json.
-   **API key at start-up:** `web/app.py` (`__main__` only) reads the private `.env` (gitignored; template
-   `.env.example`; its placeholder `paste-the-key-here` is ignored; `.env` was created from it on 2026-11-20 and waits
-   for the user to paste the key): ANTHROPIC_API_KEY and TEACHLENS_* (terminal values win), prints "Claude: API key found" or how to
+   **API key at start-up:** `web/app.py` (`__main__` only) reads the private `.env` (gitignored; the
+   template `.env.example` was deleted 2026-11-21 at the user's request, "one is enough"; the two lines `.env` needs
+   are in web/README.md; the old placeholder `paste-the-key-here` is still ignored): ANTHROPIC_API_KEY and TEACHLENS_* (terminal values win), prints "Claude: API key found" or how to
    add it, never the key. Billed per call to the key's Console organization (~4 US cents/report with opus, ~0.1 cent
    with haiku; estimates until the first real call, whose cost llm_output.json records). **Never write in the project
    whose account pays** (user request 2026-11-20). Keys are made at platform.claude.com/settings/keys.
@@ -90,6 +101,14 @@ still here (a safety check blocked the folder removal; the user may delete it). 
 fetch, `git diff --name-only bc092bd origin/scripting-frame-extraction`, check each local copy against bc092bd
 first, then `git restore --source=origin/scripting-frame-extraction --worktree -- <files>`. Their `.gitignore`
 differs (ours is merged by hand). AGENTS.md is the teammate's handoff (System A details).
+**199734b (2026-11-21, team):** copied our web app, report stage and review sheets from our 9439fd2 (38 files,
+byte-identical to 9439fd2, so they lack the later "points that passed" change; nothing to take) and added
+`evaluation/` (8 files: blind labelling frames `make`, `score` with intervals, `stitch`, lag-test `simulate`,
+`blur_frames`, `run_webapp` demo). `evaluation/` was copied here byte-identical on 2026-11-21 at the user's request;
+all modules import; not run yet (its examples name the team's scenario lessons sgp_A4_t1/A5/A6/B1, not on this
+laptop; it cites `report/evaluation_plan.md`, which is on neither branch). Their requirements.txt/.gitignore changes
+are already covered by ours (we keep `ultralytics>=8.4` and `opencv-python-headless`). Both branches now hold a copy
+of `web/` and the report stage, so they will drift; the next team diff should start from 199734b.
 
 ## Installed on this laptop (with the user's OK, 2026-11-20)
 mediapipe 1.2.2 with `--no-deps` + absl-py, flatbuffers, sounddevice (team rule: never reinstall it with deps);
@@ -107,7 +126,7 @@ statsmodels, jinja2, anthropic, Flask 3.1.3, FFmpeg 9.0.2. Root weights yolo26m-
   camera ~13 min), 124 windows, 0 fusion findings, 10 facts (2 weak activity comparisons), AI fallback with reason.
   Lesson `outputs/lessons/2026-11-20_1714_Mixed_gender_classes`, upload linked (hard links) in
   `outputs/uploads/Mixed_gender_classes/`. To check by eye: 30 hand raises for 6 students; 8 seats for 6 students.
-- Tests: `python -m unittest discover -s tests/unit` -> **217 tests** (170 System A, 12 `test_report_stage.py`,
+- Tests: `python -m unittest discover -s tests/unit` -> **219 tests** (170 System A, 14 `test_report_stage.py`,
   35 `test_web_app.py`), no network, no video.
 
 ## Working agreements with this user (follow these)
@@ -160,7 +179,13 @@ the report has positive/negative points only (raised with the user, not decided)
 1. Re-run the user's real lectures through the web app (Mixed gender classes was started 2026-11-20 as a check;
    How_much_..._2 has no videos on disk any more).
 2. Human labelling with `scripts/review_sheets.py`, then re-run the report.
-3. The first real Claude call (needs the user's key on the server side).
+3. Applied to the saved answer (no new call), the BBETTI2002 lecture now shows 1 positive + 2 negative points
+   (the invented-"6" point left out). The first real call (2026-11-21, lecture BBETTI2002_Section_55_week_11, opus,
+   2 attempts, $0.0257 + $0.0249) was rejected: attempt 1 had 87 words and a missing "not verified"; attempt 2
+   invented "about 6 students in view" (rightly rejected) and "Neither detection has been verified" was wrongly
+   rejected (UNVERIFIED_RE widened 2026-11-21). The key in `.env` (fingerprint 08830d16) was pasted in chat, so it
+   must be replaced. It is no longer anywhere else on disk: the user cleared it from `.env.example`, which was then
+   deleted (2026-11-21); no commit ever held it. The Windows user variable was removed.
 4. Room file for the user's classroom (`--local-config`, board/screen/desk areas) so board and desk are measured.
 5. Statistical power: with ~112 pairs a single fusion link can never pass BH; the "during each activity" comparisons
    (Bonferroni over the comparisons made) carry most feedback points. Worth raising with the teammate.

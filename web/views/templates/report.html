@@ -23,7 +23,7 @@
   <h2 class="panel-title">Feedback</h2>
   {% if source.problem %}
   <div class="banner" role="status">
-    <p>{% if source.code %}Error, Code={{ source.code }}{% else %}Claude could not write the feedback for this lecture, so there are no points yet. Reason: {{ source.problem }}{% endif %}</p>
+    <p>{% if source.code %}Error, Code={{ source.code }}{% elif source.outdated %}{{ source.problem }}{% else %}Claude could not write the feedback for this lecture, so there are no points yet. Reason: {{ source.problem }}{% endif %}</p>
     {% if not pdf %}<form method="post" action="{{ url_for('lectures.rewrite', lecture_id=lecture.id) }}" class="no-print">
       <button class="button" type="submit">Try again</button>
       <span class="hint">No analysis done yet.</span>
@@ -36,13 +36,13 @@
       <h3><span aria-hidden="true">✓</span> Positive points</h3>
       {% if feedback.positive %}
       <ul>{% for point in feedback.positive %}<li>{{ point }}</li>{% endfor %}</ul>
-      {% else %}<p class="muted">No clear positive point was found in this analysis.</p>{% endif %}
+      {% else %}<p class="muted">{{ feedback.positive_empty or "No clear positive point was found in this analysis." }}</p>{% endif %}
     </div>
     <div class="card points points-bad">
       <h3><span aria-hidden="true">✗</span> Negative points</h3>
       {% if feedback.negative %}
       <ul>{% for point in feedback.negative %}<li>{{ point }}</li>{% endfor %}</ul>
-      {% else %}<p class="muted">No clear negative point was found in this analysis.</p>{% endif %}
+      {% else %}<p class="muted">{{ feedback.negative_empty or "No clear negative point was found in this analysis." }}</p>{% endif %}
     </div>
   </div>
   {% endif %}

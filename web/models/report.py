@@ -13,6 +13,11 @@ import json
 from web.models import stat_charts
 from web.models.charts import ensure_charts
 from web.models.lecture import describe_activity
+from src.reporting.llm_report import PROMPT_VERSION  # noqa: E402  (stat_charts puts the project root on the path)
+
+# Feedback written with earlier wording rules (with notes on how the results were measured) is not shown; the page
+# offers "Try again" instead (user decision 2026-11-21: plain teaching advice only).
+OUTDATED = "This feedback was written in an earlier style. Press \"Try again\" to have Claude write it again."
 
 MOMENT_LABELS = {"hand_raise": "Hand raised", "phone_use": "Phone seen", "dozing": "Dozing posture"}
 # glossary entries that describe the data, not words the page uses
@@ -41,10 +46,14 @@ def parse_feedback(text):
             parts[section].append(stripped[2:])
         elif stripped and section in ("overview", "note"):
             parts[section].append(stripped)
-    empty = ("No clear positive point", "No clear negative point")
+    # the line that stands for an empty side: nothing found, or every point failed the automatic checks
+    empty = ("No clear positive point", "No clear negative point", "No positive point passed",
+             "No negative point passed")
     return {"overview": " ".join(parts["overview"]) or None,
             "positive": [p for p in parts["positive"] if not p.startswith(empty)],
             "negative": [p for p in parts["negative"] if not p.startswith(empty)],
+            "positive_empty": next((p for p in parts["positive"] if p.startswith(empty)), None),
+            "negative_empty": next((p for p in parts["negative"] if p.startswith(empty)), None),
             "note": " ".join(parts["note"]) or None}
 
 
@@ -61,6 +70,9 @@ def report_source(lesson):
     which is shown only as its code, e.g. "Code=01")."""
     status = _json(lesson / "report_status.json")
     if status.get("source") == "llm" and (lesson / "final_feedback_report.txt").exists():
+        written_with = _json(lesson / "llm_output.json").get("prompt_version")
+        if written_with and written_with != PROMPT_VERSION:
+            return {"kind": "none", "label": None, "code": None, "outdated": True, "problem": OUTDATED}
         return {"kind": "llm", "label": "Feedback written by Claude from the measured results and checked automatically",
                 "problem": None, "code": None}
     if status.get("code"):
@@ -90,7 +102,7 @@ def build_report(lecture):
     """Everything report.html needs, as plain Python data."""
     lesson = lecture.lesson_dir
     final = lesson / "final_feedback_report.txt"
-    feedback = parse_feedback(final.read_text(encoding="utf-8")) if final.exists() else         {"overview": None, "positive": [], "negative": [], "note": None}
+    feedback = parse_feedback(final.read_text(encoding="utf-8")) if final.exists() else         {"overview": None, "positive": [], "negative": [], "positive_empty": None, "negative_empty": None, "note": None}
     facts = _json(lesson / "facts.json")
     found = moments(lecture)
     context = lecture.context()
@@ -139,11 +151,9 @@ REPORT_TERMS = {
     "30-second average": "A share averaged over 30 seconds (six 5-second parts), so short jumps do not hide the trend.",
     "95% range": "Where the average would most likely fall if the same lecture were recorded again. A wide range means "
                  "the average is uncertain.",
-    "unlikely to be chance": "The difference passed a statistical check that allows for neighbouring moments being "
-                             "alike and for the number of comparisons made.",
-    "could easily be chance": "The difference did not pass that check. Treat it as something to look at, not as a "
-                              "finding.",
 }
+# "unlikely to be chance" / "could easily be chance" were removed on 2026-11-21: the feedback no longer uses them
+# (user decision: plain teaching advice, no statistical caveats on the report page).
 
 
 def key_terms(facts):

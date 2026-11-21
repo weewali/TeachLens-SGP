@@ -65,13 +65,14 @@ STAGES = [
                  "the rest of the lecture."),
         ("badges", [("stats", "HAC test · Bonferroni")]),
     ], "facts.json (added),\ntables/*.csv", False),
-    (7, "Claude writes the feedback", [
-        ("text", "Reads the facts (numbers only) and writes up to 3 positive and 3 negative points in plain English, "
-                 "addressed to the instructor as \"you\"."),
+    (7, "Claude writes feedback", [
+        ("text", "Reads the facts (numbers only) and writes up to 3 positive and 3 negative points as plain teaching "
+                 "advice to the instructor (\"you\"): what to keep doing, and one idea to try next time."),
         ("badges", [("ai", "Claude Opus 5.5")]),
     ], "final_feedback_report.txt", False),
     (8, "Check the text", [
-        ("text", "Code checks every number and word against the facts; one retry."),
+        ("text", "Code checks every number and word against the facts; one retry; points that still fail are left "
+                 "out."),
         ("text", "No rule-based text: if Claude fails, the report shows why (key or billing problems only as "
                  "Code=01 / Code=02), with a \"Try again\" button."),
         ("badges", [("tool", "Automatic checks")]),

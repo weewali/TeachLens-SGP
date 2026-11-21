@@ -26,8 +26,8 @@ def response(answer):
 def good_answer(facts):
     favourable = next(f for f in facts["facts"] if f["kind"] == "hand_raises")
     return {"positive_points": [{"text": f"Students raised their hands {favourable['count']} times, for example at "
-                                         "00:05; these hand raises have not been verified by a person.",
-                                 "fact_ids": [favourable["id"]], "explanation_ids": []}],
+                                         "00:05. Keep inviting questions like this.",
+                                 "fact_ids": [favourable["id"]]}],
             "negative_points": []}
 
 
@@ -91,12 +91,36 @@ class AiRewriteTests(unittest.TestCase):
         self.assertEqual(llm_report.validate(good_answer(self.facts), self.facts), [])
         phone = next(f for f in self.facts["facts"] if f["kind"] == "phone_use")
         bad = {"positive_points": [{"text": "Students were distracted by phones 99% of the time, which caused bored "
-                                            "faces.", "fact_ids": [phone["id"]], "explanation_ids": []}],
+                                            "faces.", "fact_ids": [phone["id"]]}],
                "negative_points": []}
         problems = " | ".join(llm_report.validate(bad, self.facts))
-        for expected in ("not 'favourable' facts", "numbers not found", "causal wording", "internal states",
-                         "does not say so"):
+        for expected in ("not 'favourable' facts", "numbers not found", "causal wording", "internal states"):
             self.assertIn(expected, problems)
+
+        def negative(text):
+            return llm_report.validate({"positive_points": [], "negative_points": [
+                {"text": text, "fact_ids": [phone["id"]]}]}, self.facts)
+        pct = phone["students_with_phone_pct"]
+        plain = f"{pct}% of students in view had a phone out. Next time, you could ask everyone to put phones away."
+        self.assertEqual(negative(plain), [])            # plain teaching advice, no caveat needed (user, 2026-11-21)
+        for caveat in ("Neither detection has been verified.", "Phone detection has not been checked.",
+                       "This could easily be chance.", "These are simple shares, not tests.",
+                       "This may be because students were reading notes.", "This will help students."):
+            self.assertTrue(negative(f"{pct}% of students had a phone. {caveat}"), caveat)
+        self.assertEqual(negative(f"{pct}% of students had a phone. Next time, give them a chance to answer and "
+                                  "share ideas first."), [])          # everyday "chance" / "share" stay allowed
+        checked = json.loads(json.dumps(self.facts))      # a person checked phones and found them unreliable
+        checked["indicator_validation"]["phone_use"] = {"checked_against_human_labels": True, "precision": 0.5}
+        problems = llm_report.validate({"positive_points": [], "negative_points": [
+            {"text": plain, "fact_ids": [phone["id"]]}]}, checked)
+        self.assertTrue(any("found unreliable" in p for p in problems))
+
+    def test_claude_gets_the_facts_without_the_teams_notes(self):
+        message = llm_report.build_user_message(self.facts)
+        for hidden in ("alternative_explanations", "indicator_validation", "data_quality", '"notes"', "report_note"):
+            self.assertNotIn(hidden, message)
+        self.assertIn('"strength"', message)
+        self.assertTrue(all(f["id"] in message for f in self.facts["facts"]))
 
     def test_without_a_key_there_is_no_feedback_only_the_reason(self):
         status = json.loads((self.lesson / "report_status.json").read_text(encoding="utf-8"))
@@ -115,7 +139,7 @@ class AiRewriteTests(unittest.TestCase):
             return response(good_answer(self.facts))
         status = feedback.report_lesson(self.lesson, caller=claude, log=lambda _: None)
         self.assertEqual((status["source"], status["reason"], len(calls)), ("llm", None, 1))
-        self.assertIn("have not been verified", (self.lesson / "final_feedback_report.txt").read_text(encoding="utf-8"))
+        self.assertIn("Keep inviting questions", (self.lesson / "final_feedback_report.txt").read_text(encoding="utf-8"))
         record = json.loads((self.lesson / "llm_output.json").read_text(encoding="utf-8"))
         self.assertEqual(record["result"]["source"], "llm")
 
@@ -126,8 +150,8 @@ class AiRewriteTests(unittest.TestCase):
 
     def test_an_answer_failing_twice_falls_back_with_the_reason(self):
         def claude(system, user, model):
-            return response({"positive_points": [{"text": "Students were bored.", "fact_ids": ["F99"],
-                                                  "explanation_ids": []}], "negative_points": []})
+            return response({"positive_points": [{"text": "Students were bored.", "fact_ids": ["F99"]}],
+                             "negative_points": []})
         (self.lesson / "final_feedback_report.txt").write_text("an earlier run's text", encoding="utf-8")
         status = feedback.report_lesson(self.lesson, caller=claude, log=lambda _: None)
         self.assertEqual((status["source"], status["code"]), ("none", None))    # not a key problem: no code
@@ -135,6 +159,33 @@ class AiRewriteTests(unittest.TestCase):
         self.assertFalse((self.lesson / "final_feedback_report.txt").exists())   # never an old text as if new
         record = json.loads((self.lesson / "llm_output.json").read_text(encoding="utf-8"))
         self.assertEqual(len(record["attempts"]), 2)
+
+    def test_the_points_that_passed_are_shown_and_the_rest_left_out(self):
+        hands = next(f for f in self.facts["facts"] if f["kind"] == "hand_raises")
+        phone = next(f for f in self.facts["facts"] if f["kind"] == "phone_use")
+        good = good_answer(self.facts)["positive_points"][0]
+        invented = {"text": "About 6 students were in view. Keep it up.",                    # 6 is not in the facts
+                    "fact_ids": [hands["id"]]}
+        calls = []
+
+        def claude(system, user, model):
+            calls.append(model)
+            return response({"positive_points": [good, invented], "negative_points": [
+                {"text": f"{phone['students_with_phone_pct']}% of students had a phone. This has not been verified.",
+                 "fact_ids": [phone["id"]]}]})                                   # a caveat: no longer allowed
+        lines = []
+        status = feedback.report_lesson(self.lesson, caller=claude, log=lines.append)
+        self.assertEqual((status["source"], status["left_out"], len(calls)), ("llm", 2, 2))   # both attempts used
+        text = (self.lesson / "final_feedback_report.txt").read_text(encoding="utf-8")
+        self.assertIn(good["text"], text)
+        self.assertNotIn("About 6 students", text)
+        self.assertIn(llm_report.NOT_PASSED_NEGATIVE, text)         # never "no clear negative point was found"
+        self.assertNotIn(llm_report.NO_NEGATIVE, text)
+        self.assertTrue(any("2 point(s) that failed the automatic checks were left out" in line for line in lines))
+        record = json.loads((self.lesson / "llm_output.json").read_text(encoding="utf-8"))
+        self.assertEqual((record["result"]["left_out"], record["result"]["from_attempt"]), (2, 2))
+        feedback.report_lesson(self.lesson, caller=claude, log=lambda _: None)
+        self.assertEqual(len(calls), 4)                              # a partial answer is never cached
 
     def test_only_api_key_problems_get_code_01(self):
         def rejected(*_args):
@@ -196,7 +247,7 @@ class ReviewSheetTests(unittest.TestCase):
             self.assertTrue(facts["indicator_validation"]["phone_use"]["checked_against_human_labels"])
             phone = next(f for f in facts["facts"] if f["kind"] == "phone_use")
             precision = facts["indicator_validation"]["phone_use"]["precision"]
-            self.assertEqual(llm_report.unverified(phone, facts), ["phone_use"] if precision < 0.7 else [])
+            self.assertEqual(llm_report.unreliable(phone, facts), ["phone_use"] if precision < 0.7 else [])
         self.assertEqual(review_sheets.wilson(0, 0), None)
         low, high = review_sheets.wilson(9, 10)
         self.assertTrue(0.5 < low < 0.9 < high <= 1.0)

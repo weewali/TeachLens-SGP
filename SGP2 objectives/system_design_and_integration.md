@@ -34,7 +34,7 @@ removed.
 | 4. Link the cameras | Both runs | Students who walk to the front, and the instructor walking into the student view, matched by time | `cross_camera.json` |
 | 5. Lagged analysis | Both event files | 5-second windows on real time; lag correlation (5–30 s) with a circular-shift test; Benjamini–Hochberg over 9 fixed hypotheses and over exploratory pairs; comparisons with HAC; lagged models; peri-event averages; `facts.json` for the report | `fusion/fusion.json`, `windows.csv`, `links.csv`, `facts.json` |
 | 6. Write the report | Windows, facts, events | Students during each instructor activity vs the rest (HAC, Bonferroni) added to `facts.json`; CSV tables | `facts.json`, `tables/events.csv`, `tables/activity_comparisons.csv` |
-| 7. Claude writes the feedback | `facts.json` | Claude Opus 5.5 writes the positive and negative points for the instructor ("you"); code checks numbers and wording; one retry; on any failure no feedback is written and the reason is recorded (no rule-based text) | `final_feedback_report.txt`, `report_status.json`, `llm_output.json` |
+| 7. Claude writes the feedback | `facts.json` | Claude Opus 5.5 writes the positive and negative points for the instructor ("you") as plain teaching advice (user decision, 21 November 2026): a positive point says what went well and what to keep doing, a negative point says calmly what happened and offers one idea to try next time; no caveats about how the results were measured; code checks numbers and wording; one retry; then points that still fail a check after the retry are left out and the points that passed are shown (user decision, 21 November 2026); a side whose every point failed says so; when no point passes or on any error, no feedback is written and the reason is recorded (no rule-based text) | `final_feedback_report.txt`, `report_status.json`, `llm_output.json` |
 | Web application | Two videos and optional context | Upload, progress by stage, tabbed report, delete | `outputs/uploads/<lecture>/`, `outputs/web_jobs/` |
 | Human review (offline) | Lesson folder | Review sheets from the review videos; scoring | `outputs/validation/<lecture>/`, `facts.json` updated |
 
@@ -78,7 +78,7 @@ proxies, not measures of attention.
 - **Upload form:** required: a lecture title and the two videos. Optional: "Additional context" (topic, slides) and
   "Activities in class" (quiz or test, group or pair work, video, break, each with its duration in minutes) followed
   by additional information. The optional context is stored and shown, not yet used by the analysis **[TODO]**.
-- **Report page tabs:** Feedback (Claude's points, or the reason they are missing, shown as "Code=01" for an API key problem and "Code=02" for a billing problem, with a "Try again" button); Charts (the lecture
+- **Report page tabs:** Feedback (Claude's points, or the reason they are missing, with a "Try again" button and the note "No analysis done yet."; an API key problem is shown only as "Error, Code=01" and a billing problem only as "Error, Code=02", also on the progress page and in its log); Charts (the lecture
   timeline of students on task per 5 seconds, students during each of your activities with 95% ranges, Instructor
   Movement, Student Seats); Moments (hand raises, phones, dozing postures, with the seat and what you were doing);
   Key terms. A "Download PDF" button saves the whole report (all tabs, the blurred charts, a summary of the
@@ -102,7 +102,7 @@ proxies, not measures of attention.
 | Instructor camera ↔ student camera | Recording-start metadata; one real-time line | Done; about ±1 s |
 | Team pipeline ↔ report stage | The report stage reads the lesson folder the team's pipeline writes (`facts.json`, `fusion/windows.csv`, events, summaries) and adds its facts to `facts.json` | Done 20 November 2026 |
 | Pipeline ↔ web application | The web job runs the two commands and follows their output; the report page reads saved files only | Done; tested with made-up lessons and on a real lecture |
-| Reporting ↔ language model | `facts.json` → Claude → checks → report; rules on any failure, with the reason shown | Implemented; first real call pending **[TODO]** |
+| Reporting ↔ language model | `facts.json` → Claude → checks → report; points that fail the checks are left out; when no point passes, no feedback, with the reason shown (key and billing problems only as error codes) | Implemented; first real call on 21 November 2026: 3 of 4 points passed and are shown |
 | Human review ↔ report | Scores update `facts.json`'s indicator validation; the AI must then call a checked detection checked (or unreliable below 0.7 precision) | Implemented; no sheets filled yet **[TODO]** |
 | Instructor's context ↔ analysis | Activities are stored with their duration but not when they happened | Stored and shown; not used **[TODO: decide]** |
 
@@ -114,7 +114,7 @@ proxies, not measures of attention.
 | Two static cameras lined up by recording time | One camera; audio or clock syncing | One view rarely shows both sides; a moving view broke roles in an early test. Metadata gives about ±1 s without extra equipment. |
 | Pretrained models with transparent rules | Training action models | No labelled classroom dataset; rules can be explained and tested. |
 | One frame per second, 5-second windows | Every frame | CPU time on a laptop; the cameras are only aligned to about 1 s anyway. |
-| Comparisons during each activity next to the lag analysis | The lag analysis alone | With many pairs in one lecture the lag analysis rarely passes its correction; the simpler comparison still gives the instructor checked, hedged points. |
+| Comparisons during each activity next to the lag analysis | The lag analysis alone | With many pairs in one lecture the lag analysis rarely passes its correction; the simpler comparison still gives the instructor checked points. |
 | Claude writes the feedback, checked in code; no rule-based text (20 November 2026) | Rule-based text, or free AI text | Readable feedback that still traces every number to the facts; a failure is shown honestly with its reason and can be retried. |
 | Fixed statistical settings; behaviour thresholds tuned later from human labels | Tuning everything on each lecture | Without labels there is no correct answer to tune towards; tuning the statistics on the data would produce false findings. |
 | Blurred faces in every report picture | The raw frame, or no picture | The instructor still sees the room and the seats, but nobody can be recognised. |

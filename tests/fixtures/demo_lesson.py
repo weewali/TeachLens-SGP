@@ -59,11 +59,11 @@ def windows_table():
 
 
 DEMO_ANSWER = {
-    "positive_points": [{"text": "Students raised their hands 5 times, for example at 00:05; these hand raises have "
-                                 "not been verified by a person.", "fact_ids": ["F1"], "explanation_ids": []}],
+    "positive_points": [{"text": "Students raised their hands 5 times, for example at 00:05. Keep inviting questions "
+                                 "like this.", "fact_ids": ["F1"]}],
     "negative_points": [{"text": "A phone was seen with 13% of the students in view on average, and with 22% at "
-                                 "00:30; this detection has not been verified.", "fact_ids": ["F2"],
-                         "explanation_ids": []}]}
+                                 "00:30. Next time, you could ask the class to put phones away when a new part "
+                                 "starts.", "fact_ids": ["F2"]}]}
 
 
 def fake_claude(system, user, model):

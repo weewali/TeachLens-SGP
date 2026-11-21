@@ -138,7 +138,11 @@ def report_lesson(lesson: Path, *, model: str = llm_report.DEFAULT_MODEL, fake_r
     (lesson / "final_feedback_report_rules.txt").unlink(missing_ok=True)   # left by older versions
     if result["source"] == "llm":
         final.write_text(result["text"], encoding="utf-8")
-        log("Claude wrote the feedback and it passed every automatic check.")
+        if result.get("left_out"):
+            log(f"Claude wrote the feedback; {result['left_out']} point(s) that failed the automatic checks were left "
+                "out, and every point shown passed.")
+        else:
+            log("Claude wrote the feedback and it passed every automatic check.")
     else:
         final.unlink(missing_ok=True)   # never show feedback from an earlier run as if it were this one's
         if result.get("code"):   # key or billing problem: the log is on the progress page, so only the code
@@ -146,6 +150,6 @@ def report_lesson(lesson: Path, *, model: str = llm_report.DEFAULT_MODEL, fake_r
         else:
             log(f"Claude could not write the feedback: {result['reason']}")
     status = {"source": result["source"], "reason": result["reason"], "code": result.get("code"),
-              "model": llm_report.MODELS[model][0], "facts": len(facts["facts"])}
+              "left_out": result.get("left_out", 0), "model": llm_report.MODELS[model][0], "facts": len(facts["facts"])}
     (lesson / "report_status.json").write_text(json.dumps(status, indent=2), encoding="utf-8")
     return status

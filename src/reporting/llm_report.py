@@ -2,13 +2,20 @@
 
 Moved here from the pipeline_creation branch's `main code/llm_report.py` (2026-11-20) and adapted to the
 lesson facts.json that src/reporting/facts.py writes (schema_version 1). The model never sees the video, the
-tables or any name: it only gets facts.json. Everything it writes is checked in code before it is kept (every
-number must come from a cited fact, the right direction, no causal or inner-state wording, hedges for weak
-evidence and for detections nobody has checked). One retry with the failures listed.
+tables or any name: it only gets facts.json, without the notes meant for the team. Everything it writes is checked
+in code before it is kept (every number must come from a cited fact, the right direction, no causal or inner-state
+wording, no promises, no talk about how the results were measured). One retry with the failures listed.
 
-Claude writes the feedback for every lecture (user decisions 2026-11-20: always on, and no rule-based text). A
-failure never crashes the stage: `rewrite()` returns the reason (no API key, no network, rejected text, ...), no
-feedback is written, and the web app shows the reason with a "Try again" button. A problem with the API key (missing,
+Writing style (user decision 2026-11-21, prompt version 5): plain words from a supportive teaching mentor, for
+better teaching. A positive point says what went well and what to keep doing, with no warning or doubt; a negative
+point says calmly what happened and offers one idea to try next time. No "not verified", "could easily be chance",
+"simple shares, not tests" or "this may be because": those caveats stay in the lesson's files (facts.json,
+report_note) for the team. A point resting on a detection that a person checked and found unreliable is left out.
+
+Claude writes the feedback for every lecture (user decisions 2026-11-20: always on, and no rule-based text). After
+the last attempt, points that still fail a check are left out and the points that passed are shown (user decision
+2026-11-21). A failure never crashes the stage: when no point passed, `rewrite()` returns the reason (no API key, no
+network, rejected text, ...), no feedback is written, and the web app shows the reason with a "Try again" button. A problem with the API key (missing,
 rejected, not allowed) is shown only as "Code=01", a billing problem of the key's account (credit balance too low,
 spend limit, on hold) only as "Code=02" (user requests 2026-11-20); the reason stays in the lesson's files.
 """
@@ -27,45 +34,49 @@ MODELS = {
 }
 DEFAULT_MODEL = "opus"
 EFFORT = "medium"            # Opus 5.5 rejects temperature and cannot turn thinking off
-PROMPT_VERSION = "4"         # 4: the lesson facts of src/reporting/facts.py ("on task" / "off task"); changes the cache key
+PROMPT_VERSION = "5"         # 5: mentor style, no measurement caveats (2026-11-21); changes the cache key
 MAX_ATTEMPTS = 2             # the second attempt is told which checks the first one failed
 MAX_POINTS = 3
 MAX_WORDS = 80
 MIN_PRECISION = 0.7
 
 SYSTEM_PROMPT = """\
-You write the "positive points" and "negative points" of a classroom feedback report for a university instructor.
-You do not see the video. A program has already analysed it and produced the JSON facts you are given. Every number
-in your answer must come from those facts.
+You write the "positive points" and "negative points" of a feedback report for a university instructor who wants to
+teach better. You do not see the video. A program has already analysed it and produced the JSON facts you are given.
+Every number in your answer must come from those facts.
 
-Rules:
-1. Use only the facts given. Copy numbers, percentages, counts and times exactly as written (digits, and mm:ss times).
-   Never calculate a new number, round differently or convert units. Write numbers as digits.
-2. List the fact ids behind each point in fact_ids. A positive point may cite only facts whose direction is
+How to write:
+1. Speak to the instructor as "you", like a supportive teaching mentor, in plain everyday English. Each point says
+   what happened in this lecture (when, what you were doing, what the students were doing) and what it means for the
+   next lecture. Use 2 or 3 short sentences (about 30 to 50 words) and only the one or two numbers that matter most.
+   Example of the tone: "When you used hand gestures, more students were on task: X% compared with Y% at other
+   times. Keep using gestures when you explain the main ideas."
+2. Positive points are purely positive: say what went well and end with what to keep doing. Add no warning, doubt or
+   "but".
+3. Negative points are calm and constructive, never blaming: say plainly what happened, then offer one practical idea
+   to try next time, as an option ("Next time, you could ..."). Where you can, base the idea on something that went
+   better in this same lecture. Never promise that an idea will work.
+4. Write only about the teaching and the class, never about how the results were measured or how certain they are: no
+   words such as "detected", "verified", "chance", "not a test", "noisy" or "could not tell apart", and no possible
+   reasons ("this may be because ..."). Do not use jargon such as "window", "observable", "p-value" or "Bonferroni";
+   say "students in view", "a few seconds later", "between 04:00 and 04:30".
+
+Rules your answer is checked against:
+5. Use only the facts given. Copy numbers, percentages, counts and times exactly as written (digits, and mm:ss times).
+   Never calculate a new number, round differently or convert units. Do not write numbers as words.
+6. List the fact ids behind each point in fact_ids. A positive point may cite only facts whose direction is
    "favourable"; a negative point only facts whose direction is "unfavourable". Do not write ids, or the word "fact",
    in the text itself.
-3. Describe what happened together, never what caused what. Do not use words such as "caused", "led to", "resulted in",
-   "due to" or "as a result". Say "while", "compared with", "in the parts of the lecture where".
-4. Match your wording to each fact's evidence.strength. "weak" means the gap could easily be chance, so say that
-   plainly. "descriptive" means a share, a count or a single stretch, not a test, so do not present it as a pattern.
-   Never present a weak finding as a clear one.
-5. Where it helps, add one short sentence with a possible explanation taken from alternative_explanations, clearly marked
-   as a possibility ("this may be because ..."), and list its id in explanation_ids. Never present it as a finding.
-6. Use every measure ("on task", "off task", "facing the front", "phone", "seated", ...) only as the glossary defines it:
-   these are observed postures and objects. Do not write about attention, engagement, boredom, understanding,
-   motivation, confusion, sleep, tiredness or distraction as if they were measured. Never judge the instructor as a
+7. Say what happened together, never what caused what: do not use "caused", "led to", "resulted in", "due to",
+   "because" or "as a result"; say "when", "while", "compared with". Describe this lecture only; do not turn it into a
+   general rule about teaching.
+8. Use every measure ("on task", "off task", "facing the front", "phone", "seated", ...) only as the glossary defines it.
+   These are postures and objects, so never write about attention, engagement, boredom, understanding, motivation,
+   confusion, sleep, tiredness or distraction, not even in your ideas for next time. Never judge the instructor as a
    person.
-7. Write plain English for an instructor who is not a statistician, and speak to them as "you" ("while you faced the
-   class"): 2 or 3 short sentences per point. No jargon: not "window", "observable", "p-value", "q-value" or
-   "Bonferroni"; say "a few seconds later", "students in view" and "could easily be chance".
-8. Write at most 3 positive and 3 negative points. If the facts support fewer, write fewer; never pad. When several
-   facts point the same way, combine them into one stronger point instead of repeating. When facts point in different
-   directions, say so honestly. Put the most useful points first, preferring ones the instructor can act on.
-9. If data_quality or a fact's notes warn that a result may be unreliable, say so in every point that rests on it.
-10. indicator_validation says whether a person has checked each detection against the video. Where an indicator has
-    not been checked (checked_against_human_labels is false), say the detection has not been verified. Where it has
-    been checked and its precision is below 0.7, say it is unreliable. Where it has been checked and is higher, you
-    may say it was checked, but still do not call a single detection certain.
+9. Write at most 3 positive and 3 negative points; if the facts support fewer, write fewer, and never pad. Keep one idea
+   per point and combine facts that say the same thing. Put first the points the instructor can act on, especially
+   what students did during your different activities, and prefer facts with a stronger evidence.strength.
 """
 
 POINT_SCHEMA = {
@@ -73,9 +84,8 @@ POINT_SCHEMA = {
     "properties": {
         "text": {"type": "string"},
         "fact_ids": {"type": "array", "items": {"type": "string"}},
-        "explanation_ids": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["text", "fact_ids", "explanation_ids"],
+    "required": ["text", "fact_ids"],
     "additionalProperties": False,
 }
 OUTPUT_SCHEMA = {
@@ -97,12 +107,16 @@ INTERNAL_STATE_RE = re.compile(r"\b(attention|attentive|inattentive|engag\w*|bor
 JUDGEMENT_RE = re.compile(r"\b(good|bad|poor|great|terrible|ineffective|effective|excellent)\s+"
                           r"(teacher|instructor|teaching|lecturer)\b", re.I)
 LEAK_RE = re.compile(r"\bF\d+\b|\bfacts?\b|\bE\d\b")
-HEDGES = ("may", "might", "could", "possibly", "possible", "perhaps", "suggest", "tentative", "weak", "unclear", "chance",
-          "uncertain", "not certain", "caution", "cannot tell", "can't tell", "not clear")
-UNVERIFIED_RE = re.compile(r"unverified|not (?:been )?(?:verified|checked)|not yet (?:verified|checked)|unreliable|"
-                           r"no one has checked|has not been checked|have not been checked", re.I)
-# The detections each kind of fact stands on (keys of facts.json's indicator_validation); a point resting on one that
-# no person has checked must say so.
+REASON_RE = re.compile(r"\bbecause\b", re.I)
+# Talk about how the results were measured or how certain they are: kept for the team, never in the instructor's
+# points (user decision 2026-11-21). "a chance to answer" and "share your ideas" stay allowed.
+METHOD_RE = re.compile(r"\b(?:un)?verif\w*|\bdetect\w*|\b(?:be|by|pure|just) chance\b|\bnot (?:a |simple )?tests?\b|"
+                       r"\bsimple shares?\b|\bstatistic\w*|\bsignifican\w*|\bnoisy\b|\bunreliable\b|\bunchecked\b|"
+                       r"\b(?:could not|couldn't|cannot|can't) tell\b|\bnot (?:yet )?(?:been )?checked\b", re.I)
+# An idea for next time is offered, never promised to work.
+PROMISE_RE = re.compile(r"\bwill (?:help|increase|improve|raise|reduce|lower|boost|keep|bring|make|get)\b", re.I)
+# The detections each kind of fact stands on (keys of facts.json's indicator_validation); a point resting on one that a
+# person checked and found unreliable is left out.
 KIND_INDICATORS = {
     "comparison": ("student_on_task_state", "instructor_role"),
     "activity_comparison": ("student_on_task_state", "instructor_role"),
@@ -118,6 +132,10 @@ NUMBER_WORDS = {"two": "2", "three": "3", "four": "4", "five": "5", "six": "6", 
                 "ten": "10", "eleven": "11", "twelve": "12"}
 NO_POSITIVE = "No clear positive point was found in this analysis."
 NO_NEGATIVE = "No clear negative point was found in this analysis."
+# a side whose every point failed the checks (never claim that nothing was found when points were left out)
+NOT_PASSED_POSITIVE = "No positive point passed the automatic checks this time."
+NOT_PASSED_NEGATIVE = "No negative point passed the automatic checks this time."
+SIDES = ("positive_points", "negative_points")
 
 
 # Problems the web app shows only as a code, never with the reason (user requests 2026-11-20):
@@ -154,13 +172,14 @@ def status_problem(error: Any) -> RewriteUnavailable:
     return RewriteUnavailable(f"Claude API error {status}: {message}")
 
 
-def unverified(fact: dict[str, Any], facts: dict[str, Any]) -> list[str]:
-    """The indicators under a fact that no person has checked, or that were checked and found unreliable."""
+def unreliable(fact: dict[str, Any], facts: dict[str, Any]) -> list[str]:
+    """The detections under a fact that a person checked against the video and found unreliable (precision below
+    MIN_PRECISION). Detections nobody has checked yet are used as they are (user decision 2026-11-21)."""
     shaky = []
     for name in fact.get("indicators") or KIND_INDICATORS.get(fact.get("kind"), ()):
         entry = facts.get("indicator_validation", {}).get(name, {})
         precision = entry.get("precision", entry.get("accuracy"))
-        if not entry.get("checked_against_human_labels") or (precision is not None and precision < MIN_PRECISION):
+        if entry.get("checked_against_human_labels") and precision is not None and precision < MIN_PRECISION:
             shaky.append(name)
     return shaky
 
@@ -171,9 +190,16 @@ def numbers_in(text: str) -> set[str]:
     return times | set(NUMBER_RE.findall(TIME_RE.sub(" ", text)))
 
 
+# Parts of facts.json meant for the team, not for the instructor's points: the report note (kept verbatim in the
+# saved text), the measurement caveats and the possible explanations (user decision 2026-11-21).
+TEAM_ONLY = ("report_note", "alternative_explanations", "data_quality", "indicator_validation")
+
+
 def build_user_message(facts: dict[str, Any]) -> str:
-    """The facts file minus the report note (which is printed verbatim, not rewritten)."""
-    shown = {k: v for k, v in facts.items() if k != "report_note"}
+    """The facts file without the team-only parts and without each fact's evidence notes."""
+    shown = {k: v for k, v in facts.items() if k not in TEAM_ONLY}
+    shown["facts"] = [{**fact, "evidence": {k: v for k, v in fact["evidence"].items() if k != "notes"}}
+                      if isinstance(fact.get("evidence"), dict) else fact for fact in facts.get("facts", [])]
     return ("Write the points for this lecture from the facts below.\n\n<facts>\n"
             + json.dumps(shown, indent=2, sort_keys=True) + "\n</facts>")
 
@@ -182,7 +208,6 @@ def validate(output: dict[str, Any], facts: dict[str, Any]) -> list[str]:
     """The problems with an answer; an empty list means it passed every check."""
     problems = []
     by_id = {f["id"]: f for f in facts["facts"]}
-    explanations = facts.get("alternative_explanations", {})
     lecture_numbers = numbers_in(json.dumps(facts.get("lecture", {})))
     for key, direction in (("positive_points", "favourable"), ("negative_points", "unfavourable")):
         points = output.get(key)
@@ -206,9 +231,6 @@ def validate(output: dict[str, Any], facts: dict[str, Any]) -> list[str]:
             wrong_way = [i for i in ids if i in by_id and by_id[i]["direction"] != direction]
             if wrong_way:
                 problems.append(f"{where}: cites {wrong_way}, which are not '{direction}' facts.")
-            bad_explanations = [e for e in point.get("explanation_ids", []) if e not in explanations]
-            if bad_explanations:
-                problems.append(f"{where}: unknown explanation ids {bad_explanations}.")
             if len(text.split()) > MAX_WORDS:
                 problems.append(f"{where}: {len(text.split())} words; the maximum is {MAX_WORDS}.")
 
@@ -216,8 +238,6 @@ def validate(output: dict[str, Any], facts: dict[str, Any]) -> list[str]:
             allowed = set(lecture_numbers)
             for fact in cited:
                 allowed |= numbers_in(json.dumps(fact))
-            for explanation_id in point.get("explanation_ids", []):
-                allowed |= numbers_in(explanations.get(explanation_id, ""))
             invented = sorted(numbers_in(text) - allowed)
             if invented:
                 problems.append(f"{where}: numbers not found in the cited facts: {invented}.")
@@ -227,29 +247,49 @@ def validate(output: dict[str, Any], facts: dict[str, Any]) -> list[str]:
                                     "write numbers as digits from the facts.")
             for label, pattern in (("causal wording", CAUSAL_RE), ("a word about internal states", INTERNAL_STATE_RE),
                                    ("a judgement of the instructor", JUDGEMENT_RE),
-                                   ("a fact id or the word 'fact'", LEAK_RE)):
+                                   ("a fact id or the word 'fact'", LEAK_RE),
+                                   ("a reason ('because'); say what happened, not why", REASON_RE),
+                                   ("talk about how the results were measured or how certain they are; write only "
+                                    "about the teaching and the class", METHOD_RE),
+                                   ("a promise that an idea will work; offer it as an option", PROMISE_RE)):
                 found = pattern.search(text)
                 if found:
                     problems.append(f"{where}: contains {label} ('{found.group(0)}').")
-            for sentence in re.split(r"(?<=[.!?])\s+", text):
-                if re.search(r"\bbecause\b", sentence, re.I) and not any(h in sentence.lower() for h in HEDGES):
-                    problems.append(f"{where}: says 'because' without marking it as a possibility.")
-            if any(f.get("evidence", {}).get("strength") in ("weak", "unknown") for f in cited) \
-                    and not any(h in text.lower() for h in HEDGES):
-                problems.append(f"{where}: rests on a weak finding but does not say so.")
-            shaky = sorted({name for f in cited for name in unverified(f, facts)})
-            if shaky and not UNVERIFIED_RE.search(text):
-                problems.append(f"{where}: rests on detections that are unverified or unreliable "
-                                f"({', '.join(shaky)}) but does not say so.")
+            shaky = sorted({name for f in cited for name in unreliable(f, facts)})
+            if shaky:
+                problems.append(f"{where}: rests on detections a person checked and found unreliable "
+                                f"({', '.join(shaky)}); leave this point out.")
     return problems
 
 
-def render(output: dict[str, Any], facts: dict[str, Any]) -> str:
-    """The report text, in the same layout as the rule-based report."""
-    def block(points: list[dict[str, Any]], empty: str) -> str:
-        return "\n".join(f"- {p['text'].strip()}" for p in points) if points else f"- {empty}"
-    return (f"positive points:\n\n{block(output['positive_points'], NO_POSITIVE)}\n\n"
-            f"negative points:\n\n{block(output['negative_points'], NO_NEGATIVE)}\n\n"
+def passing_points(output: Any, facts: dict[str, Any]) -> tuple[dict[str, list], dict[str, int]]:
+    """Only the points that pass every check on their own (at most MAX_POINTS a side), and how many were left out
+    per side (user decision 2026-11-21: show the points that passed rather than nothing)."""
+    kept: dict[str, list] = {side: [] for side in SIDES}
+    left_out = {side: 0 for side in SIDES}
+    for side in SIDES:
+        points = output.get(side) if isinstance(output, dict) else None
+        for point in points if isinstance(points, list) else []:
+            alone = {side: [point], **{other: [] for other in SIDES if other != side}}
+            if isinstance(point, dict) and not validate(alone, facts) and len(kept[side]) < MAX_POINTS:
+                kept[side].append(point)
+            else:
+                left_out[side] += 1
+    return kept, left_out
+
+
+def render(output: dict[str, Any], facts: dict[str, Any], left_out: dict[str, int] | None = None) -> str:
+    """The report text, in the same layout as the rule-based report. A side left empty because its points failed
+    the checks says so instead of claiming that nothing was found."""
+    left_out = left_out or {}
+
+    def block(side: str, empty: str, not_passed: str) -> str:
+        points = output[side]
+        if points:
+            return "\n".join(f"- {p['text'].strip()}" for p in points)
+        return f"- {not_passed if left_out.get(side) else empty}"
+    return (f"positive points:\n\n{block('positive_points', NO_POSITIVE, NOT_PASSED_POSITIVE)}\n\n"
+            f"negative points:\n\n{block('negative_points', NO_NEGATIVE, NOT_PASSED_NEGATIVE)}\n\n"
             f"{facts.get('report_note', '')}\n")
 
 
@@ -301,19 +341,22 @@ def cache_key(facts: dict[str, Any], model: str) -> str:
 def rewrite(facts: dict[str, Any], folder: Path, *, model: str = DEFAULT_MODEL, fake_response: dict | None = None,
             use_cache: bool = True, caller=call_claude) -> dict[str, Any]:
     """Has Claude write the points and checks them. Returns {"source": "llm" | "none", "reason", "text", ...}:
-    with "llm" the checked text is in "text"; with "none" no feedback was written and "reason" says why.
-    Writes llm_output.json (every attempt, its cost and problems) and caches a passing answer by its input."""
+    with "llm" the checked text is in "text" ("left_out" points that failed a check were dropped; every point shown
+    passed); with "none" no point passed and "reason" says why. Writes llm_output.json (every attempt, its answer,
+    cost and problems) and caches an answer whose every point passed."""
     folder = Path(folder)
     key = cache_key(facts, model)
     cache_path = folder / "llm_cache" / f"{key}.json"
     record: dict[str, Any] = {"model": MODELS[model][0], "prompt_version": PROMPT_VERSION, "facts_hash": key,
                               "attempts": []}
     output, problems, reason, code = None, [], None, None
+    answers: list[tuple[int, Any]] = []        # (attempt number, answer) of every attempt that gave an answer
     user = build_user_message(facts)
     if fake_response is not None:
         output = fake_response
         problems = validate(output, facts)
         record["attempts"].append({"source": "fake", "problems": problems})
+        answers.append((1, output))
     elif use_cache and cache_path.exists():
         record = json.loads(cache_path.read_text(encoding="utf-8"))
         output, problems = record["output"], []
@@ -329,7 +372,9 @@ def rewrite(facts: dict[str, Any], folder: Path, *, model: str = DEFAULT_MODEL, 
                     "request_id": getattr(response, "_request_id", None), "served_by": getattr(response, "model", None),
                     "input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens,
                     "cost_usd": round(usage.input_tokens * price_in / 1e6 + usage.output_tokens * price_out / 1e6, 4),
-                    "problems": problems})
+                    "problems": problems, "answer": output})
+                if output is not None:
+                    answers.append((len(record["attempts"]), output))
                 if not problems:
                     break
                 extra = "\n\nYour previous answer failed these checks. Fix them and answer again:\n- " + \
@@ -337,14 +382,35 @@ def rewrite(facts: dict[str, Any], folder: Path, *, model: str = DEFAULT_MODEL, 
         except RewriteUnavailable as error:
             reason, code = str(error), error.code
     record["output"] = output
-    if reason is None and (problems or output is None):
+    log_path = folder / "llm_output.json"
+    if reason is None and output is not None and not problems:          # every point passed every check
+        record["result"] = {"source": "llm", "reason": None, "code": None, "left_out": 0}
+        log_path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+        if fake_response is None and not cache_path.exists():
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+        return {"source": "llm", "reason": None, "code": None, "left_out": 0, "text": render(output, facts)}
+
+    # Otherwise show the points that passed, from the attempt where most passed (the later one on a tie). Such a
+    # partial answer is never cached, so "Try again" asks Claude again.
+    best = None
+    for number, answer in answers:
+        kept, left_out = passing_points(answer, facts)
+        count = sum(len(points) for points in kept.values())
+        if count and (best is None or count >= best[0]):
+            best = (count, number, kept, left_out)
+    if best:
+        _, number, kept, left_out = best
+        dropped = sum(left_out.values())
+        record["result"] = {"source": "llm", "reason": None, "code": None, "left_out": dropped,
+                            "from_attempt": number, "shown": kept}
+        log_path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+        return {"source": "llm", "reason": None, "code": None, "left_out": dropped,
+                "text": render(kept, facts, left_out)}
+
+    if reason is None:
         reason = (f"Claude's text failed the automatic checks {len(record['attempts'])} time(s), so it was not "
                   "used. First problem: " + (problems[0] if problems else "no answer."))
-    record["result"] = {"source": "none" if reason else "llm", "reason": reason, "code": code}
-    (folder / "llm_output.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
-    if reason:
-        return {"source": "none", "reason": reason, "code": code, "problems": problems}
-    if fake_response is None and not cache_path.exists():
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        cache_path.write_text(json.dumps(record, indent=2), encoding="utf-8")
-    return {"source": "llm", "reason": None, "code": None, "text": render(output, facts)}
+    record["result"] = {"source": "none", "reason": reason, "code": code}
+    log_path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+    return {"source": "none", "reason": reason, "code": code, "problems": problems}

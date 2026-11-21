@@ -16,14 +16,22 @@ pipeline (System A) and then the report stage:
    fusion and lag analysis, and writes `facts.json` (docs/lesson_pipeline.md).
 2. `scripts/report_lesson.py --name <id>`: adds the "during each activity" comparisons, writes `tables/`, and has
    Claude write the positive and negative points from facts.json (src/reporting/feedback.py, llm_report.py). There
-   is no rule-based text: if Claude cannot write them, the page says why and offers "Try again" (report step only).
+   is no rule-based text. The points are plain teaching advice: what went well and what to keep doing, and for
+   each negative point one idea to try next time, with no caveats about the measurements (user decision
+   2026-11-21; feedback written under the earlier rules is hidden until "Try again"). Points that still fail the automatic checks after one retry are left out and the points
+   that passed are shown; if no point passes or Claude cannot write them, the page says why and offers
+   "Try again" (report step only).
    **Code=01** on the page means an API key problem (no key in `.env`, or the key was rejected or not allowed):
    check `.env`, restart the web app, then press "Try again". **Code=02** means a billing problem of the key's
    account (credit balance too low, spend limit reached, account on hold): add credits or raise the limit in the
    Claude Console, then press "Try again". The full reason is in the lesson's `report_status.json`.
 
-At start-up `web/app.py` reads the private `.env` file (copy `.env.example`; never uploaded) so the API key is set
-every time, and prints whether a key was found (never the key itself).
+At start-up `web/app.py` reads the private `.env` file in the project folder, so the API key is set every time, and
+prints whether a key was found (never the key itself). Create `.env` yourself (Git ignores it, so it is never
+uploaded) with these two lines; keys are made at platform.claude.com/settings/keys:
+
+    ANTHROPIC_API_KEY=<your key>
+    TEACHLENS_LLM_MODEL=opus
 
 The model files must be in `models/` (pose, detection, face, hands; see AGENTS.md); nothing is ever downloaded:
 the job sets `YOLO_AUTOINSTALL=False` and `YOLO_OFFLINE=True`.

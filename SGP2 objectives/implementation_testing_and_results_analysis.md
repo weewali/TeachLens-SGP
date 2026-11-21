@@ -29,7 +29,8 @@ history); its results are kept in section 3.3 as history.
 | `src/reporting/` | `facts.py` (facts for the AI step), `feedback.py` (comparison facts, tables, rule-based points, the report stage), `llm_report.py` (Claude rewrite and its checks), `review_sheets.py` (human review), review and side-by-side videos, charts |
 | `scripts/` | `analyze_lesson.py` (whole lesson), `report_lesson.py` (report), `review_sheets.py` (human review), `make_pipeline_diagram.py` (this report's figure), and the team's single-step scripts |
 | `web/` | Flask application (models, views, controller) |
-| `tests/unit/` | 217 automated tests |
+| `evaluation/` | The team's accuracy evaluation (added 21 November 2026): blind labelling frames, scoring against the labels with intervals, lessons stitched onto one timeline, a simulation of the lag test's false-positive rate and power, head blurring for report pictures |
+| `tests/unit/` | 219 automated tests |
 
 ### 1.3 Key parameters
 
@@ -42,8 +43,8 @@ history); its results are kept in section 3.3 as history.
 | Lags | 1–6 windows (5–30 s) | How long after an instructor action a student change is looked for |
 | Minimum evidence | A teacher feature in ≥ 5 windows; ≥ 3 starts for rare actions; ≥ 5 windows on each side of a comparison | Smaller cases are not tested |
 | Shift test | 500 circular shifts; q ≤ 0.05 (Benjamini–Hochberg) | A link counts as a finding only below this |
-| Comparisons | Teacher feature ≥ half a window; p < 0.05 / number of comparisons (Bonferroni) | "Unlikely to be chance" in the feedback |
-| Claude feedback | Claude Opus 5.5; at most 3 points per side, 80 words each; 2 attempts | Otherwise no feedback is shown, only the reason |
+| Comparisons | Teacher feature ≥ half a window; p < 0.05 / number of comparisons (Bonferroni) | Stronger differences come first in the feedback (the words "unlikely to be chance" are no longer printed) |
+| Claude feedback | Claude Opus 5.5; at most 3 points per side, 80 words each; 2 attempts | Then only the points that passed are shown; no point passed: no feedback, only the reason |
 
 All behaviour-rule thresholds are unvalidated starting values. They are where accuracy can be improved later: once the
 review sheets are labelled, each threshold can be tuned to agree best with the human labels and then checked on
@@ -59,9 +60,14 @@ would turn chance patterns into "findings".
   app replaces it on purpose.
 - **Rebuilding from saved files:** the report, charts and web page are built from the lesson folder only.
 - **Claude writes the feedback, no rule-based text** (user decision, 20 November 2026): without an API key, without
-  a network, on a refusal or when its text fails the checks twice, no feedback is written; `report_status.json` and
-  the web page give the reason (an API key problem is shown only as "Code=01", a billing problem only as "Code=02"), and "Try again" re-runs only Claude's step. The web app reads the API key from a
+  a network, or on a refusal, no feedback is written. When some points still fail the checks after the retry,
+  they are left out and the points that passed are shown (user decision, 21 November 2026); only when no point
+  passes is there no feedback; `report_status.json` and
+  the web page give the reason (an API key problem is shown only as "Error, Code=01", a billing problem only as "Error, Code=02"), and "Try again" re-runs only Claude's step. The web app reads the API key from a
   private `.env` file every time it starts (never uploaded to GitHub).
+- **How the feedback reads:** plain teaching advice (user decision, 21 November 2026): a positive point says what went well and what to keep doing, a negative point says calmly what happened and offers one idea to try next time; no caveats about how the results were measured, possible reasons or "could easily be chance". Claude no longer receives
+  the team's notes (possible explanations, data-quality warnings, which detections are checked). Feedback
+  written under the earlier rules is hidden and the page offers "Try again".
 - **Privacy in pictures:** the two heatmaps are drawn on a video frame with every student's head pixelated (tracked
   people, each seat's usual position, and anyone the pose model finds in that frame); the instructor stays visible,
   because the report is theirs. On any error the chart has no background rather than an unblurred one.
@@ -70,13 +76,13 @@ would turn chance patterns into "findings".
 
 ## 2. Testing
 
-### 2.1 Automated tests: 217 tests, all passing on 20 November 2026
+### 2.1 Automated tests: 219 tests, all passing on 21 November 2026
 
 | Test files | Tests | What they cover |
 |---|---|---|
 | The team's pipeline (`test_config`, `test_events`, `test_visual_indicators`, `test_student_indicators`, `test_teacher_indicators`, `test_facial_actions`, `test_fusion`, `test_lesson`, `test_lesson_outputs`, `test_video`, ...) | 170 | Settings, the event format, behaviour rules on synthetic people, tracking, camera alignment, fusion and lag analysis, lesson folders |
-| `test_report_stage.py` | 12 | A planted difference found by the "during each activity" comparison; facts added once and renumbered; no rule-based text; the checks accept a faithful answer and reject a bad one; no key: no feedback, the reason kept and "Code=01"; only API key problems get Code=01 and only billing problems Code=02; a passing answer used and cached; two failed answers: no feedback, with the reason; review sheets made, scored and marked in `facts.json` |
-| `test_web_app.py` | 35 | Pages, the API key read from `.env` at start-up (never shown), "Try again" for Claude's step, the PDF download (self-contained page, saved copy reused, a clear message without a browser), upload checks (title, videos, activities), the two commands and their stages, the AI result or its reason, failed and interrupted analyses, Windows file locks, rerun, delete (including a running analysis and cross-site requests), report and chart data, face blurring |
+| `test_report_stage.py` | 14 | A planted difference found by the "during each activity" comparison; facts added once and renumbered; no rule-based text; the checks accept a faithful answer and reject a bad one; plain teaching advice passes and caveats ("not verified", "could easily be chance", "this may be because"), promises and points on a detection found unreliable are rejected; Claude gets the facts without the team's notes; no key: no feedback, the reason kept and "Error, Code=01"; only API key problems get Code=01 and only billing problems Code=02; a passing answer used and cached; the points that passed shown and the rest left out (never cached, never "nothing found" for a side whose points failed); two answers with no passing point: no feedback, with the reason; review sheets made, scored and marked in `facts.json` |
+| `test_web_app.py` | 35 | Pages, the API key read from `.env` at start-up (never shown; the template's placeholder ignored), "Try again" for Claude's step, "Error, Code=01" / "Error, Code=02" instead of a key or billing reason on the report and progress pages, the PDF download (self-contained page, saved copy reused, a clear message without a browser), upload checks (title, videos, activities), the two commands and their stages, the AI result or its reason, failed and interrupted analyses, Windows file locks, rerun, delete (including a running analysis and cross-site requests), report and chart data, face blurring |
 
 They run without network access or video, in about 8 seconds, on a made-up lesson (`tests/fixtures/demo_lesson.py`).
 
@@ -97,13 +103,32 @@ They run without network access or video, in about 8 seconds, on a made-up lesso
 3. **The team's seven scripted scenario lessons** (1–10 minutes each, the same six students): every lesson ran start
    to finish. The student camera dominated the time (6–9.5 minutes per lesson minute at the time; 2.2 minutes on
    20 November in a faster power mode); the instructor camera took under 2 minutes per minute.
+4. **The first real Claude call** (21 November 2026, a 5.4-minute real lecture): Claude Opus 5.5 answered twice
+   (about 3,600 input and 550 output tokens each; about USD 0.05 together). Both answers were rejected by the code
+   checks, so no feedback was shown, only the reason and "Try again". First answer: one point had 87 words (the
+   limit is 80) and one did not say its detections were unverified. Second answer: one point added a number that is
+   not in the facts ("about 6 students in view"), which the check rightly rejected; and the check wrongly rejected
+   a correct warning ("Neither detection has been verified") because it knew only a few phrasings. That check was
+   widened and tested. The run shows the checks doing their job (an invented number never reaches the instructor)
+   and that a strict check can also reject good text. Under the rule adopted the same day (show the points that
+   passed), the saved second answer gives 1 positive and 2 negative points; the point with the invented number is
+   left out (applied to the saved answer, no new call).
 
 ### 2.3 Human-labelled evaluation
 
 Not done yet. `scripts/review_sheets.py make` writes one image per sampled moment (from the review videos, with boxes
 and track numbers) and a sheet listing what the pipeline detected; a person writes yes or no; `score` gives the
-precision of each detection with a 95% Wilson interval and records it in `facts.json`, so the report stops calling a
-checked detection "not verified". **[TODO: labelling]**
+precision of each detection with a 95% Wilson interval and records it in `facts.json`; a feedback point resting on a
+detection found unreliable (precision below 0.7) is then left out. **[TODO: labelling]**
+
+A second, stricter tool came from the team on 21 November 2026 (`python -m evaluation.evaluate`). `make` writes blind
+labelling frames: both camera views with the boxes and anonymous track numbers the pipeline found, but never what it
+decided about each person, so the labeller is not pulled toward the pipeline's answers. The labeller writes a short
+code per person (facing the front, away or down; phone, writing, reading, hand raised, dozing; for the instructor
+posture, facing and gesturing). `score` compares the labels with the pipeline's events using the pipeline's own on/off
+task rule and gives agreement with intervals. `simulate` measures how often the lag test reports a link that is not
+there and how often it finds one that is, for several lecture lengths (relevant to 3.2). Not run on this laptop yet;
+its frames show real faces and stay in the ignored `outputs/evaluation/` folder. **[TODO]**
 
 ## 3. Results analysis
 
@@ -122,8 +147,8 @@ With all indicators the lag analysis tests about 112 instructor × student pairs
 p-value is 1 / (number of shifts + 1), at best 1/501. After Benjamini–Hochberg over 112 tests a single link can never
 reach q ≤ 0.05 (112 / 501 ≈ 0.22); several strong links at once are needed. The 9 hypotheses fixed in advance are
 corrected among themselves, which helps, but short lessons still have few windows. This is why the report also uses
-the simpler comparison of students during each instructor activity, which needs fewer windows; its points are still
-hedged ("could easily be chance") unless they pass the Bonferroni threshold.
+the simpler comparison of students during each instructor activity, which needs fewer windows; the threshold decides which
+points are stronger and come first (the feedback no longer prints such hedges; see 3.4).
 
 ### 3.3 Earlier results (the second implementation, retired on 20 November 2026)
 
@@ -140,7 +165,7 @@ minutes). Kept as history:
 statistics behave conservatively; privacy measures work on real frames.
 
 **They do not show:** accuracy (no human labels yet); general associations (only short, mostly scripted lessons);
-the quality of the AI wording (no real call yet).
+the quality of the AI wording (one real call so far, see 2.2).
 
 **Limitations:**
 - The rules use unvalidated thresholds; note-taking can still look like looking down.
@@ -148,12 +173,17 @@ the quality of the AI wording (no real call yet).
 - The cameras are aligned to about 1 second.
 - Board, screen and desk need to be marked once per classroom; without a room file they are not measured.
 - A one-hour lecture takes two hours or more to analyse on this laptop.
-- The web page no longer says that the detections are unverified; only the saved files do.
+- The feedback states what happened plainly: it does not say that a difference could be chance or that the
+  detections have not been checked (user decision, 21 November 2026). These caveats are only in the saved files,
+  so a weak difference reads like a clear one; the human-labelled evaluation is what will tell how far to trust
+  it.
 - Activities in class are stored with their duration but not when they happened, so they cannot yet be left out.
 
 **Next steps:**
-- Label the review sheets, report precision and recall, then tune the behaviour thresholds (not the statistics).
+- Label the review sheets or the team's blind frames (`evaluation/`), report precision and recall, then tune the
+  behaviour thresholds (not the statistics); run the lag-test simulation to state the power for real lecture lengths.
 - Record full-length lectures (55–75 minutes) with consent.
-- Make the first real Claude report and review its wording.
+- Review the wording of Claude's feedback with instructors, and collect more real calls (the first, on 21 November
+  2026, needed the "points that passed" rule; see 2.2).
 - Write a room file for the lecture room.
 - Decide how to use the activities instructors note **[TODO]**.

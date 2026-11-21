@@ -44,7 +44,7 @@ def create_app(**overrides):
 
 ENV_FILE = Path(__file__).resolve().parents[1] / ".env"   # private settings file, never uploaded (.gitignore)
 ENV_KEYS = ("ANTHROPIC_API_KEY",)                            # plus every TEACHLENS_* setting
-PLACEHOLDER = "paste-the-key-here"                           # .env.example's stand-in: never used as a key
+PLACEHOLDER = "paste-the-key-here"                           # the old template's stand-in: never used as a key
 
 
 def load_env_file(path=ENV_FILE, environ=None):
@@ -76,7 +76,7 @@ def claude_status(environ=None):
         model = environ.get("TEACHLENS_LLM_MODEL", DEFAULTS["LLM_MODEL"])
         return f"Claude: API key found; Claude ({model}) will write each report's feedback."
     return ("Claude: NO API key found, so reports will have no written feedback. Put the line "
-            "ANTHROPIC_API_KEY=<key> in the file .env in the project folder (see .env.example) and start again.")
+            "ANTHROPIC_API_KEY=<key> in the file .env in the project folder (see web/README.md) and start again.")
 
 
 if __name__ == "__main__":

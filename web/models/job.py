@@ -255,7 +255,10 @@ class JobRunner:
                     return
             # the charts, moments and key terms are complete even when Claude could not write the feedback
             report = read_report_status(lecture)
-            if report.get("source") == "llm":
+            if report.get("source") == "llm" and report.get("left_out"):
+                self._set(status, llm_ok=True, llm_result="Claude wrote the feedback; every point shown passed the "
+                          f"automatic checks ({report['left_out']} point(s) that did not were left out).")
+            elif report.get("source") == "llm":
                 self._set(status, llm_ok=True, llm_result="Claude wrote the feedback and it passed every automatic "
                                                           "check.")
             elif report.get("code"):   # key or billing problem: only the code (user requests 2026-11-20)

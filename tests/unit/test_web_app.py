@@ -146,7 +146,7 @@ class PageTests(WebTestCase):
                          '<h3 class="chart-title">Student Seats</h3>', "What the words in this report mean",
                          '<a href="#terms">Key terms</a>', '<section id="terms" class="tab-panel terms-panel">',
                          "<dt>on task</dt>", "<dt>dozing posture</dt>", "<dt>95% range</dt>",
-                         "<dt>unlikely to be chance</dt>", "05:00 of lecture", "✗", '<nav class="tabs"',
+                         "<dt>30-second average</dt>", "05:00 of lecture", "✗", '<nav class="tabs"',
                          '<section id="feedback" class="tab-panel is-active">',
                          '<section id="charts" class="tab-panel charts-panel">', '<section id="moments" class="tab-panel">',
                          '<span class="tab-count">', "uaeu-logo.svg", "Over the lecture", 'class="chart-data"',
@@ -529,13 +529,20 @@ class ModelTests(unittest.TestCase):
             self.assertNotIn("made-up-key-123", message)                    # the key is never shown
             self.assertIn("NO API key", app_module.claude_status({}))
             self.assertEqual(app_module.load_env_file(Path(directory) / "missing.env", {}), [])
-            example = ROOT / ".env.example"                              # a plain copy of the example sets no key
-            self.assertEqual(app_module.load_env_file(example, {}), ["TEACHLENS_LLM_MODEL"])
+            env_file.write_text("ANTHROPIC_API_KEY=paste-the-key-here\nTEACHLENS_LLM_MODEL=opus\n", encoding="utf-8")
+            self.assertEqual(app_module.load_env_file(env_file, {}), ["TEACHLENS_LLM_MODEL"])   # placeholder: no key
 
     def test_feedback_text_is_parsed(self):
         parsed = report_model.parse_feedback("An overview.\n\npositive points:\n\n- Good one.\n\nnegative points:\n\n"
                                              "- No clear negative point was found in this analysis.\n\nNote: careful.")
-        self.assertEqual(parsed, {"overview": "An overview.", "positive": ["Good one."], "negative": [], "note": "Note: careful."})
+        self.assertEqual(parsed, {"overview": "An overview.", "positive": ["Good one."], "negative": [],
+                                  "positive_empty": None,
+                                  "negative_empty": "No clear negative point was found in this analysis.",
+                                  "note": "Note: careful."})
+        left_out = report_model.parse_feedback("positive points:\n\n- No positive point passed the automatic checks "
+                                               "this time.\n\nnegative points:\n\n- A real point.\n")
+        self.assertEqual((left_out["positive"], left_out["positive_empty"], left_out["negative"]),
+                         ([], "No positive point passed the automatic checks this time.", ["A real point."]))
 
     def test_report_source_shows_why_the_ai_was_not_used(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -554,6 +561,11 @@ class ModelTests(unittest.TestCase):
             (lesson / "final_feedback_report.txt").write_text("positive points:\n\n- A point.\n")
             source = report_model.report_source(lesson)
             self.assertEqual((source["kind"], source["problem"]), ("llm", None))
+            (lesson / "llm_output.json").write_text(json.dumps({"prompt_version": "4"}))   # the earlier wording
+            source = report_model.report_source(lesson)
+            self.assertEqual((source["kind"], source.get("outdated")), ("none", True))   # hidden; "Try again" shown
+            (lesson / "llm_output.json").write_text(json.dumps({"prompt_version": report_model.PROMPT_VERSION}))
+            self.assertEqual(report_model.report_source(lesson)["kind"], "llm")
 
     def test_chart_data_and_moments_from_the_demo_lesson(self):
         with tempfile.TemporaryDirectory() as directory:

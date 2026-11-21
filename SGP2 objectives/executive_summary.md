@@ -21,8 +21,9 @@ and web application sit on it. The system:
    (HAC test, Bonferroni correction).
 5. Writes up to three positive and three negative points by rule, then always has Claude Opus 5.5 rewrite them. The
    model sees only anonymised numbers, and code checks every answer: numbers must match the measurements, and causal
-   or inner-state wording is rejected. Claude writes the feedback; there is no rule-based text. If Claude cannot
-   write it (no key, no network, failed checks), the report shows the reason (an API key problem only as "Code=01", a billing problem only as "Code=02") and a "Try again" button.
+   or inner-state wording is rejected. Claude writes the feedback; there is no rule-based text. A point that still
+   fails a check after one retry is left out, and the points that passed are shown. If no point passes or Claude cannot
+   write it (no key, no network, failed checks), the report shows the reason (an API key problem only as "Error, Code=01", a billing problem only as "Error, Code=02") and a "Try again" button.
 
 TeachLens is a hybrid system: pretrained deep-learning models for perception, transparent rules for behaviour,
 statistics for the links, and a language model for the wording. No model was trained by the team.
@@ -40,13 +41,13 @@ report's pictures; the instructor, whose report it is, stays visible.
   for 6 students) still need a human check.
 - Run time on this laptop's CPU is about 2.2 minutes of computing per lecture minute (more on battery power), so a
   one-hour lecture takes roughly two hours or more.
-- 217 automated tests pass (170 for the team's pipeline, 47 for the report stage and the web application).
+- 219 automated tests pass (170 for the team's pipeline, 49 for the report stage and the web application).
 
 **Limitations.** The detections have not been checked against human labels, so no accuracy figure can be claimed.
 All results so far come from short lessons; real lectures last 55–75 minutes. With many instructor–student pairs a
 single link rarely passes the statistical correction, so most feedback comes from the simpler "during each activity"
-comparisons. Activities instructors note (such as a quiz) are stored but not yet used. No real call to the language
-model has been made yet. Board and desk areas must be marked once per classroom to be measured.
+comparisons. Activities instructors note (such as a quiz) are stored but not yet used. In the first real call to the language
+model (21 November 2026) the checks caught an invented number; that point was left out and the other 3 points are shown. Board and desk areas must be marked once per classroom to be measured.
 
 **Next steps:**
 - Human labelling with the built-in review sheets, then tuning the behaviour-rule thresholds against those labels
